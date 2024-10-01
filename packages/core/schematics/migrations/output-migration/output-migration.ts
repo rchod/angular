@@ -3,12 +3,13 @@
  * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
- * found in the LICENSE file at https://angular.io/license
+ * found in the LICENSE file at https://angular.dev/license
  */
 
 import ts from 'typescript';
 import {
   confirmAsSerializable,
+  MigrationStats,
   ProgramInfo,
   projectFile,
   ProjectFile,
@@ -206,6 +207,11 @@ export class OutputMigration extends TsurgeFunnelMigration<
       importReplacements,
       problematicUsages,
     });
+  }
+
+  override async stats(globalMetadata: CompilationUnitData): Promise<MigrationStats> {
+    // TODO: Add statistics.
+    return {counters: {}};
   }
 
   override async migrate(globalData: CompilationUnitData): Promise<Replacement[]> {

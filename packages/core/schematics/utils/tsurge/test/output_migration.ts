@@ -3,7 +3,7 @@
  * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
- * found in the LICENSE file at https://angular.io/license
+ * found in the LICENSE file at https://angular.dev/license
  */
 
 import {DtsMetadataReader} from '@angular/compiler-cli/src/ngtsc/metadata';
@@ -14,6 +14,7 @@ import {ProgramInfo} from '../program_info';
 import {Replacement, TextUpdate} from '../replacement';
 import {findOutputDeclarationsAndReferences, OutputID} from './output_helpers';
 import {projectFile} from '../project_paths';
+import {MigrationStats} from '../base_migration';
 
 type AnalysisUnit = {[id: OutputID]: {seenProblematicUsage: boolean}};
 type GlobalMetadata = {[id: OutputID]: {canBeMigrated: boolean}};
@@ -106,5 +107,24 @@ export class OutputMigration extends TsurgeComplexMigration<AnalysisUnit, Global
     }
 
     return replacements;
+  }
+
+  override async stats(globalMetadata: GlobalMetadata): Promise<MigrationStats> {
+    let allOutputs = 0;
+    let migratedOutputs = 0;
+
+    for (const output of Object.values(globalMetadata)) {
+      allOutputs++;
+      if (output.canBeMigrated) {
+        migratedOutputs++;
+      }
+    }
+
+    return {
+      counters: {
+        allOutputs,
+        migratedOutputs,
+      },
+    };
   }
 }

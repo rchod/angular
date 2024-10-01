@@ -3,33 +3,27 @@
  * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
- * found in the LICENSE file at https://angular.io/license
+ * found in the LICENSE file at https://angular.dev/license
  */
 
 import ts from 'typescript';
 
 import {DtsMetadataReader, MetadataReader} from '@angular/compiler-cli/src/ngtsc/metadata';
 import {PartialEvaluator} from '@angular/compiler-cli/src/ngtsc/partial_evaluator';
-import {NgtscProgram} from '@angular/compiler-cli/src/ngtsc/program';
 import {TypeScriptReflectionHost} from '@angular/compiler-cli/src/ngtsc/reflection';
 
-import assert from 'assert';
-import {ProgramInfo} from '../../../utils/tsurge/program_info';
 import {ResourceLoader} from '@angular/compiler-cli/src/ngtsc/annotations';
 import {NgCompiler} from '@angular/compiler-cli/src/ngtsc/core';
 import {ReferenceEmitter} from '@angular/compiler-cli/src/ngtsc/imports';
-import {isShim} from '@angular/compiler-cli/src/ngtsc/shims';
 import {TemplateTypeChecker} from '@angular/compiler-cli/src/ngtsc/typecheck/api';
+import assert from 'assert';
+import {ProgramInfo} from '../../../utils/tsurge/program_info';
 
 /**
  * Interface containing the analysis information
  * for an Angular program to be migrated.
  */
 export interface AnalysisProgramInfo extends ProgramInfo {
-  // List of source files in the program.
-  sourceFiles: ts.SourceFile[];
-  // List of all files in the program, including external `d.ts`.
-  programFiles: readonly ts.SourceFile[];
   reflector: TypeScriptReflectionHost;
   typeChecker: ts.TypeChecker;
   templateTypeChecker: TemplateTypeChecker;
@@ -51,13 +45,17 @@ export function prepareAnalysisInfo(
   compiler: NgCompiler,
   programAbsoluteRootPaths?: string[],
 ) {
-  // Get template type checker & analyze sync.
-  const templateTypeChecker = compiler.getTemplateTypeChecker();
+  // Analyze sync and retrieve necessary dependencies.
+  // Note: `getTemplateTypeChecker` requires the `enableTemplateTypeChecker` flag, but
+  // this has negative effects as it causes optional TCB operations to execute, which may
+  // error with unsuccessful reference emits that previously were ignored outside of the migration.
+  // The migration is resilient to TCB information missing, so this is fine, and all the information
+  // we need is part of required TCB operations anyway.
+  const {refEmitter, metaReader, templateTypeChecker} = compiler['ensureAnalyzed']();
 
   // Generate all type check blocks.
   templateTypeChecker.generateAllTypeCheckBlocks();
 
-  const {refEmitter, metaReader} = compiler['ensureAnalyzed']();
   const typeChecker = userProgram.getTypeChecker();
 
   const reflector = new TypeScriptReflectionHost(typeChecker);
@@ -76,22 +74,7 @@ export function prepareAnalysisInfo(
     );
   }
 
-  const programFiles = userProgram.getSourceFiles();
-  const sourceFiles = programFiles.filter(
-    (f) =>
-      !f.isDeclarationFile &&
-      // Note `isShim` will work for the initial program, but for TCB programs, the shims are no longer annotated.
-      !isShim(f) &&
-      !f.fileName.endsWith('.ngtypecheck.ts') &&
-      // Optional replacement filter. Allows parallel execution in case
-      // some tsconfig's have overlap due to sharing of TS sources.
-      // (this is commonly not the case in g3 where deps are `.d.ts` files).
-      (!limitToRootNamesOnly || programAbsoluteRootPaths!.includes(f.fileName)),
-  );
-
   return {
-    programFiles,
-    sourceFiles,
     metaRegistry: metaReader,
     dtsMetadataReader,
     evaluator,

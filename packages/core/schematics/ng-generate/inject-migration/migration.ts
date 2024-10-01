@@ -3,14 +3,13 @@
  * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
- * found in the LICENSE file at https://angular.io/license
+ * found in the LICENSE file at https://angular.dev/license
  */
 
 import ts from 'typescript';
 import {PendingChange, ChangeTracker} from '../../utils/change_tracker';
 import {
   analyzeFile,
-  getNodeIndentation,
   getSuperParameters,
   getConstructorUnusedParameters,
   hasGenerics,
@@ -22,6 +21,7 @@ import {getAngularDecorators} from '../../utils/ng_decorators';
 import {getImportOfIdentifier} from '../../utils/typescript/imports';
 import {closestNode} from '../../utils/typescript/nodes';
 import {findUninitializedPropertiesToCombine} from './internal';
+import {getLeadingLineWhitespaceOfNode} from '../../utils/tsurge/helpers/ast/leading_space';
 
 /**
  * Placeholder used to represent expressions inside the AST.
@@ -173,13 +173,13 @@ function migrateClass(
   const superParameters = superCall
     ? getSuperParameters(constructor, superCall, localTypeChecker)
     : null;
-  const memberIndentation = getNodeIndentation(node.members[0]);
+  const memberIndentation = getLeadingLineWhitespaceOfNode(node.members[0]);
   const removedStatementCount = removedStatements?.size || 0;
   const innerReference =
     superCall ||
     constructor.body?.statements.find((statement) => !removedStatements?.has(statement)) ||
     constructor;
-  const innerIndentation = getNodeIndentation(innerReference);
+  const innerIndentation = getLeadingLineWhitespaceOfNode(innerReference);
   const propsToAdd: string[] = [];
   const prependToConstructor: string[] = [];
   const afterSuper: string[] = [];
@@ -215,10 +215,7 @@ function migrateClass(
     }
   }
 
-  if (
-    !options.backwardsCompatibleConstructors &&
-    (!constructor.body || constructor.body.statements.length - removedStatementCount === 0)
-  ) {
+  if (canRemoveConstructor(options, constructor, removedStatementCount, superCall)) {
     // Drop the constructor if it was empty.
     removedMembers.add(constructor);
     tracker.replaceText(sourceFile, constructor.getFullStart(), constructor.getFullWidth(), '');
@@ -660,4 +657,31 @@ function cloneName(node: ts.PropertyName): ts.PropertyName {
     default:
       return node;
   }
+}
+
+/**
+ * Determines whether it's safe to delete a class constructor.
+ * @param options Options used to configure the migration.
+ * @param constructor Node representing the constructor.
+ * @param removedStatementCount Number of statements that were removed by the migration.
+ * @param superCall Node representing the `super()` call within the constructor.
+ */
+function canRemoveConstructor(
+  options: MigrationOptions,
+  constructor: ts.ConstructorDeclaration,
+  removedStatementCount: number,
+  superCall: ts.CallExpression | null,
+): boolean {
+  if (options.backwardsCompatibleConstructors) {
+    return false;
+  }
+
+  const statementCount = constructor.body
+    ? constructor.body.statements.length - removedStatementCount
+    : 0;
+
+  return (
+    statementCount === 0 ||
+    (statementCount === 1 && superCall !== null && superCall.arguments.length === 0)
+  );
 }

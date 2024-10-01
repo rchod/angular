@@ -89,7 +89,7 @@ Before you submit your Pull Request (PR) consider the following guidelines:
    We cannot accept code without a signed CLA.
    Make sure you author all contributed Git commits with email address associated with your CLA signature.
 
-4. [Fork](https://docs.github.com/en/github/getting-started-with-github/fork-a-repo) the angular/angular repo.
+4. [Fork](https://docs.github.com/en/github/getting-started-with-github/fork-a-repo) the [angular/angular](https://github.com/angular/angular/fork) repo.
 
 5. In your forked repository, make your changes in a new git branch:
 
@@ -207,7 +207,7 @@ To ensure consistency throughout the source code, keep these rules in mind as yo
 * All public API methods **must be documented**.
 * We follow [Google's JavaScript Style Guide][js-style-guide], but wrap all code at **100 characters**.
 
-   An automated formatter is available, see [DEVELOPER.md](contributing-docs/building-and-testing-angular#formatting-your-source-code).
+   An automated formatter is available, see [DEVELOPER.md](contributing-docs/building-and-testing-angular.md#formatting-your-source-code).
 
 
 ## <a name="commit"></a> Commit Message Format

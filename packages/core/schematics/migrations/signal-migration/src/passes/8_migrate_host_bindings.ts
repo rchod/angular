@@ -3,33 +3,33 @@
  * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
- * found in the LICENSE file at https://angular.io/license
+ * found in the LICENSE file at https://angular.dev/license
  */
 
 import ts from 'typescript';
+import {ReferenceMigrationHost} from './reference_migration/reference_migration_host';
+import {ClassFieldDescriptor} from './reference_resolution/known_fields';
+import {isHostBindingReference, Reference} from './reference_resolution/reference_kinds';
 import {ProgramInfo, projectFile, Replacement, TextUpdate} from '../../../../utils/tsurge';
-import {MigrationResult} from '../result';
-import {isHostBindingInputReference} from '../utils/input_reference';
-import {KnownInputs} from '../input_detection/known_inputs';
 
 /**
  * Phase that migrates Angular host binding references to
  * unwrap signals.
  */
-export function pass8__migrateHostBindings(
-  result: MigrationResult,
-  knownInputs: KnownInputs,
+export function pass8__migrateHostBindings<D extends ClassFieldDescriptor>(
+  host: ReferenceMigrationHost<D>,
+  references: Reference<D>[],
   info: ProgramInfo,
 ) {
   const seenReferences = new WeakMap<ts.Node, Set<number>>();
 
-  for (const reference of result.references) {
+  for (const reference of references) {
     // This pass only deals with host binding references.
-    if (!isHostBindingInputReference(reference)) {
+    if (!isHostBindingReference(reference)) {
       continue;
     }
     // Skip references to incompatible inputs.
-    if (knownInputs.get(reference.target)!.isIncompatible()) {
+    if (!host.shouldMigrateReferencesToField(reference.target)) {
       continue;
     }
 
@@ -52,7 +52,7 @@ export function pass8__migrateHostBindings(
       ? `: ${reference.from.read.name}()`
       : `()`;
 
-    result.replacements.push(
+    host.replacements.push(
       new Replacement(
         projectFile(bindingField.getSourceFile(), info),
         new TextUpdate({position: readEndPos, end: readEndPos, toInsert: appendText}),

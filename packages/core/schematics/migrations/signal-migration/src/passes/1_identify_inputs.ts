@@ -3,7 +3,7 @@
  * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
- * found in the LICENSE file at https://angular.io/license
+ * found in the LICENSE file at https://angular.dev/license
  */
 
 import assert from 'assert';
@@ -63,7 +63,7 @@ export function pass1__IdentifySourceFileAndDeclarationInputs(
         );
 
         if (isInputMemberIncompatibility(conversionPreparation)) {
-          knownDecoratorInputs.markInputAsIncompatible(inputDescr, conversionPreparation);
+          knownDecoratorInputs.markFieldIncompatible(inputDescr, conversionPreparation);
           result.sourceInputs.set(inputDescr, null);
         } else {
           result.sourceInputs.set(inputDescr, conversionPreparation);

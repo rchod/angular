@@ -3,34 +3,30 @@
  * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
- * found in the LICENSE file at https://angular.io/license
+ * found in the LICENSE file at https://angular.dev/license
  */
 
-import {MigrationHost} from '../migration_host';
-import {MigrationResult} from '../result';
-import {isTemplateInputReference} from '../utils/input_reference';
-import {KnownInputs} from '../input_detection/known_inputs';
-import {ProgramInfo, Replacement, TextUpdate} from '../../../../utils/tsurge';
-
+import {Replacement, TextUpdate} from '../../../../utils/tsurge';
+import {ReferenceMigrationHost} from './reference_migration/reference_migration_host';
+import {ClassFieldDescriptor} from './reference_resolution/known_fields';
+import {isTemplateReference, Reference} from './reference_resolution/reference_kinds';
 /**
  * Phase that migrates Angular template references to
  * unwrap signals.
  */
-export function pass7__migrateTemplateReferences(
-  host: MigrationHost,
-  result: MigrationResult,
-  knownInputs: KnownInputs,
-  info: ProgramInfo,
+export function pass7__migrateTemplateReferences<D extends ClassFieldDescriptor>(
+  host: ReferenceMigrationHost<D>,
+  references: Reference<D>[],
 ) {
   const seenFileReferences = new Set<string>();
 
-  for (const reference of result.references) {
+  for (const reference of references) {
     // This pass only deals with HTML template references.
-    if (!isTemplateInputReference(reference)) {
+    if (!isTemplateReference(reference)) {
       continue;
     }
     // Skip references to incompatible inputs.
-    if (knownInputs.get(reference.target)!.isIncompatible()) {
+    if (!host.shouldMigrateReferencesToField(reference.target)) {
       continue;
     }
 
@@ -46,7 +42,7 @@ export function pass7__migrateTemplateReferences(
       ? `: ${reference.from.read.name}()`
       : `()`;
 
-    result.replacements.push(
+    host.replacements.push(
       new Replacement(
         reference.from.templateFile,
         new TextUpdate({

@@ -3,17 +3,21 @@
  * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
- * found in the LICENSE file at https://angular.io/license
+ * found in the LICENSE file at https://angular.dev/license
  */
 
 import {NgCompiler} from '@angular/compiler-cli/src/ngtsc/core';
 import ts from 'typescript';
-import {ApplyRefactoringProgressFn} from '@angular/language-service/api';
+import {ApplyRefactoringProgressFn, ApplyRefactoringResult} from '@angular/language-service/api';
 import {CompilerOptions} from '@angular/compiler-cli';
 import {
-  ConvertToSignalInputBestEffortRefactoring,
-  ConvertToSignalInputRefactoring,
-} from './convert_to_signal_input';
+  ConvertFieldToSignalInputBestEffortRefactoring,
+  ConvertFieldToSignalInputRefactoring,
+} from './convert_to_signal_input/individual_input_refactoring';
+import {
+  ConvertFullClassToSignalInputsBestEffortRefactoring,
+  ConvertFullClassToSignalInputsRefactoring,
+} from './convert_to_signal_input/full_class_input_refactoring';
 
 /**
  * Interface exposing static metadata for a {@link Refactoring},
@@ -60,10 +64,12 @@ export interface ActiveRefactoring {
     fileName: string,
     positionOrRange: number | ts.TextRange,
     reportProgress: ApplyRefactoringProgressFn,
-  ): Promise<ts.RefactorEditInfo>;
+  ): Promise<ApplyRefactoringResult>;
 }
 
 export const allRefactorings: Refactoring[] = [
-  ConvertToSignalInputRefactoring,
-  ConvertToSignalInputBestEffortRefactoring,
+  ConvertFieldToSignalInputRefactoring,
+  ConvertFieldToSignalInputBestEffortRefactoring,
+  ConvertFullClassToSignalInputsRefactoring,
+  ConvertFullClassToSignalInputsBestEffortRefactoring,
 ];

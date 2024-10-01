@@ -3,7 +3,7 @@
  * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
- * found in the LICENSE file at https://angular.io/license
+ * found in the LICENSE file at https://angular.dev/license
  */
 
 import {InputSignalNode} from '../../authoring/input/input_signal_node';
@@ -399,6 +399,12 @@ export interface ComponentDef<T> extends DirectiveDef<T> {
   getStandaloneInjector:
     | ((parentInjector: EnvironmentInjector) => EnvironmentInjector | null)
     | null;
+
+  /**
+   * A function added by the {@link ɵɵExternalStylesFeature} and used by the framework to create
+   * the list of external runtime style URLs.
+   */
+  getExternalStyles: ((encapsulationId?: string) => string[]) | null;
 
   /**
    * Used to store the result of `noSideEffects` function so that it is not removed by closure

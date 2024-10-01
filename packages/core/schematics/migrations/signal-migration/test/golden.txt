@@ -36,6 +36,9 @@ class BaseNonAngular {
 @Directive()
 class Sub implements BaseNonAngular {
   // should not be migrated because of the interface.
+  // TODO: Skipped for migration because:
+  //  This input overrides a field from a superclass, while the superclass field
+  //  is not migrated.
   @Input() disabled = '';
 }
 
@@ -55,6 +58,9 @@ interface BaseNonAngularInterface {
 @Directive()
 class Sub3 implements BaseNonAngularInterface {
   // should not be migrated because of the interface.
+  // TODO: Skipped for migration because:
+  //  This input overrides a field from a superclass, while the superclass field
+  //  is not migrated.
   @Input() disabled = '';
 }
 @@@@@@ both_input_imports.ts @@@@@@
@@ -64,6 +70,8 @@ class Sub3 implements BaseNonAngularInterface {
 import {input, Input} from '@angular/core';
 
 class BothInputImported {
+  // TODO: Skipped for migration because:
+  //  Your application code writes to the input. This prevents migration.
   @Input() decoratorInput = true;
   signalInput = input<boolean>();
 
@@ -73,14 +81,37 @@ class BothInputImported {
     this.decoratorInput = false;
   }
 }
-@@@@@@ catalyst_test.ts @@@@@@
+@@@@@@ catalyst_async_test.ts @@@@@@
 
-import { UnwrapSignalInputs } from "google3/javascript/angular2/testing/catalyst";
+import { UnwrapSignalInputs } from "google3/javascript/angular2/testing/catalyst/async";
 // tslint:disable
 
 import {input} from '@angular/core';
 
-// angular2/testing/catalyst
+// google3/javascript/angular2/testing/catalyst/async
+// ^^ this allows the advisor to even consider this file.
+
+function it(msg: string, fn: () => void) {}
+function bootstrapTemplate(tmpl: string, inputs: unknown) {}
+
+class MyComp {
+  readonly hello = input('');
+}
+
+it('should work', () => {
+  const inputs = {
+    hello: 'test',
+  } as Partial<UnwrapSignalInputs<MyComp>>;
+  bootstrapTemplate('<my-comp [hello]="hello">', inputs);
+});
+@@@@@@ catalyst_test.ts @@@@@@
+
+import { UnwrapSignalInputs } from "google3/javascript/angular2/testing/catalyst/fake_async";
+// tslint:disable
+
+import {input} from '@angular/core';
+
+// google3/javascript/angular2/testing/catalyst/fake_async
 // ^^ this allows the advisor to even consider this file.
 
 function it(msg: string, fn: () => void) {}
@@ -104,6 +135,8 @@ import {Input, Directive} from '@angular/core';
 
 @Directive()
 export class MyComp {
+  // TODO: Skipped for migration because:
+  //  Your application code writes to the input. This prevents migration.
   @Input() firstName: string;
 
   constructor() {
@@ -147,6 +180,8 @@ import {Input, Directive} from '@angular/core';
 
 @Directive()
 class Base {
+  // TODO: Skipped for migration because:
+  //  The input cannot be migrated because the field is overridden by a subclass.
   @Input() bla = true;
 }
 
@@ -157,7 +192,21 @@ class Derived extends Base {
 // overridden in separate file
 @Directive()
 export class Base2 {
+  // TODO: Skipped for migration because:
+  //  The input cannot be migrated because the field is overridden by a subclass.
   @Input() bla = true;
+}
+
+// overridden in separate file
+@Directive()
+export class Base3 {
+  // TODO: Skipped for migration because:
+  //  Your application code writes to the input. This prevents migration.
+  @Input() bla = true;
+
+  click() {
+    this.bla = false;
+  }
 }
 @@@@@@ derived_class_meta_input_alias.ts @@@@@@
 
@@ -168,6 +217,8 @@ import {Input, Directive} from '@angular/core';
 @Directive()
 class Base {
   // should not be migrated.
+  // TODO: Skipped for migration because:
+  //  The input cannot be migrated because the field is overridden by a subclass.
   @Input() bla = true;
 }
 
@@ -175,14 +226,36 @@ class Base {
   inputs: [{name: 'bla', alias: 'matDerivedBla'}],
 })
 class Derived extends Base {}
+@@@@@@ derived_class_second_separate.ts @@@@@@
+
+// tslint:disable
+
+import {Input} from '@angular/core';
+import {DerivedExternalWithInput} from './derived_class_separate_file';
+
+class Derived extends DerivedExternalWithInput {
+  // this should be incompatible, because the final superclass
+  // within its own batch unit, detected a write that should
+  // propagate to this input.
+  // TODO: Skipped for migration because:
+  //  This input is inherited from a superclass, but the parent cannot be migrated.
+  @Input() override bla = false;
+}
 @@@@@@ derived_class_separate_file.ts @@@@@@
 
 // tslint:disable
 
-import {Base2} from './derived_class';
+import {Input} from '@angular/core';
+import {Base2, Base3} from './derived_class';
 
 class DerivedExternal extends Base2 {
   override bla = false;
+}
+
+export class DerivedExternalWithInput extends Base3 {
+  // TODO: Skipped for migration because:
+  //  This input is inherited from a superclass, but the parent cannot be migrated.
+  @Input() override bla = true;
 }
 @@@@@@ different_instantiations_of_reference.ts @@@@@@
 
@@ -243,6 +316,22 @@ class ExistingSignalImport {
   signalInput = input<boolean>();
   readonly thisCanBeMigrated = input(true);
 }
+@@@@@@ external_templates.html @@@@@@
+
+<span>{{test()}}</span>
+@@@@@@ external_templates.ts @@@@@@
+
+// tslint:disable
+
+import {Component, input} from '@angular/core';
+
+@Component({
+  templateUrl: './external_templates.html',
+  selector: 'with-template',
+})
+export class WithTemplate {
+  readonly test = input(true);
+}
 @@@@@@ getters.ts @@@@@@
 
 // tslint:disable
@@ -251,6 +340,8 @@ import {Directive, Input} from '@angular/core';
 
 @Directive({})
 export class WithGetters {
+  // TODO: Skipped for migration because:
+  //  Accessor inputs cannot be migrated as they are too complex.
   @Input()
   get disabled() {
     return this._disabled;
@@ -317,7 +408,7 @@ class HostBindingsShared2 {
  * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
- * found in the LICENSE file at https://angular.io/license
+ * found in the LICENSE file at https://angular.dev/license
  */
 
 // tslint:disable
@@ -404,9 +495,13 @@ export class AppComponent {
   readonly bla = input.required<boolean, string | boolean>({ transform: disabledTransform });
   readonly narrowableMultipleTimes = input<Vehicle | null>(null);
   readonly withUndefinedInput = input<string>();
+  // TODO: Skipped for migration because:
+  //  Your application code writes to the input. This prevents migration.
   @Input() incompatible: string | null = null;
 
   private _bla: any;
+  // TODO: Skipped for migration because:
+  //  Accessor inputs cannot be migrated as they are too complex.
   @Input()
   set ngSwitch(newValue: any) {
     this._bla = newValue;
@@ -600,7 +695,7 @@ export class InlineTmpl {
  * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
- * found in the LICENSE file at https://angular.io/license
+ * found in the LICENSE file at https://angular.dev/license
  */
 
 // tslint:disable
@@ -666,6 +761,9 @@ import {Component, Input} from '@angular/core';
 
 @Component({})
 export class ManualInstantiation {
+  // TODO: Skipped for migration because:
+  //  Class of this input is manually instantiated. This is discouraged and prevents
+  //  migration
   @Input() bla: string = '';
 }
 @@@@@@ modifier_tests.ts @@@@@@
@@ -844,6 +942,7 @@ import {Directive, input} from '@angular/core';
 @Directive()
 class OptionalInput {
   readonly bla = input<string>();
+  readonly isLegacyHttpOnly = input<boolean | undefined>(false);
 }
 @@@@@@ problematic_type_reference.ts @@@@@@
 
@@ -857,6 +956,8 @@ import {Component, Directive, QueryList, Input} from '@angular/core';
   `,
 })
 class Group {
+  // TODO: Skipped for migration because:
+  //  Class of this input is referenced in the signature of another class.
   @Input() label!: string;
 }
 
@@ -913,7 +1014,7 @@ class Required {
  * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
- * found in the LICENSE file at https://angular.io/license
+ * found in the LICENSE file at https://angular.dev/license
  */
 
 // tslint:disable
@@ -1010,6 +1111,8 @@ export class ScopeMismatchTest {
 import {Input} from '@angular/core';
 
 class MyComp {
+  // TODO: Skipped for migration because:
+  //  A jasmine `spyOn` call spies on this input. This breaks with signal inputs.
   @Input() myInput = () => {};
 }
 
@@ -1021,6 +1124,18 @@ spyOn<MyComp>(new MyComp(), 'myInput').and.returnValue();
 </span>
 
 <ng-content select="mat-option, ng-container"></ng-content>
+@@@@@@ template_concat_string.ts @@@@@@
+
+// tslint:disable
+
+import {Component, input} from '@angular/core';
+
+@Component({
+  template: '<h3>' + '{{bla}}' + '</h3>',
+})
+export class WithConcatTemplate {
+  readonly bla = input(true);
+}
 @@@@@@ template_ng_if.ts @@@@@@
 
 // tslint:disable
@@ -1051,8 +1166,17 @@ import {Component, Input, input} from '@angular/core';
   `,
 })
 export class MyComp {
+  // TODO: Skipped for migration because:
+  //  This input is used in a control flow expression (e.g. `@if` or `*ngIf`)
+  //  and migrating would break narrowing currently.
   @Input() first = true;
+  // TODO: Skipped for migration because:
+  //  This input is used in a control flow expression (e.g. `@if` or `*ngIf`)
+  //  and migrating would break narrowing currently.
   @Input() second = false;
+  // TODO: Skipped for migration because:
+  //  This input is used in a control flow expression (e.g. `@if` or `*ngIf`)
+  //  and migrating would break narrowing currently.
   @Input() third = true;
   readonly fourth = input(true);
   readonly fifth = input(true);
@@ -1092,8 +1216,14 @@ import {Component, Input, input} from '@angular/core';
   },
 })
 class TwoWayBinding {
+  // TODO: Skipped for migration because:
+  //  Your application code writes to the input. This prevents migration.
   @Input() inputA = '';
+  // TODO: Skipped for migration because:
+  //  Your application code writes to the input. This prevents migration.
   @Input() inputB = true;
+  // TODO: Skipped for migration because:
+  //  Your application code writes to the input. This prevents migration.
   @Input() inputC = false;
   readonly inputD = input(false);
 }
@@ -1110,6 +1240,9 @@ function x(v: string | undefined): string | undefined {
 
 export class TransformFunctions {
   // We can check this, and expect `as any` due to transform incompatibility.
+  // TODO: Notes from signal input migration:
+  //  Input type is incompatible with transform. The migration added an `any`
+  //  cast. This worked previously because Angular was unable to check transforms.
   readonly withExplicitTypeWorks = input.required<{
     ok: true;
 }, string | undefined>({ transform: ((v: string | undefined) => '') as any });
@@ -1117,6 +1250,9 @@ export class TransformFunctions {
   // This will be a synthetic type because we add `undefined` to `boolean`.
   readonly synthetic1 = input.required<boolean | undefined, string | undefined>({ transform: x });
   // Synthetic as we infer a full type from the initial value. Cannot be checked.
+  // TODO: Skipped for migration because:
+  //  Input is required, but the migration cannot determine a good type for the
+  //  input.
   @Input({required: true, transform: (v: string | undefined) => ''}) synthetic2 = {
     infer: COMPLEX_VAR,
   };
@@ -1132,6 +1268,9 @@ import {Directive, input} from '@angular/core';
 @Directive()
 class TransformIncompatibleTypes {
   // @ts-ignore Simulate `--strictPropertyInitialization=false`.
+  // TODO: Notes from signal input migration:
+  //  Input type is incompatible with transform. The migration added an `any`
+  //  cast. This worked previously because Angular was unable to check transforms.
   readonly disabled = input<boolean, unknown>(undefined, { transform: ((v: unknown) => (v === null ? undefined : !!v)) as any });
 }
 @@@@@@ with_getters.ts @@@@@@
@@ -1141,6 +1280,8 @@ class TransformIncompatibleTypes {
 import {Input, input} from '@angular/core';
 
 export class WithSettersAndGetters {
+  // TODO: Skipped for migration because:
+  //  Accessor inputs cannot be migrated as they are too complex.
   @Input()
   set onlySetter(newValue: any) {
     this._bla = newValue;
@@ -1150,6 +1291,8 @@ export class WithSettersAndGetters {
   }
   private _bla: any;
 
+  // TODO: Skipped for migration because:
+  //  Accessor inputs cannot be migrated as they are too complex.
   @Input()
   get accessor(): string {
     return '';

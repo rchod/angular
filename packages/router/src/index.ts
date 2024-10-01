@@ -3,7 +3,7 @@
  * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
- * found in the LICENSE file at https://angular.io/license
+ * found in the LICENSE file at https://angular.dev/license
  */
 
 export {createUrlTreeFromSnapshot} from './create_url_tree';
@@ -71,6 +71,7 @@ export * from './models_deprecated';
 export {Navigation, NavigationExtras, UrlCreationOptions} from './navigation_transition';
 export {DefaultTitleStrategy, TitleStrategy} from './page_title_strategy';
 export {
+  ComponentInputBindingFeature,
   DebugTracingFeature,
   DisabledInitialNavigationFeature,
   withViewTransitions,

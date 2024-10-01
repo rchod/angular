@@ -3,7 +3,7 @@
  * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
- * found in the LICENSE file at https://angular.io/license
+ * found in the LICENSE file at https://angular.dev/license
  */
 
 import {
@@ -228,7 +228,10 @@ class TemplateVisitor<Code extends ErrorCode>
   visitBoundText(text: TmplAstBoundText): void {
     this.visitAst(text.value);
   }
-  visitIcu(icu: TmplAstIcu): void {}
+  visitIcu(icu: TmplAstIcu): void {
+    Object.keys(icu.vars).forEach((key) => this.visit(icu.vars[key]));
+    Object.keys(icu.placeholders).forEach((key) => this.visit(icu.placeholders[key]));
+  }
 
   visitDeferredBlock(deferred: TmplAstDeferredBlock): void {
     deferred.visitAll(this);

@@ -3,7 +3,7 @@
  * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
- * found in the LICENSE file at https://angular.io/license
+ * found in the LICENSE file at https://angular.dev/license
  */
 
 import {
@@ -14,7 +14,6 @@ import {
   ɵNullViewportScroller as NullViewportScroller,
   ɵPLATFORM_SERVER_ID as PLATFORM_SERVER_ID,
 } from '@angular/common';
-import {HttpClientModule} from '@angular/common/http';
 import {
   createPlatformFactory,
   Injector,
@@ -82,7 +81,7 @@ export const PLATFORM_SERVER_PROVIDERS: Provider[] = [
  */
 @NgModule({
   exports: [BrowserModule],
-  imports: [HttpClientModule, NoopAnimationsModule],
+  imports: [NoopAnimationsModule],
   providers: PLATFORM_SERVER_PROVIDERS,
 })
 export class ServerModule {}

@@ -3,7 +3,7 @@
  * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
- * found in the LICENSE file at https://angular.io/license
+ * found in the LICENSE file at https://angular.dev/license
  */
 
 export {
@@ -16,11 +16,9 @@ export {
   type InputNode,
   isInputContainerNode,
 } from './input_detection/input_node';
-export {
-  type InputDescriptor,
-  type InputUniqueKey,
-  getInputDescriptor,
-  isInputDescriptor,
-} from './utils/input_id';
+export {type ClassFieldDescriptor} from './passes/reference_resolution/known_fields';
+export {type InputDescriptor, getInputDescriptor, isInputDescriptor} from './utils/input_id';
 export {SignalInputMigration} from './migration';
 export {type MigrationConfig} from './migration_config';
+export {nonIgnorableInputIncompatibilities} from './best_effort_mode';
+export {InputIncompatibilityReason} from './input_detection/incompatibility';

@@ -3,7 +3,7 @@
  * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
- * found in the LICENSE file at https://angular.io/license
+ * found in the LICENSE file at https://angular.dev/license
  */
 
 import ts from 'typescript';
@@ -14,8 +14,6 @@ import assert from 'assert';
 import {WrappedNodeExpr} from '@angular/compiler';
 import {removeFromUnionIfPossible} from '../signal-migration/src/utils/remove_from_union';
 import {extractQueryListType} from './query_list_type';
-
-const printer = ts.createPrinter();
 
 /**
  *  A few notes on changes:
@@ -43,6 +41,7 @@ export function computeReplacementsToMigrateQuery(
   metadata: ExtractedQuery,
   importManager: ImportManager,
   info: ProgramInfo,
+  printer: ts.Printer,
 ): Replacement[] {
   const sf = node.getSourceFile();
   let newQueryFn = importManager.addImport({

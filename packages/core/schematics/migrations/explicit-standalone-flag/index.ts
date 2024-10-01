@@ -3,7 +3,7 @@
  * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
- * found in the LICENSE file at https://angular.io/license
+ * found in the LICENSE file at https://angular.dev/license
  */
 
 import {Rule, SchematicsException, Tree, UpdateRecorder} from '@angular-devkit/schematics';
@@ -20,7 +20,7 @@ export function migrate(): Rule {
 
     if (!allPaths.length) {
       throw new SchematicsException(
-        'Could not find any tsconfig file. Cannot run the standalone:false migration.',
+        'Could not find any tsconfig file. Cannot run the explicit-standalone-flag migration.',
       );
     }
 

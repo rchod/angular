@@ -3,7 +3,7 @@
  * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
- * found in the LICENSE file at https://angular.io/license
+ * found in the LICENSE file at https://angular.dev/license
  */
 
 // The formatter and CI disagree on how this import statement should be formatted. Both try to keep
@@ -39,6 +39,7 @@ import {
   ɵsetUnknownElementStrictMode as setUnknownElementStrictMode,
   ɵsetUnknownPropertyStrictMode as setUnknownPropertyStrictMode,
   ɵstringify as stringify,
+  ɵMicrotaskEffectScheduler as MicrotaskEffectScheduler,
 } from '@angular/core';
 
 import {ComponentFixture} from './component_fixture';
@@ -855,6 +856,7 @@ export class TestBedImpl implements TestBed {
    * @developerPreview
    */
   flushEffects(): void {
+    this.inject(MicrotaskEffectScheduler).flush();
     this.inject(EffectScheduler).flush();
   }
 }

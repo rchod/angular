@@ -3,7 +3,7 @@
  * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
- * found in the LICENSE file at https://angular.io/license
+ * found in the LICENSE file at https://angular.dev/license
  */
 
 import {ClassIncompatibilityReason, InputIncompatibilityReason} from './incompatibility';
@@ -53,6 +53,13 @@ export function getMessageForInputIncompatibility(reason: InputIncompatibilityRe
         short: `Input is required, but the migration cannot determine a good type for the input.`,
         extra: 'Consider adding an explicit type to make the migration possible.',
       };
+    case InputIncompatibilityReason.InputWithQuestionMarkButNoGoodExplicitTypeExtractable:
+      return {
+        short: `Input is marked with a question mark. Migration could not determine a good type for the input.`,
+        extra:
+          'The migration needs to be able to resolve a type, so that it can include `undefined` in your type. ' +
+          'Consider adding an explicit type to make the migration possible.',
+      };
     case InputIncompatibilityReason.SkippedViaConfigFilter:
       return {
         short: `This input is not part of the current migration scope.`,
@@ -73,6 +80,11 @@ export function getMessageForInputIncompatibility(reason: InputIncompatibilityRe
       return {
         short: 'Your application code writes to the input. This prevents migration.',
         extra: 'Signal inputs are readonly, so migrating would break your build.',
+      };
+    case InputIncompatibilityReason.OutsideOfMigrationScope:
+      return {
+        short: 'This input is not part of any source files in your project.',
+        extra: 'The migration excludes inputs if no source file declaring the input was seen.',
       };
   }
 }
@@ -96,7 +108,7 @@ export function getMessageForClassIncompatibility(reason: ClassIncompatibilityRe
     case ClassIncompatibilityReason.ClassManuallyInstantiated:
       return {
         short:
-          'Class of this input is manually instantiated (`new Cmp()`). ' +
+          'Class of this input is manually instantiated. ' +
           'This is discouraged and prevents migration',
         extra:
           'Signal inputs require a DI injection context. Manually instantiating ' +

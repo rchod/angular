@@ -3,7 +3,7 @@
  * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
- * found in the LICENSE file at https://angular.io/license
+ * found in the LICENSE file at https://angular.dev/license
  */
 
 import ts from 'typescript';
@@ -104,6 +104,15 @@ runInEachFileSystem(() => {
       const diags = diagnose(`
         @let foo = null;
         <div *ngIf="foo"></div>
+      `);
+
+      expect(diags.length).toBe(0);
+    });
+
+    it('should not report a @let declaration that is only used in an ICU', () => {
+      const diags = diagnose(`
+        @let value = 1;
+        <h1 i18n>{value, select, 1 {one} 2 {two} other {other}}</h1>
       `);
 
       expect(diags.length).toBe(0);

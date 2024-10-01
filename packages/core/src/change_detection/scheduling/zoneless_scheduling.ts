@@ -3,7 +3,7 @@
  * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
- * found in the LICENSE file at https://angular.io/license
+ * found in the LICENSE file at https://angular.dev/license
  */
 
 import {InjectionToken} from '../../di/injection_token';
@@ -50,6 +50,8 @@ export const enum NotificationSource {
   // The scheduler is notified when a pending task is removed via the public API.
   // This allows us to make stability async, delayed until the next application tick.
   PendingTaskRemoved,
+  // An `effect()` outside of the view tree became dirty and might need to run.
+  RootEffect,
 }
 
 /**

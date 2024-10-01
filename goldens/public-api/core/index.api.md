@@ -63,6 +63,7 @@ export function afterRenderEffect<E = never, W = never, M = never>(spec: {
 // @public
 export interface AfterRenderOptions {
     injector?: Injector;
+    manualCleanup?: boolean;
     // @deprecated
     phase?: AfterRenderPhase;
 }
@@ -447,7 +448,9 @@ export interface CreateComputedOptions<T> {
 
 // @public
 export interface CreateEffectOptions {
+    // @deprecated (undocumented)
     allowSignalWrites?: boolean;
+    forceRoot?: true;
     injector?: Injector;
     manualCleanup?: boolean;
 }
@@ -706,13 +709,6 @@ export interface ExistingProvider extends ExistingSansProvider {
 // @public
 export interface ExistingSansProvider {
     useExisting: any;
-}
-
-// @public
-export class ExperimentalPendingTasks {
-    add(): () => void;
-    // (undocumented)
-    static ɵprov: unknown;
 }
 
 // @public
@@ -985,7 +981,9 @@ export interface InputDecorator {
 export interface InputFunction {
     <T>(): InputSignal<T | undefined>;
     <T>(initialValue: T, opts?: InputOptionsWithoutTransform<T>): InputSignal<T>;
+    <T>(initialValue: undefined, opts: InputOptionsWithoutTransform<T>): InputSignal<T | undefined>;
     <T, TransformT>(initialValue: T, opts: InputOptionsWithTransform<T, TransformT>): InputSignalWithTransform<T, TransformT>;
+    <T, TransformT>(initialValue: undefined, opts: InputOptionsWithTransform<T | undefined, TransformT>): InputSignalWithTransform<T | undefined, TransformT>;
     required: {
         <T>(opts?: InputOptionsWithoutTransform<T>): InputSignal<T>;
         <T, TransformT>(opts: InputOptionsWithTransform<T, TransformT>): InputSignalWithTransform<T, TransformT>;
@@ -1017,7 +1015,7 @@ export interface InputSignalWithTransform<T, TransformT> extends Signal<T> {
     // (undocumented)
     [ɵINPUT_SIGNAL_BRAND_WRITE_TYPE]: TransformT;
     // (undocumented)
-    [SIGNAL]: InputSignalNode<T, TransformT>;
+    [SIGNAL]: ɵInputSignalNode<T, TransformT>;
 }
 
 // @public
@@ -1160,7 +1158,7 @@ export interface ModelOptions {
 // @public
 export interface ModelSignal<T> extends WritableSignal<T>, InputSignal<T>, OutputRef<T> {
     // (undocumented)
-    [SIGNAL]: InputSignalNode<T, T>;
+    [SIGNAL]: ɵInputSignalNode<T, T>;
 }
 
 // @public @deprecated
@@ -1347,6 +1345,14 @@ export interface OutputRefSubscription {
 export const PACKAGE_ROOT_URL: InjectionToken<string>;
 
 // @public
+export class PendingTasks {
+    add(): () => void;
+    run<T>(fn: () => Promise<T>): Promise<T>;
+    // (undocumented)
+    static ɵprov: unknown;
+}
+
+// @public
 export interface Pipe {
     name: string;
     pure?: boolean;
@@ -1518,6 +1524,7 @@ export interface RendererType2 {
         [kind: string]: any;
     };
     encapsulation: ViewEncapsulation;
+    getExternalStyles?: ((encapsulationId?: string) => string[]) | null;
     id: string;
     styles: string[];
 }

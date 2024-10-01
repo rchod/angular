@@ -3,7 +3,7 @@
  * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
- * found in the LICENSE file at https://angular.io/license
+ * found in the LICENSE file at https://angular.dev/license
  */
 
 import '../util/ng_jit_mode';
@@ -29,7 +29,7 @@ import {ComponentFactory, ComponentRef} from '../linker/component_factory';
 import {ComponentFactoryResolver} from '../linker/component_factory_resolver';
 import {NgModuleRef} from '../linker/ng_module_factory';
 import {ViewRef} from '../linker/view_ref';
-import {PendingTasks} from '../pending_tasks';
+import {PendingTasksInternal} from '../pending_tasks';
 import {RendererFactory2} from '../render/api';
 import {AfterRenderManager} from '../render3/after_render/manager';
 import {ComponentFactory as R3ComponentFactory} from '../render3/component_ref';
@@ -44,6 +44,7 @@ import {isPromise} from '../util/lang';
 import {NgZone} from '../zone/ng_zone';
 
 import {ApplicationInitStatus} from './application_init';
+import {EffectScheduler} from '../render3/reactivity/root_effect_scheduler';
 
 /**
  * A DI token that provides a set of callbacks to
@@ -310,6 +311,7 @@ export class ApplicationRef {
   private readonly internalErrorHandler = inject(INTERNAL_APPLICATION_ERROR_HANDLER);
   private readonly afterRenderManager = inject(AfterRenderManager);
   private readonly zonelessEnabled = inject(ZONELESS_ENABLED);
+  private readonly rootEffectScheduler = inject(EffectScheduler);
 
   /**
    * Current dirty state of the application across a number of dimensions (views, afterRender hooks,
@@ -359,7 +361,7 @@ export class ApplicationRef {
   /**
    * Returns an Observable that indicates when the application is stable or unstable.
    */
-  public readonly isStable: Observable<boolean> = inject(PendingTasks).hasPendingTasks.pipe(
+  public readonly isStable: Observable<boolean> = inject(PendingTasksInternal).hasPendingTasks.pipe(
     map((pending) => !pending),
   );
 
@@ -647,6 +649,12 @@ export class ApplicationRef {
     this.dirtyFlags |= this.deferredDirtyFlags;
     this.deferredDirtyFlags = ApplicationRefDirtyFlags.None;
 
+    // First, process any dirty root effects.
+    if (this.dirtyFlags & ApplicationRefDirtyFlags.RootEffects) {
+      this.dirtyFlags &= ~ApplicationRefDirtyFlags.RootEffects;
+      this.rootEffectScheduler.flush();
+    }
+
     // First check dirty views, if there are any.
     if (this.dirtyFlags & ApplicationRefDirtyFlags.ViewTreeAny) {
       // Change detection on views starts in targeted mode (only check components if they're
@@ -677,8 +685,12 @@ export class ApplicationRef {
 
       // Check if any views are still dirty after checking and we need to loop back.
       this.syncDirtyFlagsWithViews();
-      if (this.dirtyFlags & ApplicationRefDirtyFlags.ViewTreeAny) {
-        // If any views are still dirty after checking, loop back before running render hooks.
+      if (
+        this.dirtyFlags &
+        (ApplicationRefDirtyFlags.ViewTreeAny | ApplicationRefDirtyFlags.RootEffects)
+      ) {
+        // If any views or effects are still dirty after checking, loop back before running render
+        // hooks.
         return;
       }
     } else {
@@ -873,6 +885,11 @@ export const enum ApplicationRefDirtyFlags {
    * After render hooks need to run.
    */
   AfterRender = 0b00001000,
+
+  /**
+   * Effects at the `ApplicationRef` level.
+   */
+  RootEffects = 0b00010000,
 }
 
 let whenStableStore: WeakMap<ApplicationRef, Promise<void>> | undefined;

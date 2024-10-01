@@ -3,7 +3,7 @@
  * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
- * found in the LICENSE file at https://angular.io/license
+ * found in the LICENSE file at https://angular.dev/license
  */
 
 import ts from 'typescript';
@@ -28,6 +28,7 @@ export interface ConvertInputPreparation {
   resolvedMetadata: ExtractedInput;
   originalInputDecorator: Decorator;
   initialValue: ts.Expression | undefined;
+  leadingTodoText: string | null;
 }
 
 /**
@@ -90,16 +91,36 @@ export function prepareAndCheckForConversion(
   // If the input is using `@Input() bla?: string;` with the "optional question mark",
   // then we try to explicitly add `undefined` as type, if it's not part of the type already.
   // This is ensuring correctness, as `bla?` automatically includes `undefined` currently.
-  if (
-    node.type !== undefined &&
-    node.questionToken !== undefined &&
-    !checker.isTypeAssignableTo(checker.getUndefinedType(), checker.getTypeFromTypeNode(node.type))
-  ) {
-    typeToAdd = ts.factory.createUnionTypeNode([
-      node.type,
-      ts.factory.createKeywordTypeNode(ts.SyntaxKind.UndefinedKeyword),
-    ]);
+  if (node.questionToken !== undefined) {
+    // If there is no type, but we have an initial value, try inferring
+    // it from the initializer.
+    if (typeToAdd === undefined && initialValue !== undefined) {
+      const inferredType = inferImportableTypeForInput(checker, node, initialValue);
+      if (inferredType !== null) {
+        typeToAdd = inferredType;
+      }
+    }
+    if (typeToAdd === undefined) {
+      return {
+        context: node,
+        reason: InputIncompatibilityReason.InputWithQuestionMarkButNoGoodExplicitTypeExtractable,
+      };
+    }
+
+    if (
+      !checker.isTypeAssignableTo(
+        checker.getUndefinedType(),
+        checker.getTypeFromTypeNode(typeToAdd),
+      )
+    ) {
+      typeToAdd = ts.factory.createUnionTypeNode([
+        typeToAdd,
+        ts.factory.createKeywordTypeNode(ts.SyntaxKind.UndefinedKeyword),
+      ]);
+    }
   }
+
+  let leadingTodoText: string | null = null;
 
   // If the input does not have an initial value, and strict property initialization
   // is disabled, while strict null checks are enabled; then we know that `undefined`
@@ -115,6 +136,9 @@ export function prepareAndCheckForConversion(
     metadata.required === false &&
     !checker.isTypeAssignableTo(checker.getUndefinedType(), checker.getTypeFromTypeNode(node.type))
   ) {
+    leadingTodoText =
+      'Input is initialized to `undefined` but type does not allow this value. ' +
+      'This worked with `@Input` because your project uses `--strictPropertyInitialization=false`.';
     isUndefinedInitialValue = false;
     initialValue = ts.factory.createNonNullExpression(ts.factory.createIdentifier('undefined'));
   }
@@ -122,25 +146,9 @@ export function prepareAndCheckForConversion(
   // Attempt to extract type from input initial value. No explicit type, but input is required.
   // Hence we need an explicit type, or fall back to `typeof`.
   if (typeToAdd === undefined && initialValue !== undefined && metadata.required) {
-    const propertyType = checker.getTypeAtLocation(node);
-    if (propertyType.flags & ts.TypeFlags.Boolean) {
-      typeToAdd = ts.factory.createKeywordTypeNode(ts.SyntaxKind.BooleanKeyword);
-    } else if (propertyType.flags & ts.TypeFlags.String) {
-      typeToAdd = ts.factory.createKeywordTypeNode(ts.SyntaxKind.StringKeyword);
-    } else if (propertyType.flags & ts.TypeFlags.Number) {
-      typeToAdd = ts.factory.createKeywordTypeNode(ts.SyntaxKind.NumberKeyword);
-    } else if (ts.isIdentifier(initialValue)) {
-      // @Input({required: true}) bla = SOME_DEFAULT;
-      typeToAdd = ts.factory.createTypeQueryNode(initialValue);
-    } else if (
-      ts.isPropertyAccessExpression(initialValue) &&
-      ts.isIdentifier(initialValue.name) &&
-      ts.isIdentifier(initialValue.expression)
-    ) {
-      // @Input({required: true}) bla = prop.SOME_DEFAULT;
-      typeToAdd = ts.factory.createTypeQueryNode(
-        ts.factory.createQualifiedName(initialValue.name, initialValue.expression),
-      );
+    const inferredType = inferImportableTypeForInput(checker, node, initialValue);
+    if (inferredType !== null) {
+      typeToAdd = inferredType;
     } else {
       // Note that we could use `typeToTypeNode` here but it's likely breaking because
       // the generated type might depend on imports that we cannot add here (nor want).
@@ -158,5 +166,52 @@ export function prepareAndCheckForConversion(
     preferShorthandIfPossible,
     originalInputDecorator: metadata.inputDecorator,
     initialValue: isUndefinedInitialValue ? undefined : initialValue,
+    leadingTodoText,
   };
+}
+
+function inferImportableTypeForInput(
+  checker: ts.TypeChecker,
+  node: InputNode,
+  initialValue: ts.Node,
+): ts.TypeNode | null {
+  const propertyType = checker.getTypeAtLocation(node);
+
+  // If the resolved type is a primitive, or union of primitive types,
+  // return a type node fully derived from the resolved type.
+  if (
+    isPrimitiveImportableTypeNode(propertyType) ||
+    (propertyType.isUnion() && propertyType.types.every(isPrimitiveImportableTypeNode))
+  ) {
+    return checker.typeToTypeNode(propertyType, node, ts.NodeBuilderFlags.NoTypeReduction) ?? null;
+  }
+
+  // Alternatively, try to infer a simple importable type from\
+  // the initializer.
+
+  if (ts.isIdentifier(initialValue)) {
+    // @Input({required: true}) bla = SOME_DEFAULT;
+    return ts.factory.createTypeQueryNode(initialValue);
+  } else if (
+    ts.isPropertyAccessExpression(initialValue) &&
+    ts.isIdentifier(initialValue.name) &&
+    ts.isIdentifier(initialValue.expression)
+  ) {
+    // @Input({required: true}) bla = prop.SOME_DEFAULT;
+    return ts.factory.createTypeQueryNode(
+      ts.factory.createQualifiedName(initialValue.name, initialValue.expression),
+    );
+  }
+
+  return null;
+}
+
+function isPrimitiveImportableTypeNode(type: ts.Type): boolean {
+  return !!(
+    type.flags & ts.TypeFlags.BooleanLike ||
+    type.flags & ts.TypeFlags.StringLike ||
+    type.flags & ts.TypeFlags.NumberLike ||
+    type.flags & ts.TypeFlags.Undefined ||
+    type.flags & ts.TypeFlags.Null
+  );
 }

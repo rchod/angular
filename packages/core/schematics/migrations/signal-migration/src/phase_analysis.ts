@@ -3,7 +3,7 @@
  * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
- * found in the LICENSE file at https://angular.io/license
+ * found in the LICENSE file at https://angular.dev/license
  */
 
 import {isShim} from '@angular/compiler-cli/src/ngtsc/shims';
@@ -16,6 +16,12 @@ import {pass2_IdentifySourceFileReferences} from './passes/2_find_source_file_re
 import {MigrationResult} from './result';
 import {InheritanceGraph} from './utils/inheritance_graph';
 import {GroupedTsAstVisitor} from './utils/grouped_ts_ast_visitor';
+import {
+  isHostBindingReference,
+  isTemplateReference,
+  isTsReference,
+} from './passes/reference_resolution/reference_kinds';
+import {InputIncompatibilityReason} from './input_detection/incompatibility';
 
 /**
  * Executes the analysis phase of the migration.
@@ -32,7 +38,7 @@ export function executeAnalysisPhase(
   result: MigrationResult,
   {
     sourceFiles,
-    programFiles,
+    fullProgramSourceFiles,
     reflector,
     dtsMetadataReader,
     typeChecker,
@@ -43,7 +49,7 @@ export function executeAnalysisPhase(
   }: AnalysisProgramInfo,
 ) {
   // Pass 1
-  programFiles.forEach(
+  fullProgramSourceFiles.forEach(
     (sf) =>
       // Shim shim files. Those are unnecessary and might cause unexpected slowness.
       // e.g. `ngtypecheck` files.
@@ -61,6 +67,14 @@ export function executeAnalysisPhase(
       ),
   );
 
+  const fieldNamesToConsiderForReferenceLookup = new Set<string>();
+  for (const input of knownInputs.knownInputIds.values()) {
+    if (host.config.shouldMigrateInput?.(input) === false) {
+      continue;
+    }
+    fieldNamesToConsiderForReferenceLookup.add(input.descriptor.node.name.text);
+  }
+
   // A graph starting with source files is sufficient. We will resolve into
   // declaration files if a source file depends on such.
   const inheritanceGraph = new InheritanceGraph(typeChecker).expensivePopulate(sourceFiles);
@@ -68,7 +82,7 @@ export function executeAnalysisPhase(
 
   // Register pass 2. Find all source file references.
   pass2_IdentifySourceFileReferences(
-    host,
+    host.programInfo,
     typeChecker,
     reflector,
     resourceLoader,
@@ -77,10 +91,10 @@ export function executeAnalysisPhase(
     pass2And3SourceFileVisitor,
     knownInputs,
     result,
+    fieldNamesToConsiderForReferenceLookup,
   );
   // Register pass 3. Check incompatible patterns pass.
   pass3__checkIncompatiblePatterns(
-    host,
     inheritanceGraph,
     typeChecker,
     pass2And3SourceFileVisitor,
@@ -89,6 +103,36 @@ export function executeAnalysisPhase(
 
   // Perform Pass 2 and Pass 3, efficiently in one pass.
   pass2And3SourceFileVisitor.execute();
+
+  // Determine incompatible inputs based on resolved references.
+  for (const reference of result.references) {
+    if (isTsReference(reference) && reference.from.isWrite) {
+      knownInputs.markFieldIncompatible(reference.target, {
+        reason: InputIncompatibilityReason.WriteAssignment,
+        context: reference.from.node,
+      });
+    }
+    if (isTemplateReference(reference) || isHostBindingReference(reference)) {
+      if (reference.from.isWrite) {
+        knownInputs.markFieldIncompatible(reference.target, {
+          reason: InputIncompatibilityReason.WriteAssignment,
+          // No TS node context available for template or host bindings.
+          context: null,
+        });
+      }
+    }
+
+    // TODO: Remove this when we support signal narrowing in templates.
+    // https://github.com/angular/angular/pull/55456.
+    if (isTemplateReference(reference)) {
+      if (reference.from.isLikelyPartOfNarrowing) {
+        knownInputs.markFieldIncompatible(reference.target, {
+          reason: InputIncompatibilityReason.PotentiallyNarrowedInTemplateButNoSupportYet,
+          context: null,
+        });
+      }
+    }
+  }
 
   return {inheritanceGraph};
 }

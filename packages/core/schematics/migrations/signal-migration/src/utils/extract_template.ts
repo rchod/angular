@@ -3,20 +3,19 @@
  * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
- * found in the LICENSE file at https://angular.io/license
+ * found in the LICENSE file at https://angular.dev/license
  */
 
 import ts from 'typescript';
 import {ReflectionHost, reflectObjectLiteral} from '@angular/compiler-cli/src/ngtsc/reflection';
 import {MigrationHost} from '../migration_host';
-import {getAngularDecorators} from '@angular/compiler-cli/src/ngtsc/annotations';
+import {getAngularDecorators, ResourceLoader} from '@angular/compiler-cli/src/ngtsc/annotations';
 import {PartialEvaluator} from '@angular/compiler-cli/src/ngtsc/partial_evaluator';
 import {
   ExternalTemplateDeclaration,
   InlineTemplateDeclaration,
 } from '@angular/compiler-cli/src/ngtsc/annotations/component/src/resources';
 import {DEFAULT_INTERPOLATION_CONFIG} from '@angular/compiler';
-import path from 'path';
 
 /**
  * Attempts to extract the `TemplateDefinition` for the given
@@ -29,14 +28,14 @@ export function attemptExtractTemplateDefinition(
   node: ts.ClassDeclaration,
   checker: ts.TypeChecker,
   reflector: ReflectionHost,
-  host: MigrationHost,
+  resourceLoader: ResourceLoader,
 ): InlineTemplateDeclaration | ExternalTemplateDeclaration | null {
   const classDecorators = reflector.getDecoratorsOfDeclaration(node);
   const evaluator = new PartialEvaluator(reflector, checker, null);
 
   const ngDecorators =
     classDecorators !== null
-      ? getAngularDecorators(classDecorators, ['Component'], host.isMigratingCore)
+      ? getAngularDecorators(classDecorators, ['Component'], /* isAngularCore */ false)
       : [];
 
   if (
@@ -68,19 +67,23 @@ export function attemptExtractTemplateDefinition(
     }
   }
 
-  // external template.
-  if (templateUrlProp !== undefined) {
-    const templateUrl = evaluator.evaluate(templateUrlProp);
-    if (typeof templateUrl === 'string') {
-      return {
-        isInline: false,
-        interpolationConfig: DEFAULT_INTERPOLATION_CONFIG,
-        preserveWhitespaces: false,
-        templateUrlExpression: templateUrlProp,
-        templateUrl,
-        resolvedTemplateUrl: path.join(path.dirname(containingFile), templateUrl),
-      };
+  try {
+    // external template.
+    if (templateUrlProp !== undefined) {
+      const templateUrl = evaluator.evaluate(templateUrlProp);
+      if (typeof templateUrl === 'string') {
+        return {
+          isInline: false,
+          interpolationConfig: DEFAULT_INTERPOLATION_CONFIG,
+          preserveWhitespaces: false,
+          templateUrlExpression: templateUrlProp,
+          templateUrl,
+          resolvedTemplateUrl: resourceLoader.resolve(templateUrl, containingFile),
+        };
+      }
     }
+  } catch (e) {
+    console.error(`Could not parse external template: ${e}`);
   }
 
   return null;

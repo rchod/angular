@@ -3,7 +3,7 @@
  * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
- * found in the LICENSE file at https://angular.io/license
+ * found in the LICENSE file at https://angular.dev/license
  */
 
 import {getSystemPath, normalize, virtualFs} from '@angular-devkit/core';
@@ -2215,6 +2215,32 @@ describe('standalone migration', () => {
         ],
       })
     `),
+    );
+  });
+
+  it('should handle a directive that is explicitly standalone: false', async () => {
+    writeFile(
+      'module.ts',
+      `
+      import {NgModule, Directive} from '@angular/core';
+
+      @Directive({selector: '[dir]', standalone: false})
+      export class MyDir {}
+
+      @NgModule({declarations: [MyDir], exports: [MyDir]})
+      export class Mod {}
+    `,
+    );
+
+    await runMigration('convert-to-standalone');
+
+    const result = tree.readContent('module.ts');
+
+    expect(stripWhitespace(result)).toContain(
+      stripWhitespace(`@Directive({selector: '[dir]', standalone: true})`),
+    );
+    expect(stripWhitespace(result)).toContain(
+      stripWhitespace(`@NgModule({imports: [MyDir], exports: [MyDir]})`),
     );
   });
 

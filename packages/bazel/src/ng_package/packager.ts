@@ -3,7 +3,7 @@
  * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
- * found in the LICENSE file at https://angular.io/license
+ * found in the LICENSE file at https://angular.dev/license
  */
 
 import * as fs from 'fs';
@@ -68,6 +68,9 @@ function main(args: string[]): void {
     // Path to the package's README.md.
     readmeMd,
 
+    // Path to the package's LICENSE file.
+    licenseFile,
+
     // List of rolled-up flat ES2022 modules
     fesm2022Arg,
 
@@ -89,6 +92,10 @@ function main(args: string[]): void {
 
   if (readmeMd) {
     copyFile(readmeMd, 'README.md');
+  }
+
+  if (licenseFile) {
+    copyFile(licenseFile, 'LICENSE');
   }
 
   /**
