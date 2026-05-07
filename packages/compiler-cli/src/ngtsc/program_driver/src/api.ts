@@ -22,7 +22,7 @@ export interface FileUpdate {
   originalFile: ts.SourceFile | null;
 }
 
-export const NgOriginalFile = Symbol('NgOriginalFile');
+export const NgOriginalFile: unique symbol = Symbol('NgOriginalFile');
 
 /**
  * If an updated file has an associated original source file, then the original source file
@@ -32,7 +32,21 @@ export interface MaybeSourceFileWithOriginalFile extends ts.SourceFile {
   [NgOriginalFile]?: ts.SourceFile;
 }
 
+/**
+ * How a type-checking context should handle operations which would require inlining.
+ */
+export enum InliningMode {
+  InlineOps,
+  Error,
+  CopySourceToTcb,
+}
+
 export interface ProgramDriver {
+  /**
+   * How this strategy handles operations that require inlining.
+   */
+  readonly inliningMode: InliningMode;
+
   /**
    * Whether this strategy supports modifying user files (inline modifications) in addition to
    * modifying type-checking shims.

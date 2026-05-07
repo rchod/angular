@@ -6,6 +6,8 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
+import {AnimationLViewData} from '../../animation/interfaces';
+import type {TracingService, TracingSnapshot} from '../../application/tracing';
 import type {ChangeDetectionScheduler} from '../../change_detection/scheduling/zoneless_scheduling';
 import {TDeferBlockDetails} from '../../defer/interfaces';
 import type {Injector} from '../../di/injector';
@@ -13,11 +15,11 @@ import {ProviderToken} from '../../di/provider_token';
 import {DehydratedView} from '../../hydration/interfaces';
 import {SchemaMetadata} from '../../metadata/schema';
 import {Sanitizer} from '../../sanitization/sanitizer';
-import type {AfterRenderManager} from '../after_render/manager';
+import type {AfterRenderSequence} from '../after_render/manager';
 import type {ReactiveLViewConsumer} from '../reactive_lview_consumer';
 import type {ViewEffectNode} from '../reactivity/effect';
 
-import {LContainer} from './container';
+import type {LContainer} from './container';
 import {
   ComponentDef,
   ComponentTemplate,
@@ -68,6 +70,8 @@ export const ON_DESTROY_HOOKS = 21;
 export const EFFECTS_TO_SCHEDULE = 22;
 export const EFFECTS = 23;
 export const REACTIVE_TEMPLATE_CONSUMER = 24;
+export const AFTER_RENDER_SEQUENCES_TO_ADD = 25;
+export const ANIMATIONS = 26;
 
 /**
  * Size of LView's header. Necessary to adjust for it when setting slots.
@@ -76,7 +80,7 @@ export const REACTIVE_TEMPLATE_CONSUMER = 24;
  * instruction index into `LView` index. All other indexes should be in the `LView` index space and
  * there should be no need to refer to `HEADER_OFFSET` anywhere else.
  */
-export const HEADER_OFFSET = 25;
+export const HEADER_OFFSET = 27;
 
 // This interface replaces the real LView interface if it is an arg or a
 // return value of a public instruction. This ensures we don't need to expose
@@ -140,7 +144,7 @@ export interface LView<T = unknown> extends Array<any> {
    * Store the `TNode` of the location where the current `LView` is inserted into.
    *
    * Given:
-   * ```
+   * ```html
    * <div>
    *   <ng-template><span></span></ng-template>
    * </div>
@@ -155,7 +159,7 @@ export interface LView<T = unknown> extends Array<any> {
    * insertion information in the `TView` and instead we must store it in the `LView[T_HOST]`.
    *
    * So to determine where is our insertion parent we would execute:
-   * ```
+   * ```ts
    * const parentLView = lView[PARENT];
    * const parentTNode = lView[T_HOST];
    * const insertionParent = parentLView[parentTNode.index];
@@ -190,8 +194,8 @@ export interface LView<T = unknown> extends Array<any> {
    */
   [CONTEXT]: T;
 
-  /** An optional Module Injector to be used as fall back after Element Injectors are consulted. */
-  readonly [INJECTOR]: Injector | null;
+  /** A Module Injector to be used as fall back after Element Injectors are consulted. */
+  readonly [INJECTOR]: Injector;
 
   /**
    * Contextual data that is shared across multiple instances of `LView` in the same application.
@@ -250,7 +254,7 @@ export interface LView<T = unknown> extends Array<any> {
    * `DECLARATION_VIEW`.
    *
    * Example:
-   * ```
+   * ```html
    * <#VIEW #myComp>
    *  <div *ngIf="true">
    *   <ng-template #myTmpl>...</ng-template>
@@ -275,7 +279,7 @@ export interface LView<T = unknown> extends Array<any> {
    * `DECLARATION_COMPONENT_VIEW` to differentiate them. As in this example.
    *
    * Example showing intra component `LView` movement.
-   * ```
+   * ```html
    * <#VIEW #myComp>
    *   <div *ngIf="condition; then thenBlock else elseBlock"></div>
    *   <ng-template #thenBlock>Content to render when condition is true.</ng-template>
@@ -285,7 +289,7 @@ export interface LView<T = unknown> extends Array<any> {
    * The `thenBlock` and `elseBlock` is moved but not transplanted.
    *
    * Example showing inter component `LView` movement (transplanted view).
-   * ```
+   * ```html
    * <#VIEW #myComp>
    *   <ng-template #myTmpl>...</ng-template>
    *   <insertion-component [template]="myTmpl"></insertion-component>
@@ -363,6 +367,12 @@ export interface LView<T = unknown> extends Array<any> {
    * if any signals were read.
    */
   [REACTIVE_TEMPLATE_CONSUMER]: ReactiveLViewConsumer | null;
+
+  // AfterRenderSequences that need to be scheduled
+  [AFTER_RENDER_SEQUENCES_TO_ADD]: AfterRenderSequence[] | null;
+
+  // Enter animations that apply to nodes in this view
+  [ANIMATIONS]: AnimationLViewData | null;
 }
 
 /**
@@ -377,6 +387,15 @@ export interface LViewEnvironment {
 
   /** Scheduler for change detection to notify when application state changes. */
   changeDetectionScheduler: ChangeDetectionScheduler | null;
+
+  /** Service used for tracing different parts of the application. */
+  tracingService: TracingService<TracingSnapshot> | null;
+
+  /**
+   * Whether `ng-reflect-*` attributes should be produced in dev mode
+   * (always disabled in prod mode).
+   */
+  ngReflect: boolean;
 }
 
 /** Flags associated with an LView (saved in LView[FLAGS]) */
@@ -423,7 +442,7 @@ export const enum LViewFlags {
   IsRoot = 1 << 9,
 
   /**
-   * Whether this moved LView was needs to be refreshed. Similar to the Dirty flag, but used for
+   * Whether this moved LView needs to be refreshed. Similar to the Dirty flag, but used for
    * transplanted and signal views where the parent/ancestor views are not marked dirty as well.
    * i.e. "Refresh just this view". Used in conjunction with the HAS_CHILD_VIEWS_TO_REFRESH
    * flag.
@@ -516,7 +535,7 @@ export const enum PreOrderHookFlags {
  *
  * ## Example
  *
- * ```
+ * ```ts
  * const hostBindingOpCodes = [
  *   ~30,                               // Select element 30
  *   40, 45, MyDir.ɵdir.hostBindings    // Invoke host bindings on MyDir on element 30;
@@ -527,7 +546,7 @@ export const enum PreOrderHookFlags {
  * ```
  *
  * ## Pseudocode
- * ```
+ * ```ts
  * const hostBindingOpCodes = tView.hostBindingOpCodes;
  * if (hostBindingOpCodes === null) return;
  * for (let i = 0; i < hostBindingOpCodes.length; i++) {

@@ -10,26 +10,24 @@ import {ConstantPool} from '../../constant_pool';
 import * as core from '../../core';
 import * as o from '../../output/output_ast';
 import {ParseError, ParseSourceSpan} from '../../parse_util';
-import {CssSelector} from '../../selector';
 import {ShadowCss} from '../../shadow_css';
-import {CompilationJobKind} from '../../template/pipeline/src/compilation';
+import {CompilationJobKind, TemplateCompilationMode} from '../../template/pipeline/src/compilation';
 import {emitHostBindingFunction, emitTemplateFn, transform} from '../../template/pipeline/src/emit';
 import {ingestComponent, ingestHostBinding} from '../../template/pipeline/src/ingest';
 import {BindingParser} from '../../template_parser/binding_parser';
 import {Identifiers as R3} from '../r3_identifiers';
-import {R3CompiledExpression, typeWithParameters} from '../util';
+import {R3CompiledExpression, tsIgnoreComment, typeWithParameters} from '../util';
 
 import {
   DeclarationListEmitMode,
   DeferBlockDepsEmitMode,
   R3ComponentMetadata,
-  R3DeferPerBlockDependency,
-  R3DeferPerComponentDependency,
   R3DeferResolverFunctionMetadata,
   R3DirectiveMetadata,
   R3HostMetadata,
   R3TemplateDependency,
 } from './api';
+import {getTemplateSourceLocationsEnabled} from './config';
 import {createContentQueriesFunction, createViewQueriesFunction} from './query_generation';
 import {makeBindingParser} from './template';
 import {asLiteral, conditionallyCreateDirectiveBindingLiteral, DefinitionMap} from './util';
@@ -80,6 +78,7 @@ function baseDirectiveFields(
       meta.selector || '',
       meta.name,
       definitionMap,
+      meta.legacyOptionalChaining,
     ),
   );
 
@@ -93,8 +92,8 @@ function baseDirectiveFields(
     definitionMap.set('exportAs', o.literalArr(meta.exportAs.map((e) => o.literal(e))));
   }
 
-  if (meta.isStandalone) {
-    definitionMap.set('standalone', o.literal(true));
+  if (meta.isStandalone === false) {
+    definitionMap.set('standalone', o.literal(false));
   }
   if (meta.isSignal) {
     definitionMap.set('signals', o.literal(true));
@@ -115,7 +114,6 @@ function addFeatures(
 
   const providers = meta.providers;
   const viewProviders = (meta as R3ComponentMetadata<R3TemplateDependency>).viewProviders;
-  const inputKeys = Object.keys(meta.inputs);
 
   if (providers || viewProviders) {
     const args = [providers || new o.LiteralArrayExpr([])];
@@ -123,12 +121,6 @@ function addFeatures(
       args.push(viewProviders);
     }
     features.push(o.importExpr(R3.ProvidersFeature).callFn(args));
-  }
-  for (const key of inputKeys) {
-    if (meta.inputs[key].transformFunction !== null) {
-      features.push(o.importExpr(R3.InputTransformsFeatureFeature));
-      break;
-    }
   }
   // Note: host directives feature needs to be inserted before the
   // inheritance feature to ensure the correct execution order.
@@ -142,16 +134,21 @@ function addFeatures(
   if (meta.usesInheritance) {
     features.push(o.importExpr(R3.InheritDefinitionFeature));
   }
-  if (meta.fullInheritance) {
-    features.push(o.importExpr(R3.CopyDefinitionFeature));
-  }
   if (meta.lifecycle.usesOnChanges) {
     features.push(o.importExpr(R3.NgOnChangesFeature));
   }
-  // TODO: better way of differentiating component vs directive metadata.
-  if (meta.hasOwnProperty('template') && meta.isStandalone) {
-    features.push(o.importExpr(R3.StandaloneFeature));
+  if (meta.controlCreate !== null) {
+    features.push(
+      o.importExpr(R3.ControlFeature).callFn([o.literal(meta.controlCreate.passThroughInput)]),
+    );
   }
+  if ('externalStyles' in meta && meta.externalStyles?.length) {
+    const externalStyleNodes = meta.externalStyles.map((externalStyle) => o.literal(externalStyle));
+    features.push(
+      o.importExpr(R3.ExternalStylesFeature).callFn([o.literalArr(externalStyleNodes)]),
+    );
+  }
+
   if (features.length) {
     definitionMap.set('features', o.literalArr(features));
   }
@@ -186,28 +183,6 @@ export function compileComponentFromMetadata(
   const definitionMap = baseDirectiveFields(meta, constantPool, bindingParser);
   addFeatures(definitionMap, meta);
 
-  const selector = meta.selector && CssSelector.parse(meta.selector);
-  const firstSelector = selector && selector[0];
-
-  // e.g. `attr: ["class", ".my.app"]`
-  // This is optional an only included if the first selector of a component specifies attributes.
-  if (firstSelector) {
-    const selectorAttributes = firstSelector.getAttrs();
-    if (selectorAttributes.length) {
-      definitionMap.set(
-        'attrs',
-        constantPool.getConstLiteral(
-          o.literalArr(
-            selectorAttributes.map((value) =>
-              value != null ? o.literal(value) : o.literal(undefined),
-            ),
-          ),
-          /* forceShared */ true,
-        ),
-      );
-    }
-  }
-
   // e.g. `template: function MyComponent_Template(_ctx, _cm) {...}`
   const templateTypeName = meta.name;
 
@@ -223,18 +198,27 @@ export function compileComponentFromMetadata(
     allDeferrableDepsFn = o.variable(fnName);
   }
 
+  const compilationMode =
+    meta.isStandalone && !meta.hasDirectiveDependencies
+      ? TemplateCompilationMode.DomOnly
+      : TemplateCompilationMode.Full;
+
   // First the template is ingested into IR:
   const tpl = ingestComponent(
     meta.name,
     meta.template.nodes,
     constantPool,
+    compilationMode,
     meta.relativeContextFilePath,
     meta.i18nUseExternalIds,
     meta.defer,
     allDeferrableDepsFn,
+    meta.relativeTemplatePath,
+    getTemplateSourceLocationsEnabled(),
+    meta.legacyOptionalChaining,
   );
 
-  // Then the IR is transformed to prepare it for cod egeneration.
+  // Then the IR is transformed to prepare it for code generation.
   transform(tpl, CompilationJobKind.Tmpl);
 
   // Finally we emit the template function:
@@ -281,6 +265,7 @@ export function compileComponentFromMetadata(
     meta.encapsulation = core.ViewEncapsulation.Emulated;
   }
 
+  let hasStyles = !!meta.externalStyles?.length;
   // e.g. `styles: [str1, str2]`
   if (meta.styles && meta.styles.length) {
     const styleValues =
@@ -295,9 +280,12 @@ export function compileComponentFromMetadata(
     }, [] as o.Expression[]);
 
     if (styleNodes.length > 0) {
+      hasStyles = true;
       definitionMap.set('styles', o.literalArr(styleNodes));
     }
-  } else if (meta.encapsulation === core.ViewEncapsulation.Emulated) {
+  }
+
+  if (!hasStyles && meta.encapsulation === core.ViewEncapsulation.Emulated) {
     // If there is no style, don't generate css selectors on elements
     meta.encapsulation = core.ViewEncapsulation.None;
   }
@@ -319,7 +307,7 @@ export function compileComponentFromMetadata(
   if (meta.changeDetection !== null) {
     if (
       typeof meta.changeDetection === 'number' &&
-      meta.changeDetection !== core.ChangeDetectionStrategy.Default
+      meta.changeDetection !== core.ChangeDetectionStrategy.OnPush
     ) {
       // changeDetection is resolved during analysis. Only set it if not the default.
       definitionMap.set('changeDetection', o.literal(meta.changeDetection));
@@ -467,6 +455,7 @@ function createHostBindingsFunction(
   selector: string,
   name: string,
   definitionMap: DefinitionMap,
+  legacyOptionalChaining: boolean,
 ): o.Expression | null {
   const bindings = bindingParser.createBoundHostProperties(
     hostBindingsMetadata.properties,
@@ -501,6 +490,7 @@ function createHostBindingsFunction(
       properties: bindings,
       events: eventBindings,
       attributes: hostBindingsMetadata.attributes,
+      legacyOptionalChaining: legacyOptionalChaining,
     },
     bindingParser,
     constantPool,
@@ -517,38 +507,42 @@ function createHostBindingsFunction(
   return emitHostBindingFunction(hostJob);
 }
 
-const HOST_REG_EXP = /^(?:\[([^\]]+)\])|(?:\(([^\)]+)\))$/;
-// Represents the groups in the above regex.
-const enum HostBindingGroup {
-  // group 1: "prop" from "[prop]", or "attr.role" from "[attr.role]", or @anim from [@anim]
-  Binding = 1,
-
-  // group 2: "event" from "(event)"
-  Event = 2,
-}
-
 // Defines Host Bindings structure that contains attributes, listeners, and properties,
 // parsed from the `host` object defined for a Type.
 export interface ParsedHostBindings {
-  attributes: {[key: string]: o.Expression};
-  listeners: {[key: string]: string};
-  properties: {[key: string]: string};
+  attributes: Record<string, o.Expression>;
+  listeners: Record<string, string>;
+  properties: Record<string, string>;
   specialAttributes: {styleAttr?: string; classAttr?: string};
 }
 
 export function parseHostBindings(host: {
   [key: string]: string | o.Expression;
 }): ParsedHostBindings {
-  const attributes: {[key: string]: o.Expression} = {};
-  const listeners: {[key: string]: string} = {};
-  const properties: {[key: string]: string} = {};
+  const attributes: Record<string, o.Expression> = {};
+  const listeners: Record<string, string> = {};
+  const properties: Record<string, string> = {};
   const specialAttributes: {styleAttr?: string; classAttr?: string} = {};
 
   for (const key of Object.keys(host)) {
     const value = host[key];
-    const matches = key.match(HOST_REG_EXP);
 
-    if (matches === null) {
+    if (key.startsWith('(') && key.endsWith(')')) {
+      if (typeof value !== 'string') {
+        // TODO(alxhub): make this a diagnostic.
+        throw new Error(`Event binding must be string`);
+      }
+      listeners[key.slice(1, -1)] = value;
+    } else if (key.startsWith('[') && key.endsWith(']')) {
+      if (typeof value !== 'string') {
+        // TODO(alxhub): make this a diagnostic.
+        throw new Error(`Property binding must be string`);
+      }
+      // synthetic properties (the ones that have a `@` as a prefix)
+      // are still treated the same as regular properties. Therefore
+      // there is no point in storing them in a separate map.
+      properties[key.slice(1, -1)] = value;
+    } else {
       switch (key) {
         case 'class':
           if (typeof value !== 'string') {
@@ -571,21 +565,6 @@ export function parseHostBindings(host: {
             attributes[key] = value;
           }
       }
-    } else if (matches[HostBindingGroup.Binding] != null) {
-      if (typeof value !== 'string') {
-        // TODO(alxhub): make this a diagnostic.
-        throw new Error(`Property binding must be string`);
-      }
-      // synthetic properties (the ones that have a `@` as a prefix)
-      // are still treated the same as regular properties. Therefore
-      // there is no point in storing them in a separate map.
-      properties[matches[HostBindingGroup.Binding]] = value;
-    } else if (matches[HostBindingGroup.Event] != null) {
-      if (typeof value !== 'string') {
-        // TODO(alxhub): make this a diagnostic.
-        throw new Error(`Event binding must be string`);
-      }
-      listeners[matches[HostBindingGroup.Event]] = value;
     }
   }
 
@@ -749,7 +728,13 @@ export function compileDeferResolverFunction(
         );
 
         // Dynamic import, e.g. `import('./a').then(...)`.
-        const importExpr = new o.DynamicImportExpr(dep.importPath!).prop('then').callFn([innerFn]);
+        const importExpr = new o.DynamicImportExpr(dep.importPath!)
+          .prop('then')
+          .callFn([innerFn], undefined, undefined, [
+            // Necessary, because we might not generate extensions for the path
+            // and TS may try to enforce it based on the compiler options.
+            tsIgnoreComment(),
+          ]);
         depExpressions.push(importExpr);
       } else {
         // Non-deferrable symbol, just use a reference to the type. Note that it's important to
@@ -767,7 +752,13 @@ export function compileDeferResolverFunction(
       );
 
       // Dynamic import, e.g. `import('./a').then(...)`.
-      const importExpr = new o.DynamicImportExpr(importPath).prop('then').callFn([innerFn]);
+      const importExpr = new o.DynamicImportExpr(importPath)
+        .prop('then')
+        .callFn([innerFn], undefined, undefined, [
+          // Necessary, because we might not generate extensions for the path
+          // and TS may try to enforce it based on the compiler options.
+          tsIgnoreComment(),
+        ]);
       depExpressions.push(importExpr);
     }
   }

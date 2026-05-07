@@ -45,6 +45,9 @@ export interface LocalNgModuleData {
   exports: Reference<ClassDeclaration>[];
 }
 
+/** Value used to mark a module whose scope is in the process of being resolved. */
+const IN_PROGRESS_RESOLUTION = {};
+
 /**
  * A registry which collects information about NgModules, Directives, Components, and Pipes which
  * are local (declared in the ts.Program being compiled), and can produce `LocalModuleScope`s
@@ -96,7 +99,10 @@ export class LocalModuleScopeRegistry implements MetadataRegistry, ComponentScop
    * A cache of calculated `LocalModuleScope`s for each NgModule declared in the current program.
 
    */
-  private cache = new Map<ClassDeclaration, LocalModuleScope | null>();
+  private cache = new Map<
+    ClassDeclaration,
+    LocalModuleScope | typeof IN_PROGRESS_RESOLUTION | null
+  >();
 
   /**
    * Tracks the `RemoteScope` for components requiring "remote scoping".
@@ -145,10 +151,12 @@ export class LocalModuleScopeRegistry implements MetadataRegistry, ComponentScop
   registerPipeMetadata(pipe: PipeMeta): void {}
 
   getScopeForComponent(clazz: ClassDeclaration): LocalModuleScope | null {
-    const scope = !this.declarationToModule.has(clazz)
-      ? null
-      : this.getScopeOfModule(this.declarationToModule.get(clazz)!.ngModule);
-    return scope;
+    if (!this.declarationToModule.has(clazz)) {
+      return null;
+    }
+
+    const module = this.declarationToModule.get(clazz)!.ngModule;
+    return this.getScopeOfModule(module);
   }
 
   /**
@@ -175,9 +183,12 @@ export class LocalModuleScopeRegistry implements MetadataRegistry, ComponentScop
    * defined, or the string `'error'` if the scope contained errors.
    */
   getScopeOfModule(clazz: ClassDeclaration): LocalModuleScope | null {
-    return this.moduleToRef.has(clazz)
-      ? this.getScopeOfModuleReference(this.moduleToRef.get(clazz)!)
-      : null;
+    if (!this.moduleToRef.has(clazz)) {
+      return null;
+    }
+
+    const scope = this.getScopeOfModuleReference(this.moduleToRef.get(clazz)!);
+    return scope === 'cycle' ? null : scope;
   }
 
   /**
@@ -243,10 +254,20 @@ export class LocalModuleScopeRegistry implements MetadataRegistry, ComponentScop
   /**
    * Implementation of `getScopeOfModule` which accepts a reference to a class.
    */
-  private getScopeOfModuleReference(ref: Reference<ClassDeclaration>): LocalModuleScope | null {
+  private getScopeOfModuleReference(
+    ref: Reference<ClassDeclaration>,
+  ): LocalModuleScope | null | 'cycle' {
     if (this.cache.has(ref.node)) {
-      return this.cache.get(ref.node)!;
+      const cachedValue = this.cache.get(ref.node);
+
+      if (cachedValue === IN_PROGRESS_RESOLUTION) {
+        return 'cycle';
+      }
+
+      return cachedValue as LocalModuleScope | null;
     }
+
+    this.cache.set(ref.node, IN_PROGRESS_RESOLUTION);
 
     // Seal the registry to protect the integrity of the `LocalModuleScope` cache.
     this.sealed = true;
@@ -301,14 +322,22 @@ export class LocalModuleScopeRegistry implements MetadataRegistry, ComponentScop
     for (const decl of ngModule.imports) {
       const importScope = this.getExportedScope(decl, diagnostics, ref.node, 'import');
       if (importScope !== null) {
-        if (importScope === 'invalid' || importScope.exported.isPoisoned) {
+        if (
+          importScope === 'invalid' ||
+          importScope === 'cycle' ||
+          importScope.exported.isPoisoned
+        ) {
           // An import was an NgModule but contained errors of its own. Record this as an error too,
           // because this scope is always going to be incorrect if one of its imports could not be
           // read.
-          diagnostics.push(invalidTransitiveNgModuleRef(decl, ngModule.rawImports, 'import'));
           isPoisoned = true;
 
-          if (importScope === 'invalid') {
+          // Prevent the module from reporting a diagnostic about itself when there's a cycle.
+          if (importScope !== 'cycle') {
+            diagnostics.push(invalidTransitiveNgModuleRef(decl, ngModule.rawImports, 'import'));
+          }
+
+          if (importScope === 'invalid' || importScope === 'cycle') {
             continue;
           }
         }
@@ -427,14 +456,22 @@ export class LocalModuleScopeRegistry implements MetadataRegistry, ComponentScop
     for (const decl of ngModule.exports) {
       // Attempt to resolve decl as an NgModule.
       const exportScope = this.getExportedScope(decl, diagnostics, ref.node, 'export');
-      if (exportScope === 'invalid' || (exportScope !== null && exportScope.exported.isPoisoned)) {
+      if (
+        exportScope === 'invalid' ||
+        exportScope === 'cycle' ||
+        (exportScope !== null && exportScope.exported.isPoisoned)
+      ) {
         // An export was an NgModule but contained errors of its own. Record this as an error too,
         // because this scope is always going to be incorrect if one of its exports could not be
         // read.
-        diagnostics.push(invalidTransitiveNgModuleRef(decl, ngModule.rawExports, 'export'));
         isPoisoned = true;
 
-        if (exportScope === 'invalid') {
+        // Prevent the module from reporting a diagnostic about itself when there's a cycle.
+        if (exportScope !== 'cycle') {
+          diagnostics.push(invalidTransitiveNgModuleRef(decl, ngModule.rawExports, 'export'));
+        }
+
+        if (exportScope === 'invalid' || exportScope === 'cycle') {
           continue;
         }
       } else if (exportScope !== null) {
@@ -544,7 +581,7 @@ export class LocalModuleScopeRegistry implements MetadataRegistry, ComponentScop
     diagnostics: ts.Diagnostic[],
     ownerForErrors: DeclarationNode,
     type: 'import' | 'export',
-  ): ExportScope | null | 'invalid' {
+  ): ExportScope | null | 'invalid' | 'cycle' {
     if (ref.node.getSourceFile().isDeclarationFile) {
       // The NgModule is declared in a .d.ts file. Resolve it with the `DependencyScopeReader`.
       if (!ts.isClassDeclaration(ref.node)) {
@@ -565,8 +602,21 @@ export class LocalModuleScopeRegistry implements MetadataRegistry, ComponentScop
       }
       return this.dependencyScopeReader.resolve(ref);
     } else {
+      const scope = this.getScopeOfModuleReference(ref);
+      if (scope === 'cycle') {
+        diagnostics.push(
+          makeDiagnostic(
+            type === 'import'
+              ? ErrorCode.NGMODULE_INVALID_IMPORT
+              : ErrorCode.NGMODULE_INVALID_EXPORT,
+            identifierOfNode(ref.node) || ref.node,
+            `NgModule "${type}" field contains a cycle`,
+          ),
+        );
+      }
+
       // The NgModule is declared locally in the current program. Resolve it from the registry.
-      return this.getScopeOfModuleReference(ref);
+      return scope;
     }
   }
 

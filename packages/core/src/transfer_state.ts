@@ -6,17 +6,17 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
-import {APP_ID, PLATFORM_ID} from './application/application_tokens';
+import {APP_ID} from './application/application_tokens';
 import {inject} from './di/injector_compatibility';
 import {ɵɵdefineInjectable} from './di/interface/defs';
-import {getDocument} from './render3/interfaces/document';
+import {DOCUMENT} from './document';
 
 /**
  * A type-safe key to use with `TransferState`.
  *
  * Example:
  *
- * ```
+ * ```ts
  * const COUNTER_KEY = makeStateKey<number>('counter');
  * let value = 10;
  *
@@ -35,7 +35,7 @@ export type StateKey<T> = string & {
  *
  * Example:
  *
- * ```
+ * ```ts
  * const COUNTER_KEY = makeStateKey<number>('counter');
  * let value = 10;
  *
@@ -46,15 +46,6 @@ export type StateKey<T> = string & {
  */
 export function makeStateKey<T = void>(key: string): StateKey<T> {
   return key as StateKey<T>;
-}
-
-function initTransferState(): TransferState {
-  const transferState = new TransferState();
-  if (inject(PLATFORM_ID) === 'browser') {
-    transferState.store = retrieveTransferredState(getDocument(), inject(APP_ID));
-  }
-
-  return transferState;
 }
 
 /**
@@ -74,10 +65,17 @@ function initTransferState(): TransferState {
  */
 export class TransferState {
   /** @nocollapse */
-  static ɵprov = /** @pureOrBreakMyCode */ ɵɵdefineInjectable({
+  static ɵprov = /** @pureOrBreakMyCode */ /* @__PURE__ */ ɵɵdefineInjectable({
     token: TransferState,
     providedIn: 'root',
-    factory: initTransferState,
+    factory: () => {
+      const transferState = new TransferState();
+      if (typeof ngServerMode === 'undefined' || !ngServerMode) {
+        transferState.store = retrieveTransferredState(inject(DOCUMENT), inject(APP_ID));
+      }
+
+      return transferState;
+    },
   });
 
   /** @internal */
@@ -144,11 +142,12 @@ export class TransferState {
 
     // Escape script tag to avoid break out of <script> tag in serialized output.
     // Encoding of `<` is the same behaviour as G3 script_builders.
-    return JSON.stringify(this.store).replace(/</g, '\\u003C');
+    // Encoding of `/` prevents crawlers from incorrectly indexing relative URLs in inline JSON.
+    return JSON.stringify(this.store).replace(/</g, '\\u003C').replace(/\//g, '\\u002F');
   }
 }
 
-function retrieveTransferredState(
+export function retrieveTransferredState(
   doc: Document,
   appId: string,
 ): Record<string, unknown | undefined> {

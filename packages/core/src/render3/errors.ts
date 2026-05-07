@@ -9,7 +9,7 @@
 import {RuntimeError, RuntimeErrorCode} from '../errors';
 import {Type} from '../interface/type';
 
-import {getComponentDef} from './definition';
+import {getComponentDef} from './def_getters';
 import {getDeclarationComponentDef} from './instructions/element_validation';
 import {TNode} from './interfaces/node';
 import {LView, TVIEW} from './interfaces/view';
@@ -30,8 +30,8 @@ export function assertStandaloneComponentType(type: Type<unknown>) {
       RuntimeErrorCode.TYPE_IS_NOT_STANDALONE,
       `The ${stringifyForError(type)} component is not marked as standalone, ` +
         `but Angular expects to have a standalone component here. ` +
-        `Please make sure the ${stringifyForError(type)} component has ` +
-        `the \`standalone: true\` flag in the decorator.`,
+        `Please make sure the ${stringifyForError(type)} component does not have ` +
+        `the \`standalone: false\` flag in the decorator.`,
     );
   }
 }

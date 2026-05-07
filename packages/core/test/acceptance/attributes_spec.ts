@@ -6,14 +6,16 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
-import {Component} from '@angular/core';
-import {TestBed} from '@angular/core/testing';
 import {By, DomSanitizer, SafeUrl} from '@angular/platform-browser';
+import {ChangeDetectionStrategy, Component, provideZoneChangeDetection} from '../../src/core';
+import {TestBed} from '../../testing';
 
 describe('attribute creation', () => {
   it('should create an element', () => {
     @Component({
       template: `<div id="test" title="Hello"></div>`,
+      standalone: false,
+      changeDetection: ChangeDetectionStrategy.Eager,
     })
     class Comp {}
 
@@ -28,6 +30,8 @@ describe('attribute creation', () => {
   it('should allow for setting xlink namespaced attributes', () => {
     @Component({
       template: `<div id="test" xlink:href="bar" title="Hello"></div>`,
+      standalone: false,
+      changeDetection: ChangeDetectionStrategy.Eager,
     })
     class Comp {}
 
@@ -53,9 +57,16 @@ describe('attribute creation', () => {
 });
 
 describe('attribute binding', () => {
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [provideZoneChangeDetection()],
+    });
+  });
   it('should set attribute values', () => {
     @Component({
       template: `<a [attr.href]="url"></a>`,
+      standalone: false,
+      changeDetection: ChangeDetectionStrategy.Eager,
     })
     class Comp {
       url = 'https://angular.io/robots.txt';
@@ -73,6 +84,8 @@ describe('attribute binding', () => {
   it('should be able to bind multiple attribute values per element', () => {
     @Component({
       template: `<a [attr.id]="id" [attr.href]="url" [attr.tabindex]="'-1'"></a>`,
+      standalone: false,
+      changeDetection: ChangeDetectionStrategy.Eager,
     })
     class Comp {
       url = 'https://angular.io/robots.txt';
@@ -93,6 +106,8 @@ describe('attribute binding', () => {
   it('should be able to bind multiple attributes in the presence of other bindings', () => {
     @Component({
       template: `<a [id]="id" [attr.href]="url" [title]="'hello'"></a>`,
+      standalone: false,
+      changeDetection: ChangeDetectionStrategy.Eager,
     })
     class Comp {
       url = 'https://angular.io/robots.txt';
@@ -112,11 +127,13 @@ describe('attribute binding', () => {
 
   it('should be able to bind attributes with interpolations', () => {
     @Component({
-      template: `
-        <button
-          attr.id="my-{{id}}-button"
-          [attr.title]="title"
-          attr.tabindex="{{1 + 3 + 7}}"></button>`,
+      template: ` <button
+        attr.id="my-{{ id }}-button"
+        [attr.title]="title"
+        attr.tabindex="{{ 1 + 3 + 7 }}"
+      ></button>`,
+      standalone: false,
+      changeDetection: ChangeDetectionStrategy.Eager,
     })
     class Comp {
       title = 'hello';
@@ -137,14 +154,12 @@ describe('attribute binding', () => {
   it('should be able to bind attributes both to parent and child nodes', () => {
     @Component({
       template: `
-        <button
-          attr.id="my-{{id}}-button"
-          [attr.title]="title"
-          attr.tabindex="{{1 + 3 + 7}}">
-
-          <span attr.title="span-{{title}}" id="custom-span" [attr.tabindex]="-1"></span>
+        <button attr.id="my-{{ id }}-button" [attr.title]="title" attr.tabindex="{{ 1 + 3 + 7 }}">
+          <span attr.title="span-{{ title }}" id="custom-span" [attr.tabindex]="-1"></span>
         </button>
       `,
+      standalone: false,
+      changeDetection: ChangeDetectionStrategy.Eager,
     })
     class Comp {
       title = 'hello';
@@ -170,6 +185,8 @@ describe('attribute binding', () => {
   it('should sanitize attribute values', () => {
     @Component({
       template: `<a [attr.href]="badUrl"></a>`,
+      standalone: false,
+      changeDetection: ChangeDetectionStrategy.Eager,
     })
     class Comp {
       badUrl: string | SafeUrl = 'javascript:true';
@@ -198,17 +215,21 @@ describe('attribute interpolation', () => {
   it('should handle all varieties of interpolation', () => {
     @Component({
       template: `
-        <div attr.title="a{{a}}b{{b}}c{{c}}d{{d}}e{{e}}f{{f}}g{{g}}h{{h}}i{{i}}j"></div>
-        <div attr.title="a{{a}}b{{b}}c{{c}}d{{d}}e{{e}}f{{f}}g{{g}}h{{h}}i"></div>
-        <div attr.title="a{{a}}b{{b}}c{{c}}d{{d}}e{{e}}f{{f}}g{{g}}h"></div>
-        <div attr.title="a{{a}}b{{b}}c{{c}}d{{d}}e{{e}}f{{f}}g"></div>
-        <div attr.title="a{{a}}b{{b}}c{{c}}d{{d}}e{{e}}f"></div>
-        <div attr.title="a{{a}}b{{b}}c{{c}}d{{d}}e"></div>
-        <div attr.title="a{{a}}b{{b}}c{{c}}d"></div>
-        <div attr.title="a{{a}}b{{b}}c"></div>
-        <div attr.title="a{{a}}b"></div>
-        <div attr.title="{{a}}"></div>
+        <div
+          attr.title="a{{ a }}b{{ b }}c{{ c }}d{{ d }}e{{ e }}f{{ f }}g{{ g }}h{{ h }}i{{ i }}j"
+        ></div>
+        <div attr.title="a{{ a }}b{{ b }}c{{ c }}d{{ d }}e{{ e }}f{{ f }}g{{ g }}h{{ h }}i"></div>
+        <div attr.title="a{{ a }}b{{ b }}c{{ c }}d{{ d }}e{{ e }}f{{ f }}g{{ g }}h"></div>
+        <div attr.title="a{{ a }}b{{ b }}c{{ c }}d{{ d }}e{{ e }}f{{ f }}g"></div>
+        <div attr.title="a{{ a }}b{{ b }}c{{ c }}d{{ d }}e{{ e }}f"></div>
+        <div attr.title="a{{ a }}b{{ b }}c{{ c }}d{{ d }}e"></div>
+        <div attr.title="a{{ a }}b{{ b }}c{{ c }}d"></div>
+        <div attr.title="a{{ a }}b{{ b }}c"></div>
+        <div attr.title="a{{ a }}b"></div>
+        <div attr.title="{{ a }}"></div>
       `,
+      standalone: false,
+      changeDetection: ChangeDetectionStrategy.Eager,
     })
     class App {
       a = 1;

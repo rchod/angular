@@ -5,20 +5,15 @@
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.dev/license
  */
-import localeAr from '@angular/common/locales/ar';
-import localeDe from '@angular/common/locales/de';
-import localeEn from '@angular/common/locales/en';
-import localeEnExtra from '@angular/common/locales/extra/en';
-import localeFi from '@angular/common/locales/fi';
-import localeHu from '@angular/common/locales/hu';
-import localeSr from '@angular/common/locales/sr';
-import localeTh from '@angular/common/locales/th';
-import {
-  formatDate,
-  getThursdayThisIsoWeek,
-  isDate,
-  toDate,
-} from '@angular/common/src/i18n/format_date';
+import localeAr from '../../locales/ar';
+import localeDe from '../../locales/de';
+import localeEn from '../../locales/en';
+import localeEnExtra from '../../locales/extra/en';
+import localeFi from '../../locales/fi';
+import localeHu from '../../locales/hu';
+import localeSr from '../../locales/sr';
+import localeTh from '../../locales/th';
+import {formatDate, getThursdayThisIsoWeek, isDate, toDate} from '../../src/i18n/format_date';
 import {ɵDEFAULT_LOCALE_ID, ɵregisterLocaleData, ɵunregisterLocaleData} from '@angular/core';
 
 describe('Format date', () => {
@@ -246,6 +241,14 @@ describe('Format date', () => {
         BBBBB: 'at night',
       };
 
+      // Suppress console warnings for 'YYYY' patterns.
+      const consoleError = console.error;
+      spyOn(console, 'error').and.callFake((...args: unknown[]) => {
+        if (!/Suspicious use of week-based year/.test(String(args))) {
+          consoleError(...args);
+        }
+      });
+
       Object.keys(dateFixtures).forEach((pattern: string) => {
         expectDateFormatAs(date, pattern, dateFixtures[pattern]);
       });
@@ -270,7 +273,7 @@ describe('Format date', () => {
         );
       });
 
-      const nightTime = new Date(2015, 5, 15, 2, 3, 1, 550);
+      const nightTime = new Date(2015, 5, 15, 22, 3, 1, 550);
       Object.keys(midnightCrossingPeriods).forEach((pattern) => {
         expectDateFormatAs(nightTime, pattern, midnightCrossingPeriods[pattern]);
       });
@@ -333,14 +336,14 @@ describe('Format date', () => {
         mediumDate: 'Jun 15, 2015',
         longDate: 'June 15, 2015',
         fullDate: 'Monday, June 15, 2015',
-        short: '6/15/15, 9:03 AM',
-        medium: 'Jun 15, 2015, 9:03:01 AM',
-        long: /June 15, 2015 at 9:03:01 AM GMT(\+|-)\d/,
-        full: /Monday, June 15, 2015 at 9:03:01 AM GMT(\+|-)\d{2}:\d{2}/,
-        shortTime: '9:03 AM',
-        mediumTime: '9:03:01 AM',
-        longTime: /9:03:01 AM GMT(\+|-)\d/,
-        fullTime: /9:03:01 AM GMT(\+|-)\d{2}:\d{2}/,
+        short: '6/15/15, 9:03 AM',
+        medium: 'Jun 15, 2015, 9:03:01 AM',
+        long: /June 15, 2015, 9:03:01 AM GMT(\+|-)\d/,
+        full: /Monday, June 15, 2015, 9:03:01 AM GMT(\+|-)\d{2}:\d{2}/,
+        shortTime: '9:03 AM',
+        mediumTime: '9:03:01 AM',
+        longTime: /9:03:01 AM GMT(\+|-)\d/,
+        fullTime: /9:03:01 AM GMT(\+|-)\d{2}:\d{2}/,
       };
 
       Object.keys(dateFixtures).forEach((pattern: string) => {
@@ -380,7 +383,7 @@ describe('Format date', () => {
     it('should show the correct time when the timezone is fixed', () => {
       expect(
         formatDate('2017-06-13T10:14:39+0000', 'shortTime', ɵDEFAULT_LOCALE_ID, '+0000'),
-      ).toEqual('10:14 AM');
+      ).toEqual('10:14 AM');
       expect(formatDate('2017-06-13T10:14:39+0000', 'h:mm a', ɵDEFAULT_LOCALE_ID, '+0000')).toEqual(
         '10:14 AM',
       );
@@ -417,7 +420,7 @@ describe('Format date', () => {
 
     it(`should format the date correctly in various locales`, () => {
       expect(formatDate(date, 'short', 'de')).toEqual('15.06.15, 09:03');
-      expect(formatDate(date, 'short', 'ar')).toEqual('15‏/6‏/2015, 9:03 ص');
+      expect(formatDate(date, 'short', 'ar')).toEqual('15‏/6‏/2015، 9:03 ص');
       expect(formatDate(date, 'dd-MM-yy', 'th')).toEqual('15-06-15');
       expect(formatDate(date, 'a', 'hu')).toEqual('de.');
       expect(formatDate(date, 'a', 'sr')).toEqual('AM');
@@ -450,17 +453,23 @@ describe('Format date', () => {
 
     // https://github.com/angular/angular/issues/38739
     it('should return correct ISO 8601 week-numbering year for dates close to year end/beginning', () => {
-      expect(formatDate('2013-12-27', 'YYYY', 'en')).toEqual('2013');
-      expect(formatDate('2013-12-29', 'YYYY', 'en')).toEqual('2013');
-      expect(formatDate('2013-12-31', 'YYYY', 'en')).toEqual('2014');
+      expect(formatDate('2013-12-27', `YYYY 'W'ww`, 'en')).toEqual('2013 W52');
+      expect(formatDate('2013-12-29', `YYYY 'W'ww`, 'en')).toEqual('2013 W52');
+      expect(formatDate('2013-12-31', `YYYY 'W'ww`, 'en')).toEqual('2014 W01');
 
       // Dec. 31st is a Sunday, last day of the last week of 2023
-      expect(formatDate('2023-12-31', 'YYYY', 'en')).toEqual('2023');
+      expect(formatDate('2023-12-31', `YYYY 'W'ww`, 'en')).toEqual('2023 W52');
 
-      expect(formatDate('2010-01-02', 'YYYY', 'en')).toEqual('2009');
-      expect(formatDate('2010-01-04', 'YYYY', 'en')).toEqual('2010');
-      expect(formatDate('0049-01-01', 'YYYY', 'en')).toEqual('0048');
-      expect(formatDate('0049-01-04', 'YYYY', 'en')).toEqual('0049');
+      expect(formatDate('2010-01-02', `YYYY 'W'ww`, 'en')).toEqual('2009 W53');
+      expect(formatDate('2010-01-04', `YYYY 'W'ww`, 'en')).toEqual('2010 W01');
+      expect(formatDate('0049-01-01', `YYYY 'W'ww`, 'en')).toEqual('0048 W53');
+      expect(formatDate('0049-01-04', `YYYY 'W'ww`, 'en')).toEqual('0049 W01');
+    });
+
+    it('should throw an error when using YYYY incorrectly', () => {
+      expect(() => formatDate('2013-12-31', `YYYY/MM/dd`, ɵDEFAULT_LOCALE_ID)).toThrowError(
+        /.*Suspicious use of week-based year "Y".*/,
+      );
     });
 
     // https://github.com/angular/angular/issues/53813
@@ -480,11 +489,11 @@ describe('Format date', () => {
 
     // https://github.com/angular/angular/issues/40377
     it('should format date with year between 0 and 99 correctly', () => {
-      expect(formatDate('0098-01-11', 'YYYY', ɵDEFAULT_LOCALE_ID)).toEqual('0098');
-      expect(formatDate('0099-01-11', 'YYYY', ɵDEFAULT_LOCALE_ID)).toEqual('0099');
-      expect(formatDate('0100-01-11', 'YYYY', ɵDEFAULT_LOCALE_ID)).toEqual('0100');
-      expect(formatDate('0001-01-11', 'YYYY', ɵDEFAULT_LOCALE_ID)).toEqual('0001');
-      expect(formatDate('0000-01-11', 'YYYY', ɵDEFAULT_LOCALE_ID)).toEqual('0000');
+      expect(formatDate('0098-01-11', `YYYY 'W'ww`, ɵDEFAULT_LOCALE_ID)).toEqual('0098 W02');
+      expect(formatDate('0099-01-11', `YYYY 'W'ww`, ɵDEFAULT_LOCALE_ID)).toEqual('0099 W02');
+      expect(formatDate('0100-01-11', `YYYY 'W'ww`, ɵDEFAULT_LOCALE_ID)).toEqual('0100 W02');
+      expect(formatDate('0001-01-11', `YYYY 'W'ww`, ɵDEFAULT_LOCALE_ID)).toEqual('0001 W02');
+      expect(formatDate('0000-01-11', `YYYY 'W'ww`, ɵDEFAULT_LOCALE_ID)).toEqual('0000 W02');
     });
 
     // https://github.com/angular/angular/issues/26922
@@ -506,24 +515,22 @@ describe('Format date', () => {
     it('should support timezones', () => {
       const isoDate = '2024-02-17T12:00:00Z';
 
-      const date1 = formatDate(isoDate, 'long', 'en', 'America/New_York');
-      const date2 = formatDate(isoDate, 'long', 'en', 'EST');
-      expect(date1).toBe('February 17, 2024 at 12:00:00 PM GMT+0');
-      expect(date2).toBe('February 17, 2024 at 7:00:00 AM GMT-5');
+      const dateEst = formatDate(isoDate, 'long', 'en', 'EST');
+      expect(dateEst).toBe('February 17, 2024, 7:00:00 AM GMT-5');
 
-      const date3 = formatDate(isoDate, 'long', 'en', '+0500');
-      expect(date3).toBe('February 17, 2024 at 5:00:00 PM GMT+5');
+      const dateOffset = formatDate(isoDate, 'long', 'en', '+0500');
+      expect(dateOffset).toBe('February 17, 2024, 5:00:00 PM GMT+5');
     });
 
     it('should return thursday date of the same week', () => {
       // Dec. 31st is a Sunday, last day of the last week of 2023
-      expect(getThursdayThisIsoWeek(new Date('2023-12-31'))).toEqual(new Date('2023-12-28'));
+      expect(getThursdayThisIsoWeek(new Date(2023, 11, 31))).toEqual(new Date(2023, 11, 28));
 
       // Dec. 29th is a Thursday
-      expect(getThursdayThisIsoWeek(new Date('2022-12-29'))).toEqual(new Date('2022-12-29'));
+      expect(getThursdayThisIsoWeek(new Date(2022, 11, 29))).toEqual(new Date(2022, 11, 29));
 
       // Jan 01st is a Monday
-      expect(getThursdayThisIsoWeek(new Date('2024-01-01'))).toEqual(new Date('2024-01-04'));
+      expect(getThursdayThisIsoWeek(new Date(2024, 0, 1))).toEqual(new Date(2024, 0, 4));
     });
   });
 });

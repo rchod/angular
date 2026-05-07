@@ -45,7 +45,8 @@ export interface InjectableDecorator {
    * provided and injected as a dependency.
    *
    * @see [Introduction to Services and DI](guide/di)
-   * @see [Dependency Injection Guide](guide/di/dependency-injection
+   * @see [Creating and using services](guide/di/creating-and-using-services)
+   * @see [Defining dependency providers](guide/di/defining-dependency-providers)
    *
    * @usageNotes
    *
@@ -56,13 +57,16 @@ export interface InjectableDecorator {
    * The following example shows how a service class is properly
    *  marked so that a supporting service can be injected upon creation.
    *
-   * <code-example path="core/di/ts/metadata_spec.ts" region="Injectable"></code-example>
+   * {@example core/di/ts/metadata_spec.ts region='Injectable'}
    *
    */
   (): TypeDecorator;
-  (
-    options?: {providedIn: Type<any> | 'root' | 'platform' | 'any' | null} & InjectableProvider,
-  ): TypeDecorator;
+
+  /**
+   * @deprecated The `providedIn: NgModule` or `providedIn:'any'` options are deprecated. Please use the other signatures.
+   */
+  (options?: {providedIn: Type<any> | 'any'} & InjectableProvider): TypeDecorator;
+  (options?: {providedIn: 'root' | 'platform' | null} & InjectableProvider): TypeDecorator;
   new (): Injectable;
   new (
     options?: {providedIn: Type<any> | 'root' | 'platform' | 'any' | null} & InjectableProvider,
@@ -71,6 +75,7 @@ export interface InjectableDecorator {
 
 /**
  * Type of the Injectable metadata.
+ *
  *
  * @publicApi
  */
@@ -81,8 +86,7 @@ export interface Injectable {
    * - `Type<any>` - associates the injectable with an `@NgModule` or other `InjectorType`. This
    * option is DEPRECATED.
    * - 'null' : Equivalent to `undefined`. The injectable is not provided in any scope automatically
-   * and must be added to a `providers` array of an [@NgModule](api/core/NgModule#providers),
-   * [@Component](api/core/Directive#providers) or [@Directive](api/core/Directive#providers).
+   * and must be added to a `providers` array.
    *
    * The following options specify that this injectable should be provided in one of the following
    * injectors:

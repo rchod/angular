@@ -6,10 +6,16 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
+import {ɵRuntimeError as RuntimeError} from '@angular/core';
+
+import {RuntimeErrorCode} from './errors';
+
 /**
  * A codec for encoding and decoding parameters in URLs.
  *
  * Used by `HttpParams`.
+ *
+ * @see [Custom parameter encoding](guide/http/making-requests#custom-parameter-encoding)
  *
  * @publicApi
  **/
@@ -125,6 +131,9 @@ interface Update {
 /**
  * Options used to construct an `HttpParams` instance.
  *
+ * @see [Setting URL parameters](guide/http/making-requests#setting-url-parameters)
+ * @see [Custom parameter encoding](guide/http/making-requests#custom-parameter-encoding)
+ *
  * @publicApi
  */
 export interface HttpParamsOptions {
@@ -149,6 +158,8 @@ export interface HttpParamsOptions {
  *
  * This class is immutable; all mutation operations return a new instance.
  *
+ * @see [Setting URL parameters](guide/http/making-requests#setting-url-parameters)
+ *
  * @publicApi
  */
 export class HttpParams {
@@ -159,9 +170,12 @@ export class HttpParams {
 
   constructor(options: HttpParamsOptions = {} as HttpParamsOptions) {
     this.encoder = options.encoder || new HttpUrlEncodingCodec();
-    if (!!options.fromString) {
-      if (!!options.fromObject) {
-        throw new Error(`Cannot specify both fromString and fromObject.`);
+    if (options.fromString) {
+      if (options.fromObject) {
+        throw new RuntimeError(
+          RuntimeErrorCode.CANNOT_SPECIFY_BOTH_FROM_STRING_AND_FROM_OBJECT,
+          ngDevMode && 'Cannot specify both fromString and fromObject.',
+        );
       }
       this.map = paramParser(options.fromString, this.encoder);
     } else if (!!options.fromObject) {

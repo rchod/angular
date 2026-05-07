@@ -29,8 +29,9 @@ import {Component, Input} from '@angular/core';
       </div>
     </div>
   `,
+  standalone: false,
 })
 export class ClassBindingsComponent {
   @Input() msg: string = '';
-  @Input() list: string[] | null = null;
+  @Input() list: {i: number; text: string}[] | null = null;
 }

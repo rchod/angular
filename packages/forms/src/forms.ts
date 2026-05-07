@@ -36,6 +36,8 @@ export {RadioControlValueAccessor} from './directives/radio_control_value_access
 export {RangeValueAccessor} from './directives/range_value_accessor';
 export {FormControlDirective} from './directives/reactive_directives/form_control_directive';
 export {FormControlName} from './directives/reactive_directives/form_control_name';
+export {AbstractFormDirective} from './directives/reactive_directives/abstract_form.directive';
+export {FormArrayDirective} from './directives/reactive_directives/form_array_directive';
 export {FormGroupDirective} from './directives/reactive_directives/form_group_directive';
 export {FormArrayName, FormGroupName} from './directives/reactive_directives/form_group_name';
 export {
@@ -46,7 +48,12 @@ export {
   SelectMultipleControlValueAccessor,
   ɵNgSelectMultipleOption,
 } from './directives/select_multiple_control_value_accessor';
-export {SetDisabledStateOption} from './directives/shared';
+export {
+  selectValueAccessor as ɵselectValueAccessor,
+  SetDisabledStateOption,
+  ɵFORM_CONTROL_INTEGRATION,
+  ɵFormControlIntegration,
+} from './directives/shared';
 export {
   AsyncValidator,
   AsyncValidatorFn,
@@ -116,5 +123,13 @@ export {
 } from './model/form_group';
 export {NG_ASYNC_VALIDATORS, NG_VALIDATORS, Validators} from './validators';
 export {VERSION} from './version';
+
+export {
+  isNativeFormElement as ɵisNativeFormElement,
+  elementAcceptsMinMax as ɵelementAcceptsMinMax,
+  isTextualFormElement as ɵisTextualFormElement,
+  setNativeDomProperty as ɵsetNativeDomProperty,
+  type NativeFormControl as ɵNativeFormControl,
+} from './directives/native';
 
 export * from './form_providers';

@@ -8,16 +8,17 @@
 
 /** @fileoverview provides adapters for communicating with the ng compiler */
 
-import {ConfigurationHost} from '@angular/compiler-cli';
-import {NgCompilerAdapter} from '@angular/compiler-cli/src/ngtsc/core/api';
 import {
   AbsoluteFsPath,
+  ConfigurationHost,
   FileStats,
+  NgCompilerAdapter,
   PathSegment,
   PathString,
-} from '@angular/compiler-cli/src/ngtsc/file_system';
-import {isShim} from '@angular/compiler-cli/src/ngtsc/shims';
-import {getRootDirs} from '@angular/compiler-cli/src/ngtsc/util/src/typescript';
+  getRootDirs,
+  isShim,
+} from '@angular/compiler-cli';
+
 import * as p from 'path';
 import ts from 'typescript';
 
@@ -41,6 +42,15 @@ export class LanguageServiceAdapter implements NgCompilerAdapter {
 
   constructor(private readonly project: ts.server.Project) {
     this.rootDirs = getRootDirs(this, project.getCompilationSettings());
+  }
+
+  getSourceFile(
+    fileName: string,
+    languageVersion: ts.ScriptTarget,
+    onError?: (message: string) => void,
+    shouldCreateNewSourceFile?: boolean,
+  ): ts.SourceFile | undefined {
+    return this.project.getSourceFile(this.project.projectService.toPath(fileName));
   }
 
   resourceNameToFileName(
@@ -104,7 +114,8 @@ export class LanguageServiceAdapter implements NgCompilerAdapter {
    */
   readResource(fileName: string): string {
     if (isTypeScriptFile(fileName)) {
-      throw new Error(`readResource() should not be called on TS file: ${fileName}`);
+      console.error(`readResource() should not be called on TS file: ${fileName}`);
+      return '';
     }
     // Calling getScriptSnapshot() will actually create a ScriptInfo if it does
     // not exist! The same applies for getScriptVersion().
@@ -115,8 +126,9 @@ export class LanguageServiceAdapter implements NgCompilerAdapter {
     this.lastReadResourceVersion.set(fileName, version);
     const scriptInfo = this.project.getScriptInfo(fileName);
     if (!scriptInfo) {
-      // // This should not happen because it would have failed already at `getScriptVersion`.
-      throw new Error(`Failed to get script info when trying to read ${fileName}`);
+      // This should not happen because it would have failed already at `getScriptVersion`.
+      console.error(`Failed to get script info when trying to read ${fileName}`);
+      return '';
     }
     // Add external resources as root files to the project since we project language service
     // features for them (this is currently only the case for HTML files, but we could investigate
@@ -155,7 +167,8 @@ export class LSParseConfigHost implements ConfigurationHost {
   readFile(path: AbsoluteFsPath): string {
     const content = this.serverHost.readFile(path);
     if (content === undefined) {
-      throw new Error(`LanguageServiceFS#readFile called on unavailable file ${path}`);
+      console.error(`LanguageServiceFS#readFile called on unavailable file ${path}`);
+      return '';
     }
     return content;
   }

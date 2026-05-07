@@ -6,9 +6,9 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
-import {ContainerType, Descriptor, NestedProp, PropType} from 'protocol';
+import {ContainerType, Descriptor, NestedProp, PropType} from '../../../../protocol';
 
-import {isSignal, unwrapSignal} from '../utils';
+import {isSignal, safelyReadSignalValue, unwrapSignal} from '../utils';
 
 import {getDescriptor, getKeys} from './object-utils';
 
@@ -54,14 +54,16 @@ const typeToDescriptorPreview: Formatter<string> = {
   [PropType.Array]: (prop: Array<unknown>) => `Array(${prop.length})`,
   [PropType.Set]: (prop: Set<unknown>) => `Set(${prop.size})`,
   [PropType.Map]: (prop: Map<unknown, unknown>) => `Map(${prop.size})`,
-  [PropType.BigInt]: (prop: bigint) => truncate(prop.toString()),
+  [PropType.BigInt]: (prop: bigint) => `${truncate(prop.toString())}n`,
   [PropType.Boolean]: (prop: boolean) => truncate(prop.toString()),
   [PropType.String]: (prop: string) => `"${prop}"`,
-  [PropType.Function]: (prop: Function) => `${prop.name}(...)`,
+  [PropType.Function]: (prop: Function) => `${prop.name ? 'ƒ ' : ''}(...)`,
   [PropType.HTMLNode]: (prop: Node) => prop.constructor.name,
   [PropType.Null]: (_: null) => 'null',
-  [PropType.Number]: (prop: any) => parseInt(prop, 10).toString(),
-  [PropType.Object]: (prop: Object) => (getKeys(prop).length > 0 ? '{...}' : '{}'),
+  [PropType.Number]: (prop: any) => prop.toString(),
+  [PropType.Object]: (prop: Object) =>
+    (prop.constructor.name !== 'Object' ? `${prop.constructor.name} ` : '') +
+    (getKeys(prop).length > 0 ? '{...}' : '{}'),
   [PropType.Symbol]: (symbol: symbol) => `Symbol(${symbol.description})`,
   [PropType.Undefined]: (_: undefined) => 'undefined',
   [PropType.Date]: (prop: unknown) => {
@@ -71,6 +73,7 @@ const typeToDescriptorPreview: Formatter<string> = {
     return `${prop}`;
   },
   [PropType.Unknown]: (_: any) => 'unknown',
+  [PropType.Error]: (_: any) => '[⚠️ Error when retrieving the value]',
 };
 
 type Key = string | number;
@@ -141,6 +144,10 @@ const shallowPropTypeToTreeMetaData: Record<
     editable: false,
     expandable: false,
   },
+  [PropType.Error]: {
+    editable: false,
+    expandable: false,
+  },
 };
 
 const isEditable = (
@@ -173,10 +180,19 @@ const isGetterOrSetter = (descriptor: any): boolean =>
 
 const getPreview = (propData: TerminalType | CompositeType, isGetterOrSetter: boolean) => {
   if (propData.containerType === 'ReadonlySignal') {
-    return `Readonly Signal(${typeToDescriptorPreview[propData.type](propData.prop())})`;
+    const {error, value} = safelyReadSignalValue(propData.prop);
+    if (error) {
+      return `Signal(⚠️ Error)${error.message ? `: ${error.message}` : ''}`;
+    }
+    return `Readonly Signal(${typeToDescriptorPreview[propData.type](value)})`;
   } else if (propData.containerType === 'WritableSignal') {
-    return `Signal(${typeToDescriptorPreview[propData.type](propData.prop())})`;
+    const {error, value} = safelyReadSignalValue(propData.prop);
+    if (error) {
+      return `Signal(⚠️ Error)${error.message ? `: ${error.message}` : ''}`;
+    }
+    return `Signal(${typeToDescriptorPreview[propData.type](value)})`;
   }
+
   return !isGetterOrSetter
     ? typeToDescriptorPreview[propData.type](propData.prop)
     : typeToDescriptorPreview[PropType.Function]({name: ''});

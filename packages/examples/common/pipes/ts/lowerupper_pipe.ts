@@ -6,11 +6,13 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
+import {LowerCasePipe, UpperCasePipe} from '@angular/common';
 import {Component} from '@angular/core';
 
 // #docregion LowerUpperPipe
 @Component({
   selector: 'lowerupper-pipe',
+  imports: [LowerCasePipe, UpperCasePipe],
   template: `<div>
     <label>Name: </label><input #name (keyup)="change(name.value)" type="text" />
     <p>In lowercase:</p>

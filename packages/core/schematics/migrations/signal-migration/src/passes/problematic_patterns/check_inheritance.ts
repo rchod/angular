@@ -6,14 +6,15 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
-import {Reference} from '@angular/compiler-cli/src/ngtsc/imports';
-import {MetadataReader} from '@angular/compiler-cli/src/ngtsc/metadata';
-import {ClassDeclaration} from '@angular/compiler-cli/src/ngtsc/reflection';
+import {
+  Reference,
+  MetadataReader,
+  ClassDeclaration,
+} from '@angular/compiler-cli/private/migrations';
 import assert from 'assert';
 import ts from 'typescript';
 import {getMemberName} from '../../utils/class_member_names';
 import {InheritanceGraph} from '../../utils/inheritance_graph';
-import {topologicalSort} from '../../utils/inheritance_sort';
 import {ClassFieldDescriptor, KnownFields} from '../reference_resolution/known_fields';
 
 export interface InheritanceTracker<D extends ClassFieldDescriptor> {
@@ -26,7 +27,7 @@ export interface InheritanceTracker<D extends ClassFieldDescriptor> {
  * Phase that propagates incompatibilities to derived classes or
  * base classes. For example, consider:
  *
- * ```
+ * ```ts
  * class Base {
  *   bla = true;
  * }
@@ -44,7 +45,7 @@ export interface InheritanceTracker<D extends ClassFieldDescriptor> {
  */
 export function checkInheritanceOfKnownFields<D extends ClassFieldDescriptor>(
   inheritanceGraph: InheritanceGraph,
-  metaRegistry: MetadataReader,
+  metaRegistry: MetadataReader | null,
   fields: KnownFields<D> & InheritanceTracker<D>,
   opts: {
     getFieldsForClass: (node: ts.ClassDeclaration) => D[];
@@ -63,21 +64,23 @@ export function checkInheritanceOfKnownFields<D extends ClassFieldDescriptor>(
 
     assert(ts.isClassDeclaration(inputClass), 'Expected input graph node to be always a class.');
     const classFields = opts.getFieldsForClass(inputClass);
+    const inputFieldNamesFromMetadataArray = new Set<string>();
 
     // Iterate through derived class chains and determine all inputs that are overridden
     // via class metadata fields. e.g `@Component#inputs`. This is later used to mark a
     // potential similar class input as incompatible— because those cannot be migrated.
-    const inputFieldNamesFromMetadataArray = new Set<string>();
-    for (const derivedClasses of inheritanceGraph.traceDerivedClasses(inputClass)) {
-      const derivedMeta =
-        ts.isClassDeclaration(derivedClasses) && derivedClasses.name !== undefined
-          ? metaRegistry.getDirectiveMetadata(new Reference(derivedClasses as ClassDeclaration))
-          : null;
+    if (metaRegistry !== null) {
+      for (const derivedClasses of inheritanceGraph.traceDerivedClasses(inputClass)) {
+        const derivedMeta =
+          ts.isClassDeclaration(derivedClasses) && derivedClasses.name !== undefined
+            ? metaRegistry.getDirectiveMetadata(new Reference(derivedClasses as ClassDeclaration))
+            : null;
 
-      if (derivedMeta !== null && derivedMeta.inputFieldNamesFromMetadataArray !== null) {
-        derivedMeta.inputFieldNamesFromMetadataArray.forEach((b) =>
-          inputFieldNamesFromMetadataArray.add(b),
-        );
+        if (derivedMeta !== null && derivedMeta.inputFieldNamesFromMetadataArray !== null) {
+          derivedMeta.inputFieldNamesFromMetadataArray.forEach((b) =>
+            inputFieldNamesFromMetadataArray.add(b),
+          );
+        }
       }
     }
 

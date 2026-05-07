@@ -15,15 +15,16 @@ import {FormControl, FormGroup} from '@angular/forms';
   template: `
     <form [formGroup]="form">
       <select formControlName="state">
-        <option *ngFor="let state of states" [ngValue]="state">
-          {{ state.abbrev }}
-        </option>
+        @for (state of states; track $index) {
+          <option [ngValue]="state">{{ state.abbrev }}</option>
+        }
       </select>
     </form>
 
     <p>Form value: {{ form.value | json }}</p>
     <!-- {state: {name: 'New York', abbrev: 'NY'} } -->
   `,
+  standalone: false,
 })
 export class ReactiveSelectComp {
   states = [

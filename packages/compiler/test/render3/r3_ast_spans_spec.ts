@@ -6,6 +6,7 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
+import {ASTWithSource} from '../../src/expression_parser/ast';
 import {ParseSourceSpan} from '../../src/parse_util';
 import * as t from '../../src/render3/r3_ast';
 
@@ -25,6 +26,7 @@ class R3AstSourceSpans implements t.Visitor<void> {
       element.attributes,
       element.inputs,
       element.outputs,
+      element.directives,
       element.references,
       element.children,
     ]);
@@ -41,6 +43,7 @@ class R3AstSourceSpans implements t.Visitor<void> {
       template.attributes,
       template.inputs,
       template.outputs,
+      template.directives,
       template.templateAttrs,
       template.references,
       template.variables,
@@ -133,7 +136,8 @@ class R3AstSourceSpans implements t.Visitor<void> {
       humanizeSpan(block.startSourceSpan),
       humanizeSpan(block.endSourceSpan),
     ]);
-    this.visitAll([block.cases]);
+    this.visitAll([block.groups]);
+    block.exhaustiveCheck?.visit(this);
   }
 
   visitSwitchBlockCase(block: t.SwitchBlockCase): void {
@@ -142,7 +146,23 @@ class R3AstSourceSpans implements t.Visitor<void> {
       humanizeSpan(block.sourceSpan),
       humanizeSpan(block.startSourceSpan),
     ]);
-    this.visitAll([block.children]);
+  }
+
+  visitSwitchBlockCaseGroup(block: t.SwitchBlockCaseGroup): void {
+    this.result.push([
+      'SwitchBlockCaseGroup',
+      humanizeSpan(block.sourceSpan),
+      humanizeSpan(block.startSourceSpan),
+    ]);
+    this.visitAll([block.cases, block.children]);
+  }
+
+  visitSwitchExhaustiveCheck(block: t.SwitchExhaustiveCheck): void {
+    this.result.push([
+      'SwitchExhaustiveCheck',
+      humanizeSpan(block.sourceSpan),
+      humanizeSpan(block.startSourceSpan),
+    ]);
   }
 
   visitForLoopBlock(block: t.ForLoopBlock): void {
@@ -258,6 +278,38 @@ class R3AstSourceSpans implements t.Visitor<void> {
     ]);
   }
 
+  visitComponent(component: t.Component) {
+    this.result.push([
+      'Component',
+      humanizeSpan(component.sourceSpan),
+      humanizeSpan(component.startSourceSpan),
+      humanizeSpan(component.endSourceSpan),
+    ]);
+    this.visitAll([
+      component.attributes,
+      component.inputs,
+      component.outputs,
+      component.directives,
+      component.references,
+      component.children,
+    ]);
+  }
+
+  visitDirective(directive: t.Directive) {
+    this.result.push([
+      'Directive',
+      humanizeSpan(directive.sourceSpan),
+      humanizeSpan(directive.startSourceSpan),
+      humanizeSpan(directive.endSourceSpan),
+    ]);
+    this.visitAll([
+      directive.attributes,
+      directive.inputs,
+      directive.outputs,
+      directive.references,
+    ]);
+  }
+
   private visitAll(nodes: t.Node[][]) {
     nodes.forEach((node) => t.visitAll(this, node));
   }
@@ -270,8 +322,8 @@ function humanizeSpan(span: ParseSourceSpan | null | undefined): string {
   return span.toString();
 }
 
-function expectFromHtml(html: string) {
-  return expectFromR3Nodes(parse(html).nodes);
+function expectFromHtml(html: string, selectorlessEnabled = false) {
+  return expectFromR3Nodes(parse(html, {selectorlessEnabled}).nodes);
 }
 
 function expectFromR3Nodes(nodes: t.Node[]) {
@@ -346,7 +398,7 @@ describe('R3 AST source spans', () => {
     it('is correct for bound properties via data-', () => {
       expectFromHtml('<div data-prop="{{v}}"></div>').toEqual([
         ['Element', '<div data-prop="{{v}}"></div>', '<div data-prop="{{v}}">', '</div>'],
-        ['BoundAttribute', 'data-prop="{{v}}"', 'prop', '{{v}}'],
+        ['BoundAttribute', 'data-prop="{{v}}"', 'data-prop', '{{v}}'],
       ]);
     });
 
@@ -374,6 +426,42 @@ describe('R3 AST source spans', () => {
         ['Element', '<div @animation></div>', '<div @animation>', '</div>'],
         ['BoundAttribute', '@animation', 'animation', '<empty>'],
       ]);
+    });
+
+    it('should not throw off span of value in bound attribute when leading spaces are present', () => {
+      const assertValueSpan = (template: string, start: number, end: number) => {
+        const result = parse(template);
+        const boundAttribute = (result.nodes[0] as t.Element).inputs[0];
+        const span = (boundAttribute.value as ASTWithSource).ast.sourceSpan;
+
+        expect(span.start).toBe(start);
+        expect(span.end).toBe(end);
+      };
+
+      assertValueSpan('<a [b]="helloWorld"></a>', 8, 18);
+      assertValueSpan('<a [b]=" helloWorld"></a>', 9, 19);
+      assertValueSpan('<a [b]="  helloWorld"></a>', 10, 20);
+      assertValueSpan('<a [b]="   helloWorld"></a>', 11, 21);
+      assertValueSpan('<a [b]="    helloWorld"></a>', 12, 22);
+      assertValueSpan('<a [b]="                                          helloWorld"></a>', 50, 60);
+    });
+
+    it('should not throw off span of value in template attribute when leading spaces are present', () => {
+      const assertValueSpan = (template: string, start: number, end: number) => {
+        const result = parse(template);
+        const boundAttribute = (result.nodes[0] as t.Template).templateAttrs[0];
+        const span = (boundAttribute.value as ASTWithSource).ast.sourceSpan;
+
+        expect(span.start).toBe(start);
+        expect(span.end).toBe(end);
+      };
+
+      assertValueSpan('<ng-container *ngTemplateOutlet="helloWorld"/>', 33, 43);
+      assertValueSpan('<ng-container *ngTemplateOutlet=" helloWorld"/>', 34, 44);
+      assertValueSpan('<ng-container *ngTemplateOutlet="  helloWorld"/>', 35, 45);
+      assertValueSpan('<ng-container *ngTemplateOutlet="   helloWorld"/>', 36, 46);
+      assertValueSpan('<ng-container *ngTemplateOutlet="    helloWorld"/>', 37, 47);
+      assertValueSpan('<ng-container *ngTemplateOutlet="                    helloWorld"/>', 53, 63);
     });
   });
 
@@ -418,7 +506,7 @@ describe('R3 AST source spans', () => {
       ]);
     });
 
-    it('is correct for reference via data-ref-...', () => {
+    it('is correct for data-ref-... attribute', () => {
       expectFromHtml('<ng-template data-ref-a></ng-template>').toEqual([
         [
           'Template',
@@ -426,7 +514,7 @@ describe('R3 AST source spans', () => {
           '<ng-template data-ref-a>',
           '</ng-template>',
         ],
-        ['Reference', 'data-ref-a', 'a', '<empty>'],
+        ['TextAttribute', 'data-ref-a', 'data-ref-a', '<empty>'],
       ]);
     });
 
@@ -442,7 +530,7 @@ describe('R3 AST source spans', () => {
       ]);
     });
 
-    it('is correct for variables via data-let-...', () => {
+    it('is correct for data-let-... attribute', () => {
       expectFromHtml('<ng-template data-let-a="b"></ng-template>').toEqual([
         [
           'Template',
@@ -450,7 +538,7 @@ describe('R3 AST source spans', () => {
           '<ng-template data-let-a="b">',
           '</ng-template>',
         ],
-        ['Variable', 'data-let-a="b"', 'a', 'b'],
+        ['TextAttribute', 'data-let-a="b"', 'data-let-a', 'b'],
       ]);
     });
 
@@ -576,10 +664,10 @@ describe('R3 AST source spans', () => {
       ]);
     });
 
-    it('is correct for bound events via data-on-', () => {
+    it('is correct for text attribute via data-on-', () => {
       expectFromHtml('<div data-on-event="v"></div>').toEqual([
         ['Element', '<div data-on-event="v"></div>', '<div data-on-event="v">', '</div>'],
-        ['BoundEvent', 'data-on-event="v"', 'event', 'v'],
+        ['TextAttribute', 'data-on-event="v"', 'data-on-event', 'v'],
       ]);
     });
 
@@ -599,11 +687,10 @@ describe('R3 AST source spans', () => {
       ]);
     });
 
-    it('is correct for bound events and properties via data-bindon-', () => {
+    it('is correct for TextAttribute and properties via data-bindon-', () => {
       expectFromHtml('<div data-bindon-prop="v"></div>').toEqual([
         ['Element', '<div data-bindon-prop="v"></div>', '<div data-bindon-prop="v">', '</div>'],
-        ['BoundAttribute', 'data-bindon-prop="v"', 'prop', 'v'],
-        ['BoundEvent', 'data-bindon-prop="v"', 'prop', 'v'],
+        ['TextAttribute', 'data-bindon-prop="v"', 'data-bindon-prop', 'v'],
       ]);
     });
 
@@ -631,13 +718,6 @@ describe('R3 AST source spans', () => {
     });
 
     it('is correct for references via ref-', () => {
-      expectFromHtml('<div ref-a></div>').toEqual([
-        ['Element', '<div ref-a></div>', '<div ref-a>', '</div>'],
-        ['Reference', 'ref-a', 'a', '<empty>'],
-      ]);
-    });
-
-    it('is correct for references via data-ref-', () => {
       expectFromHtml('<div ref-a></div>').toEqual([
         ['Element', '<div ref-a></div>', '<div ref-a>', '</div>'],
         ['Reference', 'ref-a', 'a', '<empty>'],
@@ -757,14 +837,63 @@ describe('R3 AST source spans', () => {
           '@switch (cond.kind) {',
           '}',
         ],
+        ['SwitchBlockCaseGroup', '@case (x()) {X case}', '@case (x()) {'],
         ['SwitchBlockCase', '@case (x()) {X case}', '@case (x()) {'],
         ['Text', 'X case'],
+        ['SwitchBlockCaseGroup', "@case ('hello') {Y case}", "@case ('hello') {"],
         ['SwitchBlockCase', "@case ('hello') {Y case}", "@case ('hello') {"],
         ['Text', 'Y case'],
+        ['SwitchBlockCaseGroup', '@case (42) {Z case}', '@case (42) {'],
         ['SwitchBlockCase', '@case (42) {Z case}', '@case (42) {'],
         ['Text', 'Z case'],
+        ['SwitchBlockCaseGroup', '@default {No case matched}', '@default {'],
         ['SwitchBlockCase', '@default {No case matched}', '@default {'],
         ['Text', 'No case matched'],
+      ]);
+    });
+
+    it('is correct for switch blocks with consecutive cases', () => {
+      const html =
+        `@switch (cond.kind) {` +
+        `@case (x()) @case ('hello') {X case}` +
+        `@default {No case matched}` +
+        `}`;
+
+      expectFromHtml(html).toEqual([
+        [
+          'SwitchBlock',
+          "@switch (cond.kind) {@case (x()) @case ('hello') {X case}@default {No case matched}}",
+          '@switch (cond.kind) {',
+          '}',
+        ],
+        [
+          'SwitchBlockCaseGroup',
+          "@case (x()) @case ('hello') {X case}",
+          "@case (x()) @case ('hello') {",
+        ],
+        ['SwitchBlockCase', '@case (x()) ', '@case (x()) '],
+        ['SwitchBlockCase', "@case ('hello') {X case}", "@case ('hello') {"],
+        ['Text', 'X case'],
+        ['SwitchBlockCaseGroup', '@default {No case matched}', '@default {'],
+        ['SwitchBlockCase', '@default {No case matched}', '@default {'],
+        ['Text', 'No case matched'],
+      ]);
+    });
+
+    it('is correct for switch blocks with exhaustive checking', () => {
+      const html = `@switch (cond.kind) {` + `@case (x()) {X case}` + `@default never;` + `}`;
+
+      expectFromHtml(html).toEqual([
+        [
+          'SwitchBlock',
+          '@switch (cond.kind) {@case (x()) {X case}@default never;}',
+          '@switch (cond.kind) {',
+          '}',
+        ],
+        ['SwitchBlockCaseGroup', '@case (x()) {X case}', '@case (x()) {'],
+        ['SwitchBlockCase', '@case (x()) {X case}', '@case (x()) {'],
+        ['Text', 'X case'],
+        ['SwitchExhaustiveCheck', '@default never;', '@default never;'],
       ]);
     });
   });
@@ -835,7 +964,123 @@ describe('R3 AST source spans', () => {
   describe('@let declaration', () => {
     it('is correct for a let declaration', () => {
       expectFromHtml('@let foo = 123;').toEqual([
-        ['LetDeclaration', '@let foo = 123', 'foo', '123'],
+        ['LetDeclaration', '@let foo = 123;', 'foo', '123'],
+      ]);
+    });
+  });
+
+  describe('component tags', () => {
+    it('is correct for a simple component', () => {
+      expectFromHtml('<MyComp></MyComp>', true).toEqual([
+        ['Component', '<MyComp></MyComp>', '<MyComp>', '</MyComp>'],
+      ]);
+    });
+
+    it('is correct for a self-closing component', () => {
+      expectFromHtml('<MyComp/>', true).toEqual([
+        ['Component', '<MyComp/>', '<MyComp/>', '<MyComp/>'],
+      ]);
+    });
+
+    it('is correct for a component with a tag name', () => {
+      expectFromHtml('<MyComp:button></MyComp:button>', true).toEqual([
+        ['Component', '<MyComp:button></MyComp:button>', '<MyComp:button>', '</MyComp:button>'],
+      ]);
+    });
+
+    it('is correct for a component with attributes and directives', () => {
+      expectFromHtml(
+        '<MyComp before="foo" @Dir middle @OtherDir([a]="a" (b)="b()") after="123">Hello</MyComp>',
+        true,
+      ).toEqual([
+        [
+          'Component',
+          '<MyComp before="foo" @Dir middle @OtherDir([a]="a" (b)="b()") after="123">Hello</MyComp>',
+          '<MyComp before="foo" @Dir middle @OtherDir([a]="a" (b)="b()") after="123">',
+          '</MyComp>',
+        ],
+        ['TextAttribute', 'before="foo"', 'before', 'foo'],
+        ['TextAttribute', 'middle', 'middle', '<empty>'],
+        ['TextAttribute', 'after="123"', 'after', '123'],
+        ['Directive', '@Dir', '@Dir', '<empty>'],
+        ['Directive', '@OtherDir([a]="a" (b)="b()")', '@OtherDir(', ')'],
+        ['BoundAttribute', '[a]="a"', 'a', 'a'],
+        ['BoundEvent', '(b)="b()"', 'b', 'b()'],
+        ['Text', 'Hello'],
+      ]);
+    });
+
+    it('is correct for a component nested inside other markup', () => {
+      expectFromHtml(
+        '@if (expr) {<div>Hello: <MyComp><span><OtherComp/></span></MyComp></div>}',
+        true,
+      ).toEqual([
+        [
+          'IfBlock',
+          '@if (expr) {<div>Hello: <MyComp><span><OtherComp/></span></MyComp></div>}',
+          '@if (expr) {',
+          '}',
+        ],
+        [
+          'IfBlockBranch',
+          '@if (expr) {<div>Hello: <MyComp><span><OtherComp/></span></MyComp></div>}',
+          '@if (expr) {',
+        ],
+        [
+          'Element',
+          '<div>Hello: <MyComp><span><OtherComp/></span></MyComp></div>',
+          '<div>',
+          '</div>',
+        ],
+        ['Text', 'Hello: '],
+        ['Component', '<MyComp><span><OtherComp/></span></MyComp>', '<MyComp>', '</MyComp>'],
+        ['Element', '<span><OtherComp/></span>', '<span>', '</span>'],
+        ['Component', '<OtherComp/>', '<OtherComp/>', '<OtherComp/>'],
+      ]);
+    });
+  });
+
+  describe('directives', () => {
+    it('is correct for a directive with no attributes', () => {
+      expectFromHtml('<div @Dir></div>', true).toEqual([
+        ['Element', '<div @Dir></div>', '<div @Dir>', '</div>'],
+        ['Directive', '@Dir', '@Dir', '<empty>'],
+      ]);
+    });
+
+    it('is correct for a directive with attributes', () => {
+      expectFromHtml('<div @Dir(a="1" [b]="two" (c)="c()")></div>', true).toEqual([
+        [
+          'Element',
+          '<div @Dir(a="1" [b]="two" (c)="c()")></div>',
+          '<div @Dir(a="1" [b]="two" (c)="c()")>',
+          '</div>',
+        ],
+        ['Directive', '@Dir(a="1" [b]="two" (c)="c()")', '@Dir(', ')'],
+        ['TextAttribute', 'a="1"', 'a', '1'],
+        ['BoundAttribute', '[b]="two"', 'b', 'two'],
+        ['BoundEvent', '(c)="c()"', 'c', 'c()'],
+      ]);
+    });
+
+    it('is correct for directives mixed with other attributes', () => {
+      expectFromHtml(
+        '<div before="foo" @Dir middle @OtherDir([a]="a" (b)="b()") after="123"></div>',
+        true,
+      ).toEqual([
+        [
+          'Element',
+          '<div before="foo" @Dir middle @OtherDir([a]="a" (b)="b()") after="123"></div>',
+          '<div before="foo" @Dir middle @OtherDir([a]="a" (b)="b()") after="123">',
+          '</div>',
+        ],
+        ['TextAttribute', 'before="foo"', 'before', 'foo'],
+        ['TextAttribute', 'middle', 'middle', '<empty>'],
+        ['TextAttribute', 'after="123"', 'after', '123'],
+        ['Directive', '@Dir', '@Dir', '<empty>'],
+        ['Directive', '@OtherDir([a]="a" (b)="b()")', '@OtherDir(', ')'],
+        ['BoundAttribute', '[a]="a"', 'a', 'a'],
+        ['BoundEvent', '(b)="b()"', 'b', 'b()'],
       ]);
     });
   });

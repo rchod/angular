@@ -12,12 +12,14 @@ import {SecurityContext} from './security';
 /**
  * Sanitizer is used by the views to sanitize potentially dangerous values.
  *
+ * @see [Sanitization and security contexts](best-practices/security#sanitization-and-security-contexts)
+ *
  * @publicApi
  */
 export abstract class Sanitizer {
   abstract sanitize(context: SecurityContext, value: {} | string | null): string | null;
   /** @nocollapse */
-  static ɵprov = /** @pureOrBreakMyCode */ ɵɵdefineInjectable({
+  static ɵprov = /** @pureOrBreakMyCode */ /* @__PURE__ */ ɵɵdefineInjectable({
     token: Sanitizer,
     providedIn: 'root',
     factory: () => null,

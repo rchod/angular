@@ -6,19 +6,20 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
-import {CompilerOptions} from '@angular/compiler-cli';
-import {NgCompiler} from '@angular/compiler-cli/src/ngtsc/core';
+import {CompilerOptions, NgCompiler} from '@angular/compiler-cli';
+
 import {
   isInputContainerNode,
   MigrationConfig,
 } from '@angular/core/schematics/migrations/signal-migration/src';
-import {ApplyRefactoringProgressFn, ApplyRefactoringResult} from '@angular/language-service/api';
+import {ApplyRefactoringProgressFn, ApplyRefactoringResult} from '../../../api';
 import ts from 'typescript';
 import {isTypeScriptFile} from '../../utils';
 import {findTightestNode, getParentClassDeclaration} from '../../utils/ts_utils';
 import type {ActiveRefactoring} from '../refactoring';
 import {applySignalInputRefactoring} from './apply_input_refactoring';
-import {isDecoratorInputClassField, isDirectiveOrComponent} from './decorators';
+import {isDecoratorInputClassField} from './decorators';
+import {isDirectiveOrComponent} from '../../utils/decorators';
 
 /**
  * Base language service refactoring action that can convert a

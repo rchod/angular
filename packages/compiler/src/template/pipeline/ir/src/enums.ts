@@ -70,6 +70,16 @@ export enum OpKind {
   DisableBindings,
 
   /**
+   * Create a conditional creation instruction op.
+   */
+  ConditionalCreate,
+
+  /**
+   * Create a conditional branch creation instruction op.
+   */
+  ConditionalBranchCreate,
+
+  /**
    * An op to conditionally render a template.
    */
   Conditional,
@@ -166,9 +176,9 @@ export enum OpKind {
   I18nMessage,
 
   /**
-   * A host binding property.
+   * A binding to a native DOM property.
    */
-  HostProperty,
+  DomProperty,
 
   /**
    * A namespace change, which causes the subsequent elements to be processed as either HTML or SVG.
@@ -179,6 +189,13 @@ export enum OpKind {
    * Configure a content projeciton definition for the view.
    */
   ProjectionDef,
+
+  /**
+   * Emit a top-level call to the `ɵɵenableIncrementalHydrationRuntime` instruction.
+   * This op is inserted once per view (before the first `Defer` op with hydrate triggers)
+   * to activate the incremental hydration runtime for that view.
+   */
+  EnableIncrementalHydrationRuntime,
 
   /**
    * Create a content projection slot.
@@ -264,6 +281,44 @@ export enum OpKind {
    * A creation op that corresponds to i18n attributes on an element.
    */
   I18nAttributes,
+
+  /**
+   * Creation op that attaches the location at which an element was defined in a template to it.
+   */
+  SourceLocation,
+
+  /**
+   * An operation to bind animation css classes to an element.
+   */
+  Animation,
+
+  /**
+   * An operation to bind animation css classes to an element.
+   */
+  AnimationString,
+
+  /**
+   * An operation to bind animation css classes to an element.
+   */
+  AnimationBinding,
+
+  /**
+   * An operation to bind animation events to an element.
+   */
+  AnimationListener,
+
+  /**
+   * An operation to bind an expression to a `field` property of an element.
+   */
+  Control,
+
+  /**
+   * An operation to set up a corresponding {@link Control} operation.
+   *
+   * This is responsible for setting up event listeners on a native or custom form control when
+   * bound to a specialized field directive.
+   */
+  ControlCreate,
 }
 
 /**
@@ -356,9 +411,9 @@ export enum ExpressionKind {
   SafeKeyedRead,
 
   /**
-   * A safe function call requiring expansion into a null check.
+   * Wraps an expression to indicate that it should be evaluated with legacy null-safe navigation semantics.
    */
-  SafeInvokeFunction,
+  SafeNavigationMigration,
 
   /**
    * An intermediate expression that will be expanded from a safe read into an explicit ternary.
@@ -399,6 +454,11 @@ export enum ExpressionKind {
    * Operation that sets the value of a two-way binding.
    */
   TwoWayBindingSet,
+
+  /**
+   * Definition of an arrow function inside of an expression.
+   */
+  ArrowFunction,
 }
 
 export enum VariableFlags {
@@ -437,16 +497,6 @@ export enum SemanticVariableKind {
 }
 
 /**
- * Whether to compile in compatibilty mode. In compatibility mode, the template pipeline will
- * attempt to match the output of `TemplateDefinitionBuilder` as exactly as possible, at the cost
- * of producing quirky or larger code in some cases.
- */
-export enum CompatibilityMode {
-  Normal,
-  TemplateDefinitionBuilder,
-}
-
-/**
  * Enumeration of the types of attributes which can be applied to an element.
  */
 export enum BindingKind {
@@ -481,14 +531,19 @@ export enum BindingKind {
   I18n,
 
   /**
-   * Animation property bindings.
+   * Legacy animation property bindings.
    */
-  Animation,
+  LegacyAnimation,
 
   /**
    * Property side of a two-way binding.
    */
   TwoWayProperty,
+
+  /**
+   * Property side of an animation binding.
+   */
+  Animation,
 }
 
 /**
@@ -594,10 +649,40 @@ export enum TemplateKind {
 }
 
 /**
+ * Kinds of animations
+ */
+export const enum AnimationKind {
+  ENTER = 'enter',
+  LEAVE = 'leave',
+}
+
+/**
+ * Kinds of animations
+ */
+export const enum AnimationBindingKind {
+  STRING,
+  VALUE,
+}
+
+/**
  * Kinds of modifiers for a defer block.
  */
 export const enum DeferOpModifierKind {
   NONE = 'none',
   PREFETCH = 'prefetch',
   HYDRATE = 'hydrate',
+}
+
+/**
+ * Specifies defer block flags, which should be used for all
+ * instances of a given defer block (the flags that should be
+ * placed into the `TDeferDetails` at runtime).
+ */
+export const enum TDeferDetailsFlags {
+  Default = 0,
+
+  /**
+   * Whether or not the defer block has hydrate triggers.
+   */
+  HasHydrateTriggers = 1 << 0,
 }

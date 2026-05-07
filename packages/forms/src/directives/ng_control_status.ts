@@ -81,11 +81,6 @@ export const ngControlStatusHost = {
   '[class.ng-pending]': 'isPending',
 };
 
-export const ngGroupStatusHost = {
-  ...ngControlStatusHost,
-  '[class.ng-submitted]': 'isSubmitted',
-};
-
 /**
  * @description
  * Directive automatically applied to Angular form controls that sets CSS classes
@@ -109,7 +104,11 @@ export const ngGroupStatusHost = {
  * @ngModule FormsModule
  * @publicApi
  */
-@Directive({selector: '[formControlName],[ngModel],[formControl]', host: ngControlStatusHost})
+@Directive({
+  selector: '[formControlName],[ngModel],[formControl]',
+  host: ngControlStatusHost,
+  standalone: false,
+})
 export class NgControlStatus extends AbstractControlStatus {
   constructor(@Self() cd: NgControl) {
     super(cd);
@@ -130,8 +129,15 @@ export class NgControlStatus extends AbstractControlStatus {
  */
 @Directive({
   selector:
-    '[formGroupName],[formArrayName],[ngModelGroup],[formGroup],form:not([ngNoForm]),[ngForm]',
-  host: ngGroupStatusHost,
+    '[formGroupName],[formArrayName],[ngModelGroup],[formGroup],[formArray],form:not([ngNoForm]),[ngForm]',
+  // Note: having this object here to ensure that the spread assignment is not considered
+  // a side-effect, ending up preserving `ngControlStatusHost` and `ngGroupStatusHost`.
+  // Do not move it to a separate const (`ngGroupStatusHost`).
+  host: {
+    ...ngControlStatusHost,
+    '[class.ng-submitted]': 'isSubmitted',
+  },
+  standalone: false,
 })
 export class NgControlStatusGroup extends AbstractControlStatus {
   constructor(@Optional() @Self() cd: ControlContainer) {

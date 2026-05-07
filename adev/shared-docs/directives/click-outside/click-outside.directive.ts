@@ -7,39 +7,38 @@
  */
 
 import {DOCUMENT} from '@angular/common';
-import {Directive, ElementRef, EventEmitter, Input, Output, inject} from '@angular/core';
+import {Directive, ElementRef, inject, input, output} from '@angular/core';
 
 @Directive({
   selector: '[docsClickOutside]',
-  standalone: true,
   host: {
     '(document:click)': 'onClick($event)',
   },
 })
 export class ClickOutside {
-  @Input('docsClickOutsideIgnore') public ignoredElementsIds: string[] = [];
-  @Output('docsClickOutside') public clickOutside = new EventEmitter<void>();
+  readonly ignoredElementsIds = input<string[]>([], {alias: 'docsClickOutsideIgnore'});
+  public readonly clickOutside = output<void>({alias: 'docsClickOutside'});
 
   private readonly document = inject(DOCUMENT);
   private readonly elementRef = inject(ElementRef<HTMLElement>);
 
-  onClick($event: PointerEvent): void {
+  onClick(event: MouseEvent): void {
     if (
-      !this.elementRef.nativeElement.contains($event.target) &&
-      !this.wasClickedOnIgnoredElement($event)
+      !this.elementRef.nativeElement.contains(event.target) &&
+      !this.wasClickedOnIgnoredElement(event)
     ) {
       this.clickOutside.emit();
     }
   }
 
-  private wasClickedOnIgnoredElement($event: PointerEvent): boolean {
-    if (this.ignoredElementsIds.length === 0) {
+  private wasClickedOnIgnoredElement(event: MouseEvent): boolean {
+    if (this.ignoredElementsIds().length === 0) {
       return false;
     }
 
-    return this.ignoredElementsIds.some((elementId) => {
+    return this.ignoredElementsIds().some((elementId) => {
       const element = this.document.getElementById(elementId);
-      const target = $event.target as Node;
+      const target = event.target as Node;
       const contains = element?.contains(target);
       return contains;
     });

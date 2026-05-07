@@ -14,25 +14,18 @@ import {
   inject,
   Injector,
   Input,
-  NgZone,
   provideZoneChangeDetection,
   signal,
-} from '@angular/core';
-import {TestBed} from '@angular/core/testing';
-import {setUseMicrotaskEffectsByDefault} from '../src/render3/reactivity/effect';
+} from '../src/core';
+import {TestBed} from '../testing';
 
 describe('effects in TestBed', () => {
   let prev: boolean;
-  beforeEach(() => {
-    prev = setUseMicrotaskEffectsByDefault(false);
-  });
-  afterEach(() => setUseMicrotaskEffectsByDefault(prev));
 
   it('created in the constructor should run with detectChanges()', () => {
     const log: string[] = [];
     @Component({
       selector: 'test-cmp',
-      standalone: true,
       template: '',
     })
     class Cmp {
@@ -68,7 +61,6 @@ describe('effects in TestBed', () => {
     const log: string[] = [];
     @Component({
       selector: 'test-cmp',
-      standalone: true,
       template: '',
     })
     class Cmp {
@@ -112,7 +104,6 @@ describe('effects in TestBed', () => {
     let observed = '';
     @Component({
       selector: 'test-cmp',
-      standalone: true,
       template: '',
     })
     class Cmp {
@@ -137,7 +128,6 @@ describe('effects in TestBed', () => {
     let observed: string | null = null;
 
     @Component({
-      standalone: true,
       template: '',
     })
     class Cmp {
@@ -163,8 +153,8 @@ describe('effects in TestBed', () => {
     const log: string[] = [];
 
     @Component({
-      standalone: true,
       template: `{{ sentinel }}`,
+      changeDetection: ChangeDetectionStrategy.Eager,
     })
     class TestCmp {
       get sentinel(): string {

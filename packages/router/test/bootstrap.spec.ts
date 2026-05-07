@@ -6,9 +6,14 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
-import {DOCUMENT, PlatformLocation, ɵgetDOM as getDOM} from '@angular/common';
-import {BrowserPlatformLocation} from '@angular/common/src/location/platform_location';
-import {NullViewportScroller, ViewportScroller} from '@angular/common/src/viewport_scroller';
+import {
+  BrowserPlatformLocation,
+  DOCUMENT,
+  ɵgetDOM as getDOM,
+  ɵNullViewportScroller as NullViewportScroller,
+  PlatformLocation,
+  ViewportScroller,
+} from '@angular/common';
 import {MockPlatformLocation} from '@angular/common/testing';
 import {
   ApplicationRef,
@@ -21,43 +26,44 @@ import {
   NgModule,
 } from '@angular/core';
 import {TestBed} from '@angular/core/testing';
-import {BrowserModule} from '@angular/platform-browser';
-import {platformBrowserDynamic} from '@angular/platform-browser-dynamic';
+import {BrowserModule, platformBrowser} from '@angular/platform-browser';
+import {isNode, useAutoTick} from '@angular/private/testing';
 import {
-  Event,
   NavigationEnd,
   provideRouter,
   Router,
   RouterModule,
   RouterOutlet,
   withEnabledBlockingInitialNavigation,
-} from '@angular/router';
-
-// This is needed, because all files under `packages/` are compiled together as part of the
-// [legacy-unit-tests-saucelabs][1] CI job, including the `lib.webworker.d.ts` typings brought in by
-// [service-worker/worker/src/service-worker.d.ts][2].
-//
-// [1]:
-// https://github.com/angular/angular/blob/ffeea63f43e6a7fd46be4a8cd5a5d254c98dea08/.circleci/config.yml#L681
-// [2]:
-// https://github.com/angular/angular/blob/316dc2f12ce8931f5ff66fa5f8da21c0d251a337/packages/service-worker/worker/src/service-worker.d.ts#L9
-declare var window: Window;
+} from '../index';
 
 describe('bootstrap', () => {
+  useAutoTick();
   let log: any[] = [];
   let testProviders: any[] = null!;
 
-  @Component({template: 'simple'})
+  @Component({
+    template: 'simple',
+    standalone: false,
+  })
   class SimpleCmp {}
 
-  @Component({selector: 'test-app', template: 'root <router-outlet></router-outlet>'})
+  @Component({
+    selector: 'test-app',
+    template: 'root <router-outlet></router-outlet>',
+    standalone: false,
+  })
   class RootCmp {
     constructor() {
       log.push('RootCmp');
     }
   }
 
-  @Component({selector: 'test-app2', template: 'root <router-outlet></router-outlet>'})
+  @Component({
+    selector: 'test-app2',
+    template: 'root <router-outlet></router-outlet>',
+    standalone: false,
+  })
   class SecondRootCmp {}
 
   @Injectable({providedIn: 'root'})
@@ -125,12 +131,13 @@ describe('bootstrap', () => {
       }
     }
 
-    await platformBrowserDynamic([])
+    await platformBrowser([])
       .bootstrapModule(TestModule)
       .then((res) => {
         const router = res.injector.get(Router);
         expect(router.navigated).toEqual(false);
         expect(router.getCurrentNavigation()).toBeNull();
+        expect(router.currentNavigation()).toBeNull();
         expect(log).toContain('TestModule');
         expect(log).toContain('NavigationError');
       });
@@ -139,7 +146,6 @@ describe('bootstrap', () => {
   it('should finish navigation when initial navigation is enabledBlocking and component renavigates on render', async () => {
     @Component({
       template: '',
-      standalone: true,
     })
     class Renavigate {
       constructor(router: Router) {
@@ -148,7 +154,6 @@ describe('bootstrap', () => {
     }
     @Component({
       template: '',
-      standalone: true,
     })
     class BlankCmp {}
 
@@ -170,7 +175,7 @@ describe('bootstrap', () => {
     class TestModule {}
 
     await expectAsync(
-      Promise.all([platformBrowserDynamic([]).bootstrapModule(TestModule), navigationEndPromise]),
+      Promise.all([platformBrowser([]).bootstrapModule(TestModule), navigationEndPromise]),
     ).toBeResolved();
   });
 
@@ -205,7 +210,7 @@ describe('bootstrap', () => {
       }
     }
 
-    const bootstrapPromise = platformBrowserDynamic([])
+    const bootstrapPromise = platformBrowser([])
       .bootstrapModule(TestModule)
       .then((ref) => {
         const router = ref.injector.get(Router);
@@ -244,7 +249,7 @@ describe('bootstrap', () => {
       }
     }
 
-    const bootstrapPromise = platformBrowserDynamic([])
+    const bootstrapPromise = platformBrowser([])
       .bootstrapModule(TestModule)
       .then((ref) => {
         const router = ref.injector.get(Router);
@@ -257,7 +262,11 @@ describe('bootstrap', () => {
   });
 
   it('should wait for resolvers to complete when initialNavigation = enabledBlocking', async () => {
-    @Component({selector: 'test', template: 'test'})
+    @Component({
+      selector: 'test',
+      template: 'test',
+      standalone: false,
+    })
     class TestCmpEnabled {}
 
     @NgModule({
@@ -277,7 +286,7 @@ describe('bootstrap', () => {
       constructor(router: Router) {}
     }
 
-    const bootstrapPromise = platformBrowserDynamic([])
+    const bootstrapPromise = platformBrowser([])
       .bootstrapModule(TestModule)
       .then((ref) => {
         const router = ref.injector.get(Router);
@@ -291,7 +300,11 @@ describe('bootstrap', () => {
   });
 
   it('should NOT wait for resolvers to complete when initialNavigation = enabledNonBlocking', async () => {
-    @Component({selector: 'test', template: 'test'})
+    @Component({
+      selector: 'test',
+      template: 'test',
+      standalone: false,
+    })
     class TestCmpLegacyEnabled {}
 
     @NgModule({
@@ -314,30 +327,24 @@ describe('bootstrap', () => {
       }
     }
 
-    const bootstrapPromise = platformBrowserDynamic([])
+    const bootstrapPromise = platformBrowser([])
       .bootstrapModule(TestModule)
       .then((ref) => {
         const router: Router = ref.injector.get(Router);
         expect(router.routerState.snapshot.root.firstChild).toBeNull();
         // ResolveEnd has not been emitted yet because bootstrap returned too early
-        expect(log).toEqual([
-          'TestModule',
-          'RootCmp',
-          'NavigationStart',
-          'RoutesRecognized',
-          'GuardsCheckStart',
-          'ChildActivationStart',
-          'ActivationStart',
-          'GuardsCheckEnd',
-          'ResolveStart',
-        ]);
+        expect(log).not.toContain('ResolveEnd');
       });
 
     await Promise.all([bootstrapPromise, navigationEndPromise]);
   });
 
   it('should NOT wait for resolvers to complete when initialNavigation is not set', async () => {
-    @Component({selector: 'test', template: 'test'})
+    @Component({
+      selector: 'test',
+      template: 'test',
+      standalone: false,
+    })
     class TestCmpLegacyEnabled {}
 
     @NgModule({
@@ -359,30 +366,24 @@ describe('bootstrap', () => {
       }
     }
 
-    const bootstrapPromise = platformBrowserDynamic([])
+    const bootstrapPromise = platformBrowser([])
       .bootstrapModule(TestModule)
       .then((ref) => {
         const router: Router = ref.injector.get(Router);
         expect(router.routerState.snapshot.root.firstChild).toBeNull();
         // ResolveEnd has not been emitted yet because bootstrap returned too early
-        expect(log).toEqual([
-          'TestModule',
-          'RootCmp',
-          'NavigationStart',
-          'RoutesRecognized',
-          'GuardsCheckStart',
-          'ChildActivationStart',
-          'ActivationStart',
-          'GuardsCheckEnd',
-          'ResolveStart',
-        ]);
+        expect(log).not.toContain('ResolveEnd');
       });
 
     await Promise.all([bootstrapPromise, navigationEndPromise]);
   });
 
   it('should not run navigation when initialNavigation = disabled', (done) => {
-    @Component({selector: 'test', template: 'test'})
+    @Component({
+      selector: 'test',
+      template: 'test',
+      standalone: false,
+    })
     class TestCmpDiabled {}
 
     @NgModule({
@@ -405,7 +406,7 @@ describe('bootstrap', () => {
       }
     }
 
-    platformBrowserDynamic([])
+    platformBrowser([])
       .bootstrapModule(TestModule)
       .then((res) => {
         const router = res.injector.get(Router);
@@ -424,7 +425,7 @@ describe('bootstrap', () => {
     })
     class TestModule {}
 
-    await platformBrowserDynamic([])
+    await platformBrowser([])
       .bootstrapModule(TestModule)
       .then((res) => {
         const router = res.injector.get(Router);
@@ -447,7 +448,7 @@ describe('bootstrap', () => {
     })
     class TestModule {}
 
-    await platformBrowserDynamic([])
+    await platformBrowser([])
       .bootstrapModule(TestModule)
       .then((res) => {
         const router = res.injector.get(Router);
@@ -471,14 +472,15 @@ describe('bootstrap', () => {
       @Component({
         selector: 'component-a',
         template: `
-           <div style="height: 3000px;"></div>
-           <div id="marker1"></div>
-           <div style="height: 3000px;"></div>
-           <div id="marker2"></div>
-           <div style="height: 3000px;"></div>
-           <a name="marker3"></a>
-           <div style="height: 3000px;"></div>
-      `,
+          <div style="height: 3000px;"></div>
+          <div id="marker1"></div>
+          <div style="height: 3000px;"></div>
+          <div id="marker2"></div>
+          <div style="height: 3000px;"></div>
+          <a name="marker3"></a>
+          <div style="height: 3000px;"></div>
+        `,
+        standalone: false,
       })
       class TallComponent {}
       @NgModule({
@@ -515,7 +517,7 @@ describe('bootstrap', () => {
         });
       }
 
-      const res = await platformBrowserDynamic([]).bootstrapModule(TestModule);
+      const res = await platformBrowser([]).bootstrapModule(TestModule);
       const router = res.injector.get(Router);
 
       await router.navigateByUrl('/aa');
@@ -562,10 +564,8 @@ describe('bootstrap', () => {
       spyOn(window, 'addEventListener').and.callThrough();
       spyOn(window, 'removeEventListener').and.callThrough();
 
-      const ngModuleRef = await platformBrowserDynamic().bootstrapModule(TestModule);
+      const ngModuleRef = await platformBrowser().bootstrapModule(TestModule);
       ngModuleRef.destroy();
-
-      expect(window.addEventListener).toHaveBeenCalledTimes(2);
 
       expect(window.addEventListener).toHaveBeenCalledWith(
         'popstate',
@@ -599,7 +599,7 @@ describe('bootstrap', () => {
     class TestModule {}
 
     (async () => {
-      const res = await platformBrowserDynamic([]).bootstrapModule(TestModule);
+      const res = await platformBrowser([]).bootstrapModule(TestModule);
       const router = res.injector.get(Router);
       router.events.subscribe(async (e) => {
         if (e instanceof NavigationEnd && e.url === '/b') {

@@ -18,7 +18,7 @@ import {PRIMARY_OUTLET, RouteTitleKey} from './shared';
  * The built-in implementation traverses the router state snapshot and finds the deepest primary
  * outlet with `title` property. Given the `Routes` below, navigating to
  * `/base/child(popup:aux)` would result in the document title being set to "child".
- * ```
+ * ```ts
  * [
  *   {path: 'base', title: 'base', children: [
  *     {path: 'child', title: 'child'},
@@ -33,7 +33,7 @@ import {PRIMARY_OUTLET, RouteTitleKey} from './shared';
  * incorporate titles in named outlets.
  *
  * @publicApi
- * @see [Page title guide](guide/routing/common-router-tasks#setting-the-page-title)
+ * @see [Page title guide](guide/routing/define-routes#using-titlestrategy-for-page-titles)
  */
 @Injectable({providedIn: 'root', useFactory: () => inject(DefaultTitleStrategy)})
 export abstract class TitleStrategy {

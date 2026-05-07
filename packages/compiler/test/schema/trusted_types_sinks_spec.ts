@@ -6,13 +6,14 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
-import {isTrustedTypesSink} from '@angular/compiler/src/schema/trusted_types_sinks';
+import {isTrustedTypesSink} from '../../src/schema/trusted_types_sinks';
 
 describe('isTrustedTypesSink', () => {
   it('should classify Trusted Types sinks', () => {
     expect(isTrustedTypesSink('iframe', 'srcdoc')).toBeTrue();
     expect(isTrustedTypesSink('p', 'innerHTML')).toBeTrue();
     expect(isTrustedTypesSink('embed', 'src')).toBeTrue();
+    expect(isTrustedTypesSink('iframe', 'src')).toBeTrue();
     expect(isTrustedTypesSink('a', 'href')).toBeFalse();
     expect(isTrustedTypesSink('base', 'href')).toBeFalse();
     expect(isTrustedTypesSink('div', 'style')).toBeFalse();

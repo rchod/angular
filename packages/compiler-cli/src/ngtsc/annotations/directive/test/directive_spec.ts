@@ -7,10 +7,11 @@
  */
 import {
   CssSelector,
-  DirectiveMeta as T2DirectiveMeta,
+  MatchSource,
   parseTemplate,
   R3TargetBinder,
   SelectorMatcher,
+  DirectiveMeta as T2DirectiveMeta,
   TmplAstElement,
 } from '@angular/compiler';
 import ts from 'typescript';
@@ -18,7 +19,13 @@ import ts from 'typescript';
 import {absoluteFrom} from '../../../file_system';
 import {runInEachFileSystem} from '../../../file_system/testing';
 import {ImportedSymbolsTracker, ReferenceEmitter} from '../../../imports';
-import {CompoundMetadataReader, DtsMetadataReader, LocalMetadataRegistry} from '../../../metadata';
+import {
+  CompoundMetadataReader,
+  DtsMetadataReader,
+  HostDirectivesResolver,
+  LocalMetadataRegistry,
+  ResourceRegistry,
+} from '../../../metadata';
 import {PartialEvaluator} from '../../../partial_evaluator';
 import {NOOP_PERF_RECORDER} from '../../../perf';
 import {
@@ -26,7 +33,11 @@ import {
   isNamedClassDeclaration,
   TypeScriptReflectionHost,
 } from '../../../reflection';
-import {LocalModuleScopeRegistry, MetadataDtsModuleScopeResolver} from '../../../scope';
+import {
+  LocalModuleScopeRegistry,
+  MetadataDtsModuleScopeResolver,
+  TypeCheckScopeRegistry,
+} from '../../../scope';
 import {getDeclaration, makeProgram} from '../../../testing';
 import {CompilationMode} from '../../../transform';
 import {
@@ -117,6 +128,9 @@ runInEachFileSystem(() => {
       const analysis = analyzeDirective(program, 'TestDir');
       const matcher = new SelectorMatcher<T2DirectiveMeta[]>();
       const dirMeta: T2DirectiveMeta = {
+        ref: {
+          key: 'TestDir',
+        },
         exportAs: null,
         inputs: analysis.inputs,
         outputs: analysis.outputs,
@@ -127,6 +141,7 @@ runInEachFileSystem(() => {
         animationTriggerNames: null,
         ngContentSelectors: null,
         preserveWhitespaces: false,
+        matchSource: MatchSource.Selector,
       };
       matcher.addSelectables(CssSelector.parse('[dir]'), [dirMeta]);
 
@@ -195,6 +210,13 @@ runInEachFileSystem(() => {
     const injectableRegistry = new InjectableClassRegistry(reflectionHost, /* isCore */ false);
     const importTracker = new ImportedSymbolsTracker();
     const jitDeclarationRegistry = new JitDeclarationRegistry();
+    const resourceRegistry = new ResourceRegistry();
+    const hostDirectivesResolver = new HostDirectivesResolver(metaReader);
+    const typeCheckScopeRegistry = new TypeCheckScopeRegistry(
+      scopeRegistry,
+      metaReader,
+      hostDirectivesResolver,
+    );
 
     const handler = new DirectiveDecoratorHandler(
       reflectionHost,
@@ -212,9 +234,16 @@ runInEachFileSystem(() => {
       NOOP_PERF_RECORDER,
       importTracker,
       /*includeClassMetadata*/ true,
+      typeCheckScopeRegistry,
       /*compilationMode */ CompilationMode.FULL,
       jitDeclarationRegistry,
+      resourceRegistry,
       /* strictStandalone */ false,
+      /* implicitStandaloneValue */ true,
+      /* usePoisonedData */ false,
+      /* typeCheckHostBindings */ true,
+      /* emitDeclarationOnly */ false,
+      /* legacyOptionalChaining */ false,
     );
 
     const DirNode = getDeclaration(program, _('/entry.ts'), dirName, isNamedClassDeclaration);

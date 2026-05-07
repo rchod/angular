@@ -7,7 +7,6 @@
  */
 
 import {
-  InjectFlags,
   InjectionToken,
   INJECTOR,
   Injector,
@@ -15,9 +14,11 @@ import {
   ɵɵdefineInjectable,
   ɵɵdefineInjector,
   ɵɵinject,
-} from '@angular/core';
-import {createInjector} from '@angular/core/src/di/create_injector';
-import {R3Injector} from '@angular/core/src/di/r3_injector';
+} from '../../src/core';
+import {createInjector} from '../../src/di/create_injector';
+import {InternalInjectFlags} from '../../src/di/interface/injector';
+import {R3Injector} from '../../src/di/r3_injector';
+import {ERROR_DETAILS_PAGE_BASE_URL} from '../../src/error_details_base_url';
 
 describe('InjectorDef-based createInjector()', () => {
   class CircularA {
@@ -83,7 +84,8 @@ describe('InjectorDef-based createInjector()', () => {
     static ɵprov = ɵɵdefineInjectable({
       token: ServiceWithOptionalDep,
       providedIn: null,
-      factory: () => new ServiceWithOptionalDep(ɵɵinject(OptionalService, InjectFlags.Optional)),
+      factory: () =>
+        new ServiceWithOptionalDep(ɵɵinject(OptionalService, InternalInjectFlags.Optional)),
     });
   }
 
@@ -336,23 +338,27 @@ describe('InjectorDef-based createInjector()', () => {
 
   it('should throw when no provider defined', () => {
     expect(() => injector.get(ServiceTwo)).toThrowError(
-      `R3InjectorError(Module)[ServiceTwo]: \n` +
-        `  NullInjectorError: No provider for ServiceTwo!`,
+      'NG0201: No provider found for `ServiceTwo`. ' +
+        'Source: Module. ' +
+        `Find more at ${ERROR_DETAILS_PAGE_BASE_URL}/NG0201`,
     );
   });
 
   it('should throw without the module name when no module', () => {
     const injector = createInjector([ServiceTwo]);
     expect(() => injector.get(ServiceTwo)).toThrowError(
-      `R3InjectorError[ServiceTwo]: \n` + `  NullInjectorError: No provider for ServiceTwo!`,
+      'NG0201: No provider found for `ServiceTwo`. ' +
+        `Find more at ${ERROR_DETAILS_PAGE_BASE_URL}/NG0201`,
     );
   });
 
   it('should throw with the full path when no provider', () => {
     const injector = createInjector(ModuleWithMissingDep);
     expect(() => injector.get(ServiceWithMissingDep)).toThrowError(
-      `R3InjectorError(ModuleWithMissingDep)[ServiceWithMissingDep -> Service]: \n` +
-        `  NullInjectorError: No provider for Service!`,
+      'NG0201: No provider found for `Service`. ' +
+        'Source: ModuleWithMissingDep. ' +
+        'Path: ServiceWithMissingDep -> Service. ' +
+        `Find more at ${ERROR_DETAILS_PAGE_BASE_URL}/NG0201`,
     );
   });
 
@@ -455,14 +461,14 @@ describe('InjectorDef-based createInjector()', () => {
   it('does not allow injection after destroy', () => {
     (injector as R3Injector).destroy();
     expect(() => injector.get(DeepService)).toThrowError(
-      'NG0205: Injector has already been destroyed.',
+      /NG0205: Injector has already been destroyed./,
     );
   });
 
   it('does not allow double destroy', () => {
     (injector as R3Injector).destroy();
     expect(() => (injector as R3Injector).destroy()).toThrowError(
-      'NG0205: Injector has already been destroyed.',
+      /NG0205: Injector has already been destroyed./,
     );
   });
 
@@ -500,7 +506,7 @@ describe('InjectorDef-based createInjector()', () => {
         static ɵinj = ɵɵdefineInjector({providers: [MissingArgumentType]});
       }
       expect(() => createInjector(ErrorModule).get(MissingArgumentType)).toThrowError(
-        "NG0204: Can't resolve all parameters for MissingArgumentType: (?).",
+        /NG0204: Can't resolve all parameters for MissingArgumentType: \(\?\)./,
       );
     });
   });

@@ -12,6 +12,7 @@ import {
   AfterViewChecked,
   AfterViewInit,
   ApplicationRef,
+  ChangeDetectionStrategy,
   Compiler,
   Component,
   destroyPlatform,
@@ -28,6 +29,7 @@ import {
   OnChanges,
   OnDestroy,
   OnInit,
+  provideZoneChangeDetection,
   StaticProvider,
   Type,
   ViewRef,
@@ -35,7 +37,7 @@ import {
 import {fakeAsync, tick, waitForAsync} from '@angular/core/testing';
 import {BrowserModule} from '@angular/platform-browser';
 import {platformBrowserDynamic} from '@angular/platform-browser-dynamic';
-import {downgradeComponent, downgradeModule, UpgradeComponent} from '@angular/upgrade/static';
+import {downgradeComponent, downgradeModule, UpgradeComponent} from '../../../static';
 
 import * as angular from '../../../src/common/src/angular1';
 import {
@@ -59,10 +61,18 @@ withEachNg1Version(() => {
       afterEach(() => destroyPlatform());
 
       it('should support multiple downgraded modules', waitForAsync(() => {
-        @Component({selector: 'ng2A', template: 'a'})
+        @Component({
+          selector: 'ng2A',
+          template: 'a',
+          standalone: false,
+        })
         class Ng2ComponentA {}
 
-        @Component({selector: 'ng2B', template: 'b'})
+        @Component({
+          selector: 'ng2B',
+          template: 'b',
+          standalone: false,
+        })
         class Ng2ComponentB {}
 
         @NgModule({
@@ -83,7 +93,9 @@ withEachNg1Version(() => {
 
         const doDowngradeModule = (module: Type<any>) => {
           const bootstrapFn = (extraProviders: StaticProvider[]) =>
-            (getPlatform() || platformBrowserDynamic(extraProviders)).bootstrapModule(module);
+            (getPlatform() || platformBrowserDynamic(extraProviders)).bootstrapModule(module, {
+              applicationProviders: [provideZoneChangeDetection()],
+            });
           return downgradeModule(bootstrapFn);
         };
 
@@ -116,10 +128,18 @@ withEachNg1Version(() => {
       }));
 
       it('should support downgrading modules by providing NgModule class to `downgradeModule` call', waitForAsync(() => {
-        @Component({selector: 'ng2A', template: 'a'})
+        @Component({
+          selector: 'ng2A',
+          template: 'a',
+          standalone: false,
+        })
         class Ng2ComponentA {}
 
-        @Component({selector: 'ng2B', template: 'b'})
+        @Component({
+          selector: 'ng2B',
+          template: 'b',
+          standalone: false,
+        })
         class Ng2ComponentB {}
 
         @NgModule({
@@ -167,7 +187,10 @@ withEachNg1Version(() => {
       }));
 
       it('should support nesting components from different downgraded modules', waitForAsync(() => {
-        @Directive({selector: 'ng1A'})
+        @Directive({
+          selector: 'ng1A',
+          standalone: false,
+        })
         class Ng1ComponentA extends UpgradeComponent {
           constructor(elementRef: ElementRef, injector: Injector) {
             super('ng1A', elementRef, injector);
@@ -177,12 +200,14 @@ withEachNg1Version(() => {
         @Component({
           selector: 'ng2A',
           template: 'ng2A(<ng1A></ng1A>)',
+          standalone: false,
         })
         class Ng2ComponentA {}
 
         @Component({
           selector: 'ng2B',
           template: 'ng2B',
+          standalone: false,
         })
         class Ng2ComponentB {}
 
@@ -205,7 +230,9 @@ withEachNg1Version(() => {
         const doDowngradeModule = (module: Type<any>) => {
           const bootstrapFn = (extraProviders: StaticProvider[]) => {
             const platformRef = getPlatform() || platformBrowserDynamic(extraProviders);
-            return platformRef.bootstrapModule(module);
+            return platformRef.bootstrapModule(module, {
+              applicationProviders: [provideZoneChangeDetection()],
+            });
           };
           return downgradeModule(bootstrapFn);
         };
@@ -254,12 +281,14 @@ withEachNg1Version(() => {
         @Component({
           selector: 'ng2A',
           template: 'ng2A(<ng-content></ng-content>)',
+          standalone: false,
         })
         class Ng2ComponentA {}
 
         @Component({
           selector: 'ng2B',
           template: 'ng2B',
+          standalone: false,
         })
         class Ng2ComponentB {}
 
@@ -282,7 +311,9 @@ withEachNg1Version(() => {
         const doDowngradeModule = (module: Type<any>) => {
           const bootstrapFn = (extraProviders: StaticProvider[]) => {
             const platformRef = getPlatform() || platformBrowserDynamic(extraProviders);
-            return platformRef.bootstrapModule(module);
+            return platformRef.bootstrapModule(module, {
+              applicationProviders: [provideZoneChangeDetection()],
+            });
           };
           return downgradeModule(bootstrapFn);
         };
@@ -333,6 +364,7 @@ withEachNg1Version(() => {
         @Component({
           selector: 'ng2A',
           template: 'ng2A(Counter:{{ counter.value }} | <ng-content></ng-content>)',
+          standalone: false,
         })
         class Ng2ComponentA {
           constructor(public counter: CounterService) {}
@@ -341,6 +373,7 @@ withEachNg1Version(() => {
         @Component({
           selector: 'ng2B',
           template: 'Counter:{{ counter.value }}',
+          standalone: false,
         })
         class Ng2ComponentB {
           constructor(public counter: CounterService) {}
@@ -370,7 +403,9 @@ withEachNg1Version(() => {
           const bootstrapFn = (extraProviders: StaticProvider[]) => {
             if (!rootInjectorPromise) {
               rootInjectorPromise = platformBrowserDynamic(extraProviders)
-                .bootstrapModule(Ng2ModuleRoot)
+                .bootstrapModule(Ng2ModuleRoot, {
+                  applicationProviders: [provideZoneChangeDetection()],
+                })
                 .then((ref) => ref.injector);
             }
 
@@ -436,6 +471,7 @@ withEachNg1Version(() => {
             {provide: 'FOO', useValue: 'CompA-foo'},
             {provide: 'BAR', useValue: 'CompA-bar'},
           ],
+          standalone: false,
         })
         class Ng2ComponentA {}
 
@@ -443,6 +479,7 @@ withEachNg1Version(() => {
           selector: 'ng2B',
           template: ` FOO:{{ foo }} BAR:{{ bar }} BAZ:{{ baz }} QUX:{{ qux }} `,
           providers: [{provide: 'FOO', useValue: 'CompB-foo'}],
+          standalone: false,
         })
         class Ng2ComponentB {
           constructor(
@@ -476,7 +513,9 @@ withEachNg1Version(() => {
               {provide: 'BAZ', useValue: 'Plat-baz'},
               {provide: 'QUX', useValue: 'Plat-qux'},
             ]);
-          return platformRef.bootstrapModule(Ng2Module);
+          return platformRef.bootstrapModule(Ng2Module, {
+            applicationProviders: [provideZoneChangeDetection()],
+          });
         };
 
         const downMod = downgradeModule(bootstrapFn);
@@ -518,6 +557,7 @@ withEachNg1Version(() => {
             {provide: 'FOO', useValue: 'CompA-foo'},
             {provide: 'BAR', useValue: 'CompA-bar'},
           ],
+          standalone: false,
         })
         class Ng2ComponentA {}
 
@@ -525,6 +565,7 @@ withEachNg1Version(() => {
           selector: 'ng2B',
           template: ` FOO:{{ foo }} BAR:{{ bar }} BAZ:{{ baz }} QUX:{{ qux }} QUUX:{{ quux }} `,
           providers: [{provide: 'FOO', useValue: 'CompB-foo'}],
+          standalone: false,
         })
         class Ng2ComponentB {
           constructor(
@@ -575,7 +616,9 @@ withEachNg1Version(() => {
                 {provide: 'QUX', useValue: 'Plat-qux'},
                 {provide: 'QUUX', useValue: 'Plat-quux'},
               ]);
-            return platformRef.bootstrapModule(module);
+            return platformRef.bootstrapModule(module, {
+              applicationProviders: [provideZoneChangeDetection()],
+            });
           };
           return downgradeModule(bootstrapFn);
         };
@@ -634,12 +677,20 @@ withEachNg1Version(() => {
       }));
 
       it('should support downgrading a component and propagate inputs', waitForAsync(() => {
-        @Component({selector: 'ng2A', template: 'a({{ value }}) | <ng2B [value]="value"></ng2B>'})
+        @Component({
+          selector: 'ng2A',
+          template: 'a({{ value }}) | <ng2B [value]="value"></ng2B>',
+          standalone: false,
+        })
         class Ng2AComponent {
           @Input() value = -1;
         }
 
-        @Component({selector: 'ng2B', template: 'b({{ value }})'})
+        @Component({
+          selector: 'ng2B',
+          template: 'b({{ value }})',
+          standalone: false,
+        })
         class Ng2BComponent {
           @Input() value = -2;
         }
@@ -653,7 +704,9 @@ withEachNg1Version(() => {
         }
 
         const bootstrapFn = (extraProviders: StaticProvider[]) =>
-          platformBrowserDynamic(extraProviders).bootstrapModule(Ng2Module);
+          platformBrowserDynamic(extraProviders).bootstrapModule(Ng2Module, {
+            applicationProviders: [provideZoneChangeDetection()],
+          });
         const lazyModuleName = downgradeModule<Ng2Module>(bootstrapFn);
         const ng1Module = angular
           .module_('ng1', [lazyModuleName])
@@ -694,7 +747,11 @@ withEachNg1Version(() => {
           getValue = () => `${this.ng1Value}-bar`;
         }
 
-        @Component({selector: 'ng2', template: '{{ value }}'})
+        @Component({
+          selector: 'ng2',
+          template: '{{ value }}',
+          standalone: false,
+        })
         class Ng2Component {
           value: string;
           constructor(ng2Service: Ng2Service) {
@@ -719,7 +776,9 @@ withEachNg1Version(() => {
         }
 
         const bootstrapFn = (extraProviders: StaticProvider[]) =>
-          platformBrowserDynamic(extraProviders).bootstrapModule(Ng2Module);
+          platformBrowserDynamic(extraProviders).bootstrapModule(Ng2Module, {
+            applicationProviders: [provideZoneChangeDetection()],
+          });
         const lazyModuleName = downgradeModule<Ng2Module>(bootstrapFn);
         const ng1Module = angular
           .module_('ng1', [lazyModuleName])
@@ -747,7 +806,11 @@ withEachNg1Version(() => {
       }));
 
       it('should create components inside the Angular zone', waitForAsync(() => {
-        @Component({selector: 'ng2', template: 'In the zone: {{ inTheZone }}'})
+        @Component({
+          selector: 'ng2',
+          template: 'In the zone: {{ inTheZone }}',
+          standalone: false,
+        })
         class Ng2Component {
           private inTheZone = false;
           constructor() {
@@ -764,7 +827,9 @@ withEachNg1Version(() => {
         }
 
         const bootstrapFn = (extraProviders: StaticProvider[]) =>
-          platformBrowserDynamic(extraProviders).bootstrapModule(Ng2Module);
+          platformBrowserDynamic(extraProviders).bootstrapModule(Ng2Module, {
+            applicationProviders: [provideZoneChangeDetection()],
+          });
         const lazyModuleName = downgradeModule<Ng2Module>(bootstrapFn);
         const ng1Module = angular
           .module_('ng1', [lazyModuleName])
@@ -783,7 +848,11 @@ withEachNg1Version(() => {
       it('should destroy components inside the Angular zone', waitForAsync(() => {
         let destroyedInTheZone = false;
 
-        @Component({selector: 'ng2', template: ''})
+        @Component({
+          selector: 'ng2',
+          template: '',
+          standalone: false,
+        })
         class Ng2Component implements OnDestroy {
           ngOnDestroy() {
             destroyedInTheZone = NgZone.isInAngularZone();
@@ -799,7 +868,9 @@ withEachNg1Version(() => {
         }
 
         const bootstrapFn = (extraProviders: StaticProvider[]) =>
-          platformBrowserDynamic(extraProviders).bootstrapModule(Ng2Module);
+          platformBrowserDynamic(extraProviders).bootstrapModule(Ng2Module, {
+            applicationProviders: [provideZoneChangeDetection()],
+          });
         const lazyModuleName = downgradeModule<Ng2Module>(bootstrapFn);
         const ng1Module = angular
           .module_('ng1', [lazyModuleName])
@@ -819,7 +890,11 @@ withEachNg1Version(() => {
       it('should propagate input changes inside the Angular zone', waitForAsync(() => {
         let ng2Component: Ng2Component;
 
-        @Component({selector: 'ng2', template: ''})
+        @Component({
+          selector: 'ng2',
+          template: '',
+          standalone: false,
+        })
         class Ng2Component implements OnChanges {
           @Input() attrInput = 'foo';
           @Input() propInput = 'foo';
@@ -839,7 +914,9 @@ withEachNg1Version(() => {
         }
 
         const bootstrapFn = (extraProviders: StaticProvider[]) =>
-          platformBrowserDynamic(extraProviders).bootstrapModule(Ng2Module);
+          platformBrowserDynamic(extraProviders).bootstrapModule(Ng2Module, {
+            applicationProviders: [provideZoneChangeDetection()],
+          });
         const lazyModuleName = downgradeModule<Ng2Module>(bootstrapFn);
         const ng1Module = angular
           .module_('ng1', [lazyModuleName])
@@ -886,6 +963,7 @@ withEachNg1Version(() => {
         @Component({
           selector: 'test',
           template: '',
+          standalone: false,
         })
         class TestComponent implements OnDestroy {
           constructor() {
@@ -899,6 +977,7 @@ withEachNg1Version(() => {
         @Component({
           selector: 'wrapper',
           template: '<ng-content></ng-content>',
+          standalone: false,
         })
         class WrapperComponent {}
 
@@ -911,7 +990,9 @@ withEachNg1Version(() => {
         }
 
         const bootstrapFn = (extraProviders: StaticProvider[]) =>
-          platformBrowserDynamic(extraProviders).bootstrapModule(Ng2Module);
+          platformBrowserDynamic(extraProviders).bootstrapModule(Ng2Module, {
+            applicationProviders: [provideZoneChangeDetection()],
+          });
         const lazyModuleName = downgradeModule<Ng2Module>(bootstrapFn);
         const ng1Module = angular
           .module_('ng1', [lazyModuleName])
@@ -943,6 +1024,7 @@ withEachNg1Version(() => {
         @Component({
           selector: 'ng2',
           template: '{{ count }}<button (click)="increment()"></button>',
+          standalone: false,
         })
         class Ng2Component {
           private count = 0;
@@ -960,7 +1042,9 @@ withEachNg1Version(() => {
         }
 
         const bootstrapFn = (extraProviders: StaticProvider[]) =>
-          platformBrowserDynamic(extraProviders).bootstrapModule(Ng2Module);
+          platformBrowserDynamic(extraProviders).bootstrapModule(Ng2Module, {
+            applicationProviders: [provideZoneChangeDetection()],
+          });
         const lazyModuleName = downgradeModule<Ng2Module>(bootstrapFn);
         const ng1Module = angular
           .module_('ng1', [lazyModuleName])
@@ -989,6 +1073,7 @@ withEachNg1Version(() => {
         @Component({
           selector: 'test',
           template: '{{ count }}<button (click)="increment()"></button>',
+          standalone: false,
         })
         class TestComponent {
           count = 0;
@@ -1000,6 +1085,7 @@ withEachNg1Version(() => {
         @Component({
           selector: 'wrapper',
           template: '<ng-content></ng-content>',
+          standalone: false,
         })
         class WrapperComponent {}
 
@@ -1012,7 +1098,9 @@ withEachNg1Version(() => {
         }
 
         const bootstrapFn = (extraProviders: StaticProvider[]) =>
-          platformBrowserDynamic(extraProviders).bootstrapModule(Ng2Module);
+          platformBrowserDynamic(extraProviders).bootstrapModule(Ng2Module, {
+            applicationProviders: [provideZoneChangeDetection()],
+          });
         const lazyModuleName = downgradeModule<Ng2Module>(bootstrapFn);
         const ng1Module = angular
           .module_('ng1', [lazyModuleName])
@@ -1051,6 +1139,8 @@ withEachNg1Version(() => {
             <button (click)="value = 'qux'"></button>
             <ng-content></ng-content>
           `,
+          standalone: false,
+          changeDetection: ChangeDetectionStrategy.Eager,
         })
         class Ng2Component
           implements
@@ -1104,7 +1194,9 @@ withEachNg1Version(() => {
         }
 
         const bootstrapFn = (extraProviders: StaticProvider[]) =>
-          platformBrowserDynamic(extraProviders).bootstrapModule(Ng2Module);
+          platformBrowserDynamic(extraProviders).bootstrapModule(Ng2Module, {
+            applicationProviders: [provideZoneChangeDetection()],
+          });
         const lazyModuleName = downgradeModule<Ng2Module>(bootstrapFn);
         const ng1Module = angular
           .module_('ng1', [lazyModuleName])
@@ -1224,7 +1316,11 @@ withEachNg1Version(() => {
       it('should detach hostViews from the ApplicationRef once destroyed', waitForAsync(() => {
         let ng2Component: Ng2Component;
 
-        @Component({selector: 'ng2', template: ''})
+        @Component({
+          selector: 'ng2',
+          template: '',
+          standalone: false,
+        })
         class Ng2Component {
           constructor(public appRef: ApplicationRef) {
             ng2Component = this;
@@ -1242,7 +1338,9 @@ withEachNg1Version(() => {
         }
 
         const bootstrapFn = (extraProviders: StaticProvider[]) =>
-          platformBrowserDynamic(extraProviders).bootstrapModule(Ng2Module);
+          platformBrowserDynamic(extraProviders).bootstrapModule(Ng2Module, {
+            applicationProviders: [provideZoneChangeDetection()],
+          });
         const lazyModuleName = downgradeModule<Ng2Module>(bootstrapFn);
         const ng1Module = angular
           .module_('ng1', [lazyModuleName])
@@ -1273,7 +1371,11 @@ withEachNg1Version(() => {
       it('should properly run cleanup when a downgraded component is destroyed', waitForAsync(() => {
         let destroyed = false;
 
-        @Component({selector: 'ng2', template: '<ul><li>test1</li><li>test2</li></ul>'})
+        @Component({
+          selector: 'ng2',
+          template: '<ul><li>test1</li><li>test2</li></ul>',
+          standalone: false,
+        })
         class Ng2Component implements OnDestroy {
           ngOnDestroy() {
             destroyed = true;
@@ -1289,7 +1391,9 @@ withEachNg1Version(() => {
         }
 
         const bootstrapFn = (extraProviders: StaticProvider[]) =>
-          platformBrowserDynamic(extraProviders).bootstrapModule(Ng2Module);
+          platformBrowserDynamic(extraProviders).bootstrapModule(Ng2Module, {
+            applicationProviders: [provideZoneChangeDetection()],
+          });
         const lazyModuleName = downgradeModule<Ng2Module>(bootstrapFn);
         const ng1Module = angular
           .module_('ng1', [lazyModuleName])
@@ -1337,7 +1441,11 @@ withEachNg1Version(() => {
         let count = 0;
         let getNgZoneCount = 0;
 
-        @Component({selector: 'ng2', template: 'Count: {{ count }} | In the zone: {{ inTheZone }}'})
+        @Component({
+          selector: 'ng2',
+          template: 'Count: {{ count }} | In the zone: {{ inTheZone }}',
+          standalone: false,
+        })
         class Ng2Component {
           private count = ++count;
           private inTheZone = false;
@@ -1362,7 +1470,9 @@ withEachNg1Version(() => {
         }
 
         const bootstrapFn = (extraProviders: StaticProvider[]) =>
-          platformBrowserDynamic(extraProviders).bootstrapModule(Ng2Module);
+          platformBrowserDynamic(extraProviders).bootstrapModule(Ng2Module, {
+            applicationProviders: [provideZoneChangeDetection()],
+          });
         const lazyModuleName = downgradeModule<Ng2Module>(bootstrapFn);
         const ng1Module = angular
           .module_('ng1', [lazyModuleName])
@@ -1398,7 +1508,11 @@ withEachNg1Version(() => {
       it("should give access to both injectors in the Angular module's constructor", waitForAsync(() => {
         let $injectorFromNg2: angular.IInjectorService | null = null;
 
-        @Component({selector: 'ng2', template: ''})
+        @Component({
+          selector: 'ng2',
+          template: '',
+          standalone: false,
+        })
         class Ng2Component {}
 
         @NgModule({
@@ -1414,7 +1528,9 @@ withEachNg1Version(() => {
         }
 
         const bootstrapFn = (extraProviders: StaticProvider[]) =>
-          platformBrowserDynamic(extraProviders).bootstrapModule(Ng2Module);
+          platformBrowserDynamic(extraProviders).bootstrapModule(Ng2Module, {
+            applicationProviders: [provideZoneChangeDetection()],
+          });
         const lazyModuleName = downgradeModule<Ng2Module>(bootstrapFn);
         const ng1Module = angular
           .module_('ng1', [lazyModuleName])
@@ -1428,7 +1544,11 @@ withEachNg1Version(() => {
       }));
 
       it('should destroy the AngularJS app when `PlatformRef` is destroyed', waitForAsync(() => {
-        @Component({selector: 'ng2', template: '<span>NG2</span>'})
+        @Component({
+          selector: 'ng2',
+          template: '<span>NG2</span>',
+          standalone: false,
+        })
         class Ng2Component {}
 
         @NgModule({
@@ -1440,7 +1560,9 @@ withEachNg1Version(() => {
         }
 
         const bootstrapFn = (extraProviders: StaticProvider[]) =>
-          platformBrowserDynamic(extraProviders).bootstrapModule(Ng2Module);
+          platformBrowserDynamic(extraProviders).bootstrapModule(Ng2Module, {
+            applicationProviders: [provideZoneChangeDetection()],
+          });
         const lazyModuleName = downgradeModule<Ng2Module>(bootstrapFn);
         const ng1Module = angular
           .module_('ng1', [lazyModuleName])
@@ -1496,15 +1618,25 @@ withEachNg1Version(() => {
 
         const doDowngradeModule = (module: Type<any>) => {
           const bootstrapFn = (extraProviders: StaticProvider[]) =>
-            (getPlatform() || platformBrowserDynamic(extraProviders)).bootstrapModule(module);
+            (getPlatform() || platformBrowserDynamic(extraProviders)).bootstrapModule(module, {
+              applicationProviders: [provideZoneChangeDetection()],
+            });
           return downgradeModule(bootstrapFn);
         };
 
         beforeEach(() => {
-          @Component({selector: 'ng2A', template: 'a'})
+          @Component({
+            selector: 'ng2A',
+            template: 'a',
+            standalone: false,
+          })
           class Ng2ComponentA {}
 
-          @Component({selector: 'ng2B', template: 'b'})
+          @Component({
+            selector: 'ng2B',
+            template: 'b',
+            standalone: false,
+          })
           class Ng2ComponentB {}
 
           @NgModule({

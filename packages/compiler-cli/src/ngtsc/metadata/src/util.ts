@@ -12,6 +12,7 @@ import {OwningModule, Reference} from '../../imports';
 import {
   ClassDeclaration,
   ClassMember,
+  ClassMemberAccessLevel,
   ClassMemberKind,
   isNamedClassDeclaration,
   ReflectionHost,
@@ -28,26 +29,39 @@ import {
   MetadataReader,
   NgModuleMeta,
   PipeMeta,
-  TemplateGuardMeta,
 } from './api';
-import {ClassPropertyMapping, ClassPropertyName} from './property_mapping';
+import {TypeEntityToDeclarationError} from '../../reflection/src/typescript';
+import {ClassPropertyMapping, ClassPropertyName, TemplateGuardMeta} from '@angular/compiler';
 
 export function extractReferencesFromType(
   checker: ts.TypeChecker,
   def: ts.TypeNode,
   bestGuessOwningModule: OwningModule | null,
-): Reference<ClassDeclaration>[] {
+): {result: Reference<ClassDeclaration>[]; isIncomplete: boolean} {
   if (!ts.isTupleTypeNode(def)) {
-    return [];
+    return {result: [], isIncomplete: false};
   }
 
-  return def.elements.map((element) => {
+  const result: Reference<ClassDeclaration>[] = [];
+  let isIncomplete = false;
+
+  for (const element of def.elements) {
     if (!ts.isTypeQueryNode(element)) {
       throw new Error(`Expected TypeQueryNode: ${nodeDebugInfo(element)}`);
     }
 
-    return extraReferenceFromTypeQuery(checker, element, def, bestGuessOwningModule);
-  });
+    const ref = extraReferenceFromTypeQuery(checker, element, def, bestGuessOwningModule);
+
+    // Note: Sometimes a reference inside the type tuple/array
+    // may not be resolvable/existent. We proceed with incomplete data.
+    if (ref === null) {
+      isIncomplete = true;
+    } else {
+      result.push(ref);
+    }
+  }
+
+  return {result, isIncomplete};
 }
 
 export function extraReferenceFromTypeQuery(
@@ -55,12 +69,28 @@ export function extraReferenceFromTypeQuery(
   typeNode: ts.TypeQueryNode,
   origin: ts.TypeNode,
   bestGuessOwningModule: OwningModule | null,
-) {
+): Reference<ClassDeclaration> | null {
   const type = typeNode.exprName;
-  const {node, from} = reflectTypeEntityToDeclaration(type, checker);
+  let node: ts.Declaration;
+  let from: string | null;
+
+  // Gracefully handle when the type entity could not be converted or
+  // resolved to its declaration node.
+  try {
+    const result = reflectTypeEntityToDeclaration(type, checker);
+    node = result.node;
+    from = result.from;
+  } catch (e) {
+    if (e instanceof TypeEntityToDeclarationError) {
+      return null;
+    }
+    throw e;
+  }
+
   if (!isNamedClassDeclaration(node)) {
     throw new Error(`Expected named ClassDeclaration: ${nodeDebugInfo(node)}`);
   }
+
   if (from !== null && !from.startsWith('.')) {
     // The symbol was imported using an absolute module specifier so return a reference that
     // uses that absolute module specifier as its best guess owning module.
@@ -146,7 +176,24 @@ export function extractDirectiveTypeCheckMeta(
   reflector: ReflectionHost,
 ): DirectiveTypeCheckMeta {
   const members = reflector.getMembersOfClass(node);
-  const staticMembers = members.filter((member) => member.isStatic);
+  const publicMethods = new Set<string>();
+  const staticMembers: ClassMember[] = [];
+
+  for (const member of members) {
+    if (member.isStatic) {
+      staticMembers.push(member);
+    }
+
+    if (
+      member.kind === ClassMemberKind.Method &&
+      !member.isStatic &&
+      (member.accessLevel === ClassMemberAccessLevel.PublicReadonly ||
+        member.accessLevel === ClassMemberAccessLevel.PublicWritable)
+    ) {
+      publicMethods.add(member.name);
+    }
+  }
+
   const ngTemplateGuards = staticMembers
     .map(extractTemplateGuard)
     .filter((guard): guard is TemplateGuardMeta => guard !== null);
@@ -195,6 +242,7 @@ export function extractDirectiveTypeCheckMeta(
     restrictedInputFields,
     stringLiteralInputFields,
     undeclaredInputFields,
+    publicMethods,
     isGeneric: arity !== null && arity > 0,
   };
 }

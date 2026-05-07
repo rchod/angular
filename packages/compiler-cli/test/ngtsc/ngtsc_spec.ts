@@ -6,14 +6,14 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
-import {NgtscProgram} from '@angular/compiler-cli/src/ngtsc/program';
-import {CompilerOptions} from '@angular/compiler-cli/src/transformers/api';
-import {createCompilerHost} from '@angular/compiler-cli/src/transformers/compiler_host';
-import {platform} from 'os';
+import {platform} from 'node:os';
 import ts from 'typescript';
+import {NgtscProgram} from '../../src/ngtsc/program';
+import {CompilerOptions} from '../../src/transformers/api';
+import {createCompilerHost} from '../../src/transformers/compiler_host';
 
 import {ErrorCode, ngErrorCode} from '../../src/ngtsc/diagnostics';
-import {absoluteFrom, NgtscCompilerHost} from '../../src/ngtsc/file_system';
+import {absoluteFrom} from '../../src/ngtsc/file_system';
 import {runInEachFileSystem} from '../../src/ngtsc/file_system/testing';
 import {loadStandardTestFiles} from '../../src/ngtsc/testing';
 import {
@@ -27,14 +27,28 @@ const trim = (input: string): string => input.replace(/\s+/g, ' ').trim();
 
 const varRegExp = (name: string): RegExp => new RegExp(`const \\w+ = \\[\"${name}\"\\];`);
 
-const viewQueryRegExp = (predicate: string, flags: number, ref?: string): RegExp => {
-  const maybeRef = ref ? `, ${ref}` : ``;
-  return new RegExp(`i0\\.ɵɵviewQuery\\(${predicate}, ${flags}${maybeRef}\\)`);
+const viewQueryRegExp = (queries: [{predicate: string; flags: number; ref?: string}]): RegExp => {
+  let result = `i0\\.ɵɵviewQuery`;
+
+  for (const {ref, predicate, flags} of queries) {
+    const maybeRef = ref ? `, ${ref}` : ``;
+    result += `\\(${predicate}, ${flags}${maybeRef}\\)`;
+  }
+
+  return new RegExp(result);
 };
 
-const contentQueryRegExp = (predicate: string, flags: number, ref?: string): RegExp => {
-  const maybeRef = ref ? `, ${ref}` : ``;
-  return new RegExp(`i0\\.ɵɵcontentQuery\\(dirIndex, ${predicate}, ${flags}${maybeRef}\\)`);
+const contentQueryRegExp = (
+  queries: {predicate: string; flags: number; ref?: string}[],
+): RegExp => {
+  let result = `i0\\.ɵɵcontentQuery`;
+
+  for (const {predicate, flags, ref} of queries) {
+    const maybeRef = ref ? `, ${ref}` : ``;
+    result += `\\(dirIndex, ${predicate}, ${flags}${maybeRef}\\)`;
+  }
+
+  return new RegExp(result);
 };
 
 const setClassMetadataRegExp = (expectedType: string): RegExp =>
@@ -66,6 +80,7 @@ runInEachFileSystem((os: string) => {
         @Component({
           selector: 'test-cmp',
           templateUrl: 'test.html',
+          standalone: false,
         })
         export class TestCmp {}
     `,
@@ -147,7 +162,7 @@ runInEachFileSystem((os: string) => {
       expect(jsContents).toContain('Dep.ɵprov =');
       expect(jsContents).toContain('Service.ɵprov =');
       expect(jsContents).toContain(
-        'Service.ɵfac = function Service_Factory(__ngFactoryType__) { return new (__ngFactoryType__ || Service)(i0.ɵɵinject(Dep)); };',
+        'Service.ɵfac = function Service_Factory(__ngFactoryType__) { /* @ts-ignore */\nreturn new (__ngFactoryType__ || Service)(i0.ɵɵinject(Dep)); };',
       );
       expect(jsContents).toContain("providedIn: 'root' })");
       expect(jsContents).not.toContain('__decorate');
@@ -186,6 +201,276 @@ runInEachFileSystem((os: string) => {
       expect(dtsContents).toContain('static ɵfac: i0.ɵɵFactoryDeclaration<Service, never>;');
     });
 
+    describe('animate.enter', () => {
+      it('should compile animate.enter event bindings with a function call', () => {
+        env.write(
+          'test.ts',
+          `
+          import {Component, signal, ViewChild, ElementRef} from '@angular/core';
+
+          @Component({
+            selector: 'test-cmp',
+            template:
+              '<div>@if (show()) {<p (animate.enter)="animateFn($event)">I should slide in</p>}</div>',
+          })
+          class TestComponent {
+            show = signal(false);
+            animateFn = (event: any) => {
+              event.target.classList.add('slide-in');
+            };
+          }
+        `,
+        );
+
+        env.driveMain();
+
+        const jsContents = env.getContents('test.js');
+        expect(jsContents).toContain(
+          'i0.ɵɵanimateEnterListener(function TestComponent_Conditional_1_Template_p_animateenter_0_listener($event) { i0.ɵɵrestoreView(_r1); const ctx_r1 = i0.ɵɵnextContext(); return i0.ɵɵresetView(ctx_r1.animateFn($event)); });',
+        );
+        const instances = jsContents.match(/ɵɵanimateEnter/g);
+        expect(instances?.length).toBe(1);
+      });
+
+      it('should compile animate.enter bindings with a class string', () => {
+        env.write(
+          'test.ts',
+          `
+          import {Component, signal, ViewChild, ElementRef} from '@angular/core';
+
+          @Component({
+            selector: 'test-cmp',
+            template:
+              '<div>@if (show()) {<p [animate.enter]="fade()">I should slide in</p>}</div>',
+          })
+          class TestComponent {
+            show = signal(false);
+            fade = signal('fadein');
+          }
+        `,
+        );
+
+        env.driveMain();
+
+        const jsContents = env.getContents('test.js');
+        expect(jsContents).toContain(
+          'i0.ɵɵanimateEnter(function TestComponent_Conditional_1_Template_animateenter_cb() { i0.ɵɵrestoreView(_r1); const ctx_r1 = i0.ɵɵnextContext(); return i0.ɵɵresetView(ctx_r1.fade()); });',
+        );
+        const instances = jsContents.match(/ɵɵanimateEnter/g);
+        expect(instances?.length).toBe(1);
+      });
+
+      it('should compile animate.enter bindings with a string array', () => {
+        env.write(
+          'test.ts',
+          `
+          import {Component, signal, ViewChild, ElementRef} from '@angular/core';
+
+          @Component({
+            selector: 'test-cmp',
+            template:
+              '<div>@if (show()) {<p [animate.enter]="classList">I should slide in</p>}</div>',
+          })
+          class TestComponent {
+            show = signal(false);
+            classList = ['fadein', 'stuff'];
+          }
+        `,
+        );
+
+        env.driveMain();
+
+        const jsContents = env.getContents('test.js');
+        expect(jsContents).toContain(
+          'i0.ɵɵanimateEnter(function TestComponent_Conditional_1_Template_animateenter_cb() { i0.ɵɵrestoreView(_r1); const ctx_r1 = i0.ɵɵnextContext(); return i0.ɵɵresetView(ctx_r1.classList); });',
+        );
+        const instances = jsContents.match(/ɵɵanimateEnter/g);
+        expect(instances?.length).toBe(1);
+      });
+
+      it('should compile animate.enter with a string', () => {
+        env.write(
+          'test.ts',
+          `
+          import {Component, signal, ViewChild, ElementRef} from '@angular/core';
+
+          @Component({
+            selector: 'test-cmp',
+            template:
+              '<div>@if (show()) {<p animate.enter="fade">I should slide in</p>}</div>',
+          })
+          class TestComponent {
+            show = signal(false);
+          }
+        `,
+        );
+
+        env.driveMain();
+
+        const jsContents = env.getContents('test.js');
+        expect(jsContents).toContain('i0.ɵɵanimateEnter("fade");');
+        const updateInstances = jsContents.match(/ɵɵanimateEnter\(/g);
+        expect(updateInstances?.length).toBe(1);
+      });
+
+      it('should throw an error when legacy animations are used with animate.enter', () => {
+        env.write(
+          'test.ts',
+          `
+          import {Component} from '@angular/core';
+
+          @Component({
+            selector: 'test-cmp',
+            template: '<div animate.enter="some-class"></div>',
+            animations: [],
+          })
+          class TestComponent {}
+        `,
+        );
+
+        const diags = env.driveDiagnostics();
+        expect(diags.length).toBe(1);
+        expect(diags[0].messageText).toContain(
+          `A component cannot have both the '@Component.animations' property (legacy animations) and use 'animate.enter' or 'animate.leave' in the template.`,
+        );
+      });
+
+      it('should throw an error when legacy animations are used with animate.leave', () => {
+        env.write(
+          'test.ts',
+          `
+          import {Component} from '@angular/core';
+
+          @Component({
+            selector: 'test-cmp',
+            template: '<div animate.leave="some-class"></div>',
+            animations: [],
+          })
+          class TestComponent {}
+        `,
+        );
+
+        const diags = env.driveDiagnostics();
+        expect(diags.length).toBe(1);
+        expect(diags[0].messageText).toContain(
+          `A component cannot have both the '@Component.animations' property (legacy animations) and use 'animate.enter' or 'animate.leave' in the template.`,
+        );
+      });
+    });
+
+    describe('animate.leave', () => {
+      it('should compile animate.leave event bindings with a function call', () => {
+        env.write(
+          'test.ts',
+          `
+          import {Component, signal, ViewChild, ElementRef} from '@angular/core';
+
+          @Component({
+            selector: 'test-cmp',
+            template:
+              '<div>@if (show()) {<p (animate.leave)="animateFn($event)">I should slide out</p>}</div>',
+          })
+          class TestComponent {
+            show = signal(true);
+            animateFn = (event: any) => {
+              event.target.classList.add('slide-in');
+            };
+          }
+        `,
+        );
+
+        env.driveMain();
+
+        const jsContents = env.getContents('test.js');
+        expect(jsContents).toContain(
+          'i0.ɵɵanimateLeaveListener(function TestComponent_Conditional_1_Template_p_animateleave_0_listener($event) { i0.ɵɵrestoreView(_r1); const ctx_r1 = i0.ɵɵnextContext(); return i0.ɵɵresetView(ctx_r1.animateFn($event)); });',
+        );
+        const instances = jsContents.match(/ɵɵanimateLeave/g);
+        expect(instances?.length).toBe(1);
+      });
+
+      it('should compile animate.leave bindings with a class string', () => {
+        env.write(
+          'test.ts',
+          `
+          import {Component, signal, ViewChild, ElementRef} from '@angular/core';
+
+          @Component({
+            selector: 'test-cmp',
+            template:
+              '<div>@if (show()) {<p [animate.leave]="fade()">I should slide out</p>}</div>',
+          })
+          class TestComponent {
+            show = signal(true);
+            fade = signal('fadeout');
+          }
+        `,
+        );
+
+        env.driveMain();
+
+        const jsContents = env.getContents('test.js');
+        expect(jsContents).toContain(
+          'i0.ɵɵanimateLeave(function TestComponent_Conditional_1_Template_animateleave_cb() { i0.ɵɵrestoreView(_r1); const ctx_r1 = i0.ɵɵnextContext(); return i0.ɵɵresetView(ctx_r1.fade()); });',
+        );
+        const instances = jsContents.match(/ɵɵanimateLeave/g);
+        expect(instances?.length).toBe(1);
+      });
+
+      it('should compile animate.leave bindings with a string array', () => {
+        env.write(
+          'test.ts',
+          `
+          import {Component, signal, ViewChild, ElementRef} from '@angular/core';
+
+          @Component({
+            selector: 'test-cmp',
+            template:
+              '<div>@if (show()) {<p [animate.leave]="classList">I should slide out</p>}</div>',
+          })
+          class TestComponent {
+            show = signal(true);
+            classList = ['fadeout', 'stuff'];
+          }
+        `,
+        );
+
+        env.driveMain();
+
+        const jsContents = env.getContents('test.js');
+        expect(jsContents).toContain(
+          'i0.ɵɵanimateLeave(function TestComponent_Conditional_1_Template_animateleave_cb() { i0.ɵɵrestoreView(_r1); const ctx_r1 = i0.ɵɵnextContext(); return i0.ɵɵresetView(ctx_r1.classList); });',
+        );
+        const instances = jsContents.match(/ɵɵanimateLeave/g);
+        expect(instances?.length).toBe(1);
+      });
+
+      it('should compile animate.leave with a string', () => {
+        env.write(
+          'test.ts',
+          `
+          import {Component, signal, ViewChild, ElementRef} from '@angular/core';
+
+          @Component({
+            selector: 'test-cmp',
+            template:
+              '<div>@if (show()) {<p animate.leave="fade">I should slide out</p>}</div>',
+          })
+          class TestComponent {
+            show = signal(true);
+          }
+        `,
+        );
+
+        env.driveMain();
+
+        const jsContents = env.getContents('test.js');
+        expect(jsContents).toContain('i0.ɵɵanimateLeave("fade");');
+        const updateInstances = jsContents.match(/ɵɵanimateLeave\(/g);
+        expect(updateInstances?.length).toBe(1);
+      });
+    });
+
     it('should compile Injectables with providedIn and factory with deps without errors', () => {
       env.write(
         'test.ts',
@@ -209,7 +494,9 @@ runInEachFileSystem((os: string) => {
       expect(jsContents).toContain(
         'factory: function Service_Factory(__ngFactoryType__) { let __ngConditionalFactory__ = null; if (__ngFactoryType__) {',
       );
-      expect(jsContents).toContain('return new (__ngFactoryType__ || Service)(i0.ɵɵinject(Dep));');
+      expect(jsContents).toContain(
+        '/* @ts-ignore */\nreturn new (__ngFactoryType__ || Service)(i0.ɵɵinject(Dep));',
+      );
       expect(jsContents).toContain(
         '__ngConditionalFactory__ = ((dep) => new Service(dep))(i0.ɵɵinject(Dep));',
       );
@@ -247,7 +534,9 @@ runInEachFileSystem((os: string) => {
       expect(jsContents).toContain(
         'factory: function Service_Factory(__ngFactoryType__) { let __ngConditionalFactory__ = null; if (__ngFactoryType__) {',
       );
-      expect(jsContents).toContain('return new (__ngFactoryType__ || Service)(i0.ɵɵinject(Dep));');
+      expect(jsContents).toContain(
+        '/* @ts-ignore */\nreturn new (__ngFactoryType__ || Service)(i0.ɵɵinject(Dep));',
+      );
       expect(jsContents).toContain(
         '__ngConditionalFactory__ = ((dep) => new Service(dep))(i0.ɵɵinject(Dep, 10));',
       );
@@ -284,7 +573,7 @@ runInEachFileSystem((os: string) => {
       expect(jsContents).toContain('Service.ɵprov =');
       expect(jsContents).toContain('Mod.ɵmod =');
       expect(jsContents).toContain(
-        'Service.ɵfac = function Service_Factory(__ngFactoryType__) { return new (__ngFactoryType__ || Service)(i0.ɵɵinject(Dep)); };',
+        'Service.ɵfac = function Service_Factory(__ngFactoryType__) { /* @ts-ignore */\nreturn new (__ngFactoryType__ || Service)(i0.ɵɵinject(Dep)); };',
       );
       expect(jsContents).toContain('providedIn: i0.forwardRef(() => Mod) })');
       expect(jsContents).not.toContain('__decorate');
@@ -341,7 +630,7 @@ runInEachFileSystem((os: string) => {
 
       expect(jsContents).toContain(
         `Service.ɵfac = function Service_Factory(__ngFactoryType__) { ` +
-          `return new (__ngFactoryType__ || Service)(i0.ɵɵinject(Dep), i0.ɵɵinject(OptionalDep, 8)); };`,
+          `/* @ts-ignore */\nreturn new (__ngFactoryType__ || Service)(i0.ɵɵinject(Dep), i0.ɵɵinject(OptionalDep, 8)); };`,
       );
     });
 
@@ -351,7 +640,10 @@ runInEachFileSystem((os: string) => {
         `
         import {Directive} from '@angular/core';
 
-        @Directive({selector: '[dir]'})
+        @Directive({
+          selector: '[dir]',
+          standalone: false,
+        })
         export class TestDir {}
       `,
       );
@@ -390,7 +682,7 @@ runInEachFileSystem((os: string) => {
 
       const dtsContents = env.getContents('test.d.ts');
       expect(dtsContents).toContain(
-        'static ɵdir: i0.ɵɵDirectiveDeclaration<TestDir, never, never, {}, {}, never, never, false, never>',
+        'static ɵdir: i0.ɵɵDirectiveDeclaration<TestDir, never, never, {}, {}, never, never, true, never>',
       );
       expect(dtsContents).toContain('static ɵfac: i0.ɵɵFactoryDeclaration<TestDir, never>');
     });
@@ -404,6 +696,7 @@ runInEachFileSystem((os: string) => {
         @Component({
           selector: 'test-cmp',
           template: 'this is a test',
+          standalone: false,
         })
         export class TestCmp {}
     `,
@@ -432,6 +725,7 @@ runInEachFileSystem((os: string) => {
         @Component({
           selector: 'test-cmp',
           template: 'this is ' + 'a test',
+          standalone: false,
         })
         export class TestCmp {}
     `,
@@ -465,6 +759,7 @@ runInEachFileSystem((os: string) => {
         @Component({
           selector: 'test-cmp',
           template: getTemplate(),
+          standalone: false,
         })
         export class TestCmp {}
     `,
@@ -493,6 +788,7 @@ runInEachFileSystem((os: string) => {
         @Component({
           selector: 'test-cmp',
           templateUrl: './dir/test.html',
+          standalone: false,
         })
         export class TestCmp {}
     `,
@@ -514,6 +810,7 @@ runInEachFileSystem((os: string) => {
         @Component({
           selector: 'broken-cmp',
           template: '{{ broken = "true" }}', // assignment not legal in this context
+          standalone: false,
         })
         export class BrokenCmp {}
 
@@ -541,10 +838,16 @@ runInEachFileSystem((os: string) => {
         `
             import {Directive, NgModule} from '@angular/core';
 
-            @Directive({selector: 'internal'})
+            @Directive({
+              selector: 'internal',
+              standalone: false,
+            })
             export class InternalDir {}
 
-            @Directive({selector: 'external'})
+            @Directive({
+              selector: 'external',
+              standalone: false,
+            })
             export class ExternalDir {}
 
             @NgModule({
@@ -572,7 +875,10 @@ runInEachFileSystem((os: string) => {
         `
             import {Directive, NgModule} from '@angular/core';
 
-            @Directive({selector: 'internal'})
+            @Directive({
+              selector: 'internal',
+              standalone: false,
+            })
             export class InternalDir {}
 
             @NgModule({
@@ -581,7 +887,10 @@ runInEachFileSystem((os: string) => {
             })
             export class DepModule {}
 
-            @Directive({selector: 'external'})
+            @Directive({
+              selector: 'external',
+              standalone: false,
+            })
             export class ExternalDir {}
 
             @NgModule({
@@ -744,7 +1053,7 @@ runInEachFileSystem((os: string) => {
 
         it('should still perform schema checks in embedded views', () => {
           env.tsconfig({
-            'fullTemplateTypeCheck': false,
+            'strictTemplates': false,
             'annotateForClosureCompiler': true,
           });
           env.write(
@@ -759,12 +1068,14 @@ runInEachFileSystem((os: string) => {
                   <some-dir>Has a directive, should be okay</some-dir>
                   <not-a-cmp>Should trigger a schema error</not-a-cmp>
                 </ng-template>
-              \`
+              \`,
+              standalone: false,
             })
             export class TestCmp {}
 
             @Directive({
               selector: 'some-dir',
+              standalone: false,
             })
             export class TestDir {}
 
@@ -950,7 +1261,8 @@ runInEachFileSystem((os: string) => {
 
       @AngularComponent({
         selector: 'test-component',
-        template: '...'
+        template: '...',
+        standalone: false,
       })
       export class TestComponent {
         @AngularInput() input: any;
@@ -958,12 +1270,14 @@ runInEachFileSystem((os: string) => {
       }
 
       @AngularDirective({
-        selector: 'test-directive'
+        selector: 'test-directive',
+        standalone: false,
       })
       export class TestDirective {}
 
       @AngularPipe({
-        name: 'test-pipe'
+        name: 'test-pipe',
+        standalone: false,
       })
       export class TestPipe {}
 
@@ -1009,7 +1323,10 @@ runInEachFileSystem((os: string) => {
 
         // ModuleA classes
 
-        @Pipe({name: 'number'})
+        @Pipe({
+          name: 'number',
+          standalone: false,
+        })
         class PipeA {
           transform() {}
         }
@@ -1022,14 +1339,18 @@ runInEachFileSystem((os: string) => {
 
         // ModuleB classes
 
-        @Pipe({name: 'number'})
+        @Pipe({
+          name: 'number',
+          standalone: false,
+        })
         class PipeB {
           transform() {}
         }
 
         @Component({
           selector: 'app',
-          template: '{{ count | number }}'
+          template: '{{ count | number }}',
+          standalone: false,
         })
         export class App {
           count = 0;
@@ -1058,7 +1379,10 @@ runInEachFileSystem((os: string) => {
 
             // ModuleA classes
 
-            @Pipe({name: 'number'})
+            @Pipe({
+              name: 'number',
+              standalone: false,
+            })
             class PipeA {
               transform() {}
             }
@@ -1071,7 +1395,10 @@ runInEachFileSystem((os: string) => {
 
             // ModuleB classes
 
-            @Pipe({name: 'number'})
+            @Pipe({
+              name: 'number',
+              standalone: false,
+            })
             class PipeB {
               transform() {}
             }
@@ -1086,7 +1413,8 @@ runInEachFileSystem((os: string) => {
 
             @Component({
               selector: 'app',
-              template: '{{ count | number }}'
+              template: '{{ count | number }}',
+              standalone: false,
             })
             export class App {
               count = 0;
@@ -1115,12 +1443,16 @@ runInEachFileSystem((os: string) => {
 
         // ModuleA classes
 
-        @Directive({selector: '[dir]'})
+        @Directive({
+          selector: '[dir]',
+          standalone: false,
+        })
         class DirectiveA {}
 
         @Component({
-          selector: 'comp',
-          template: '...'
+          selector: 'comp-a',
+          template: '...',
+          standalone: false,
         })
         class ComponentA {}
 
@@ -1132,12 +1464,16 @@ runInEachFileSystem((os: string) => {
 
         // ModuleB classes
 
-        @Directive({selector: '[dir]'})
+        @Directive({
+          selector: '[dir]',
+          standalone: false,
+        })
         class DirectiveB {}
 
         @Component({
-          selector: 'comp',
+          selector: 'comp-b',
           template: '...',
+          standalone: false,
         })
         export class ComponentB {}
 
@@ -1145,8 +1481,10 @@ runInEachFileSystem((os: string) => {
           selector: 'app',
           template: \`
             <div dir></div>
-            <comp></comp>
+            <comp-a></comp-a>
+            <comp-b></comp-b>
           \`,
+          standalone: false,
         })
         export class App {}
 
@@ -1166,6 +1504,43 @@ runInEachFileSystem((os: string) => {
       );
     });
 
+    it(
+      'should not throw, but issue a diagnostic when an `NgModule` from `d.ts` references ' +
+        'non-existent classes',
+      () => {
+        env.tsconfig();
+        env.write(
+          'test.ts',
+          `
+          import {NgModule} from '@angular/core';
+          import {MyModule} from './lib';
+
+          @NgModule({
+            imports: [MyModule],
+          })
+          export class Mod {}
+        `,
+        );
+        env.write(
+          'lib.d.ts',
+          `
+          import * as i0 from '@angular/core';
+          import {InvalidRef} from 'other-lib';
+
+          export declare class MyModule {
+            static ɵmod: i0.ɵɵNgModuleDeclaration<Module, [], never, [typeof InvalidRef]>
+          }
+        `,
+        );
+
+        const diagnostics = env.driveDiagnostics();
+        expect(diagnostics.length).toBe(1);
+        expect(diagnostics[0].messageText).toBe(
+          'This import contains errors, which may affect components that depend on this NgModule.',
+        );
+      },
+    );
+
     it('should respect imported module order while processing Directives and Components', () => {
       env.tsconfig({});
       env.write(
@@ -1175,12 +1550,16 @@ runInEachFileSystem((os: string) => {
 
         // ModuleA classes
 
-        @Directive({selector: '[dir]'})
+        @Directive({
+          selector: '[dir]',
+          standalone: false,
+        })
         class DirectiveA {}
 
         @Component({
-          selector: 'comp',
-          template: '...'
+          selector: 'comp-a',
+          template: '...',
+          standalone: false,
         })
         class ComponentA {}
 
@@ -1192,12 +1571,16 @@ runInEachFileSystem((os: string) => {
 
         // ModuleB classes
 
-        @Directive({selector: '[dir]'})
+        @Directive({
+          selector: '[dir]',
+          standalone: false,
+        })
         class DirectiveB {}
 
         @Component({
-          selector: 'comp',
-          template: '...'
+          selector: 'comp-b',
+          template: '...',
+          standalone: false,
         })
         class ComponentB {}
 
@@ -1213,8 +1596,10 @@ runInEachFileSystem((os: string) => {
           selector: 'app',
           template: \`
             <div dir></div>
-            <comp></comp>
+            <comp-a></comp-a>
+            <comp-b></comp-b>
           \`,
+          standalone: false,
         })
         export class App {}
 
@@ -1235,7 +1620,12 @@ runInEachFileSystem((os: string) => {
     });
 
     it('should compile Components with a templateUrl in a different rootDir', () => {
-      env.tsconfig({}, ['./extraRootDir']);
+      env.tsconfig(
+        {},
+        {
+          rootDirs: ['.', './extraRootDir'],
+        },
+      );
       env.write('extraRootDir/test.html', '<p>Hello World</p>');
       env.write(
         'test.ts',
@@ -1245,6 +1635,7 @@ runInEachFileSystem((os: string) => {
         @Component({
           selector: 'test-cmp',
           templateUrl: 'test.html',
+          standalone: false,
         })
         export class TestCmp {}
     `,
@@ -1257,7 +1648,12 @@ runInEachFileSystem((os: string) => {
     });
 
     it('should compile Components with an absolute templateUrl in a different rootDir', () => {
-      env.tsconfig({}, ['./extraRootDir']);
+      env.tsconfig(
+        {},
+        {
+          rootDirs: ['.', './extraRootDir'],
+        },
+      );
       env.write('extraRootDir/test.html', '<p>Hello World</p>');
       env.write(
         'test.ts',
@@ -1267,6 +1663,7 @@ runInEachFileSystem((os: string) => {
         @Component({
           selector: 'test-cmp',
           templateUrl: '/test.html',
+          standalone: false,
         })
         export class TestCmp {}
     `,
@@ -1288,6 +1685,7 @@ runInEachFileSystem((os: string) => {
           selector: 'test-cmp',
           styleUrls: ['./dir/style.css'],
           template: '',
+          standalone: false,
         })
         export class TestCmp {}
     `,
@@ -1310,6 +1708,7 @@ runInEachFileSystem((os: string) => {
           selector: 'test-cmp',
           styleUrls: ['./dir/style.scss'],
           template: '',
+          standalone: false,
         })
         export class TestCmp {}
     `,
@@ -1343,7 +1742,7 @@ runInEachFileSystem((os: string) => {
       );
 
       const dtsContents = env.getContents('test.d.ts');
-      const expectedDirectiveDeclaration = `static ɵdir: i0.ɵɵDirectiveDeclaration<TestBase, never, never, { "input": { "alias": "input"; "required": false; }; }, {}, never, never, false, never>;`;
+      const expectedDirectiveDeclaration = `static ɵdir: i0.ɵɵDirectiveDeclaration<TestBase, never, never, { "input": { "alias": "input"; "required": false; }; }, {}, never, never, true, never>;`;
       expect(dtsContents).toContain(expectedDirectiveDeclaration);
     });
 
@@ -1433,6 +1832,7 @@ runInEachFileSystem((os: string) => {
         @Component({
           selector: 'test-cmp',
           template: 'this is a test',
+          standalone: false,
         })
         export class TestCmp {}
 
@@ -1578,16 +1978,29 @@ runInEachFileSystem((os: string) => {
         `
       import {Component, Directive, Pipe} from '@angular/core';
 
-      @Directive({selector: '[dir]'})
+      @Directive({
+        selector: '[dir]',
+        standalone: false,
+      })
       export class Dir {}
 
-      @Directive({selector: '[other]'})
+      @Directive({
+        selector: '[other]',
+        standalone: false,
+      })
       export class OtherDir {}
 
-      @Pipe({name:'pipe'})
+      @Pipe({
+        name:'pipe',
+        standalone: false,
+      })
       export class MyPipe {}
 
-      @Component({selector: 'test', template: ''})
+      @Component({
+        selector: 'test',
+        template: '',
+        standalone: false
+      })
       export class Comp {}
     `,
       );
@@ -1633,6 +2046,7 @@ runInEachFileSystem((os: string) => {
         @Component({
           selector: 'test-cmp',
           template: 'this is a test',
+          standalone: false,
         })
         export class TestCmp {}
 
@@ -1679,6 +2093,7 @@ runInEachFileSystem((os: string) => {
         @Component({
           selector: 'test-cmp',
           template: 'this is a test',
+          standalone: false,
         })
         export class TestCmp {}
 
@@ -1729,6 +2144,7 @@ runInEachFileSystem((os: string) => {
         @Component({
           selector: 'test-cmp',
           template: 'this is a test',
+          standalone: false,
         })
         export class TestCmp {}
 
@@ -1778,7 +2194,11 @@ runInEachFileSystem((os: string) => {
         'foo.ts',
         `
       import {Component} from '@angular/core';
-      @Component({selector: 'foo', template: ''})
+      @Component({
+        selector: 'foo',
+        template: '',
+        standalone: false,
+      })
       export class Foo {}
     `,
       );
@@ -1799,9 +2219,8 @@ runInEachFileSystem((os: string) => {
         JSON.stringify({
           extends: './tsconfig-base.json',
           compilerOptions: {
-            baseUrl: '.',
             paths: {
-              '*': ['*', 'shared/*'],
+              'foo': ['./shared/foo/index'],
             },
           },
         }),
@@ -1826,6 +2245,7 @@ runInEachFileSystem((os: string) => {
       @Component({
         selector: 'foo',
         template: '',
+        standalone: false,
       })
       export class Foo {
       }
@@ -1853,7 +2273,11 @@ runInEachFileSystem((os: string) => {
       })
       export class FooModule {}
 
-      @Component({selector: 'foo', template: 'foo'})
+      @Component({
+        selector: 'foo',
+        template: 'foo',
+        standalone: false,
+      })
       export class Foo {}
     `,
       );
@@ -1875,7 +2299,10 @@ runInEachFileSystem((os: string) => {
       })
       export class FooModule {}
 
-      @Directive({selector: 'foo'})
+      @Directive({
+        selector: 'foo',
+        standalone: false,
+      })
       export class Foo {}
     `,
       );
@@ -1938,7 +2365,10 @@ runInEachFileSystem((os: string) => {
 
           export const useFoo = forwardRef(() => Foo);
 
-          @Directive({selector: 'foo'})
+          @Directive({
+            selector: 'foo',
+            standalone: false,
+          })
           export class Foo {}
           `,
       );
@@ -1964,13 +2394,28 @@ runInEachFileSystem((os: string) => {
 
     it('should use absolute import for forward references that were resolved from an absolute file', () => {
       env.write(
+        'tsconfig.json',
+        JSON.stringify({
+          extends: './tsconfig-base.json',
+          compilerOptions: {
+            paths: {
+              'dir': ['./dir.ts'],
+            },
+          },
+        }),
+      );
+
+      env.write(
         'dir.ts',
         `
           import {Directive, forwardRef} from '@angular/core';
 
           export const useFoo = forwardRef(() => Foo);
 
-          @Directive({selector: 'foo'})
+          @Directive({
+            selector: 'foo',
+            standalone: false,
+          })
           export class Foo {}
           `,
       );
@@ -2003,6 +2448,7 @@ runInEachFileSystem((os: string) => {
         @Pipe({
           name: 'test-pipe',
           pure: false,
+          standalone: false,
         })
         export class TestPipe {}
     `,
@@ -2014,7 +2460,7 @@ runInEachFileSystem((os: string) => {
       const dtsContents = env.getContents('test.d.ts');
 
       expect(jsContents).toContain(
-        'TestPipe.ɵpipe = /*@__PURE__*/ i0.ɵɵdefinePipe({ name: "test-pipe", type: TestPipe, pure: false })',
+        'TestPipe.ɵpipe = /*@__PURE__*/ i0.ɵɵdefinePipe({ name: "test-pipe", type: TestPipe, pure: false, standalone: false })',
       );
       expect(jsContents).toContain(
         'TestPipe.ɵfac = function TestPipe_Factory(__ngFactoryType__) { return new (__ngFactoryType__ || TestPipe)(); }',
@@ -2033,6 +2479,7 @@ runInEachFileSystem((os: string) => {
 
         @Pipe({
           name: 'test-pipe',
+          standalone: false,
         })
         export class TestPipe {}
     `,
@@ -2044,7 +2491,7 @@ runInEachFileSystem((os: string) => {
       const dtsContents = env.getContents('test.d.ts');
 
       expect(jsContents).toContain(
-        'TestPipe.ɵpipe = /*@__PURE__*/ i0.ɵɵdefinePipe({ name: "test-pipe", type: TestPipe, pure: true })',
+        'TestPipe.ɵpipe = /*@__PURE__*/ i0.ɵɵdefinePipe({ name: "test-pipe", type: TestPipe, pure: true, standalone: false })',
       );
       expect(jsContents).toContain(
         'TestPipe.ɵfac = function TestPipe_Factory(__ngFactoryType__) { return new (__ngFactoryType__ || TestPipe)(); }',
@@ -2066,6 +2513,7 @@ runInEachFileSystem((os: string) => {
         @Pipe({
           name: 'test-pipe',
           pure: false,
+          standalone: false,
         })
         export class TestPipe {
           constructor(dep: Dep) {}
@@ -2089,6 +2537,7 @@ runInEachFileSystem((os: string) => {
 
         @Pipe({
           name: 'test-pipe',
+          standalone: false,
         })
         export class TestPipe<T> {}
     `,
@@ -2111,12 +2560,19 @@ runInEachFileSystem((os: string) => {
         `
         import {Component, NgModule, Pipe} from '@angular/core';
 
-        @Pipe({name: 'test'})
+        @Pipe({
+          name: 'test',
+          standalone: false,
+        })
         export class TestPipe {
           transform() {}
         }
 
-        @Component({selector: 'test-cmp', template: '{{value | test}}'})
+        @Component({
+          selector: 'test-cmp',
+          template: '{{value | test}}',
+          standalone: false,
+        })
         export class TestCmp {
           value = '';
         }
@@ -2137,6 +2593,102 @@ runInEachFileSystem((os: string) => {
       );
     });
 
+    it('should report diagnostic on the exact element in the `imports` array', () => {
+      // Note: the scenario here is slightly contrived, but we want to hit the code
+      // path where TS doesn't report a type error before Angular which appears to be
+      // common with the language service.
+      env.write(
+        'test.ts',
+        `
+          import {Component, Directive} from '@angular/core';
+
+          @Directive({selector: '[hello]'})
+          export class HelloDir {}
+
+          const someVar = {} as any;
+          const tuple = [() => {}] as const;
+
+          @Component({
+            template: '<div hello></div>',
+            imports: [
+              someVar,
+              HelloDir,
+              'invalid',
+              tuple,
+            ]
+          })
+          export class TestCmp {}
+        `,
+      );
+
+      const diags = env.driveDiagnostics();
+      expect(diags.length).toBe(3);
+      {
+        const message = ts.flattenDiagnosticMessageText(diags[0].messageText, '\n');
+        expect(getDiagnosticSourceCode(diags[0])).toBe('someVar');
+        expect(message).toContain(
+          `'imports' must be an array of components, directives, pipes, or NgModules.`,
+        );
+        expect(message).toContain(`Value is of type '{}'`);
+      }
+      {
+        const message = ts.flattenDiagnosticMessageText(diags[1].messageText, '\n');
+        expect(getDiagnosticSourceCode(diags[1])).toBe(`'invalid'`);
+        expect(message).toContain(
+          `'imports' must be an array of components, directives, pipes, or NgModules.`,
+        );
+        expect(message).toContain(`Value is of type 'string'`);
+      }
+      {
+        const message = ts.flattenDiagnosticMessageText(diags[2].messageText, '\n');
+        expect(getDiagnosticSourceCode(diags[2])).toBe('tuple');
+        expect(message).toContain(
+          `'imports' must be an array of components, directives, pipes, or NgModules.`,
+        );
+        expect(message).toContain(`Value is of type '[(not statically analyzable)]'.`);
+      }
+    });
+
+    it('should report imports diagnostic for declaration file in original expression', () => {
+      env.write(
+        'node_modules/external/index.d.ts',
+        `
+        export declare const UNRESOLVED_ITEM: readonly [unresolved];
+      `,
+      );
+      env.write(
+        'test.ts',
+        `
+          import {Component, Directive} from '@angular/core';
+          import {UNRESOLVED_ITEM as Unresolved} from 'external';
+
+          @Directive({selector: '[hello]'})
+          export class HelloDir {}
+
+          @Component({
+            template: '<div hello></div>',
+            imports: [
+              [Unresolved],
+              HelloDir,
+            ]
+          })
+          export class TestCmp {}
+        `,
+      );
+
+      const diags = env.driveDiagnostics();
+      const message = diags.length
+        ? ts.flattenDiagnosticMessageText(diags[0].messageText, '\n')
+        : '';
+      expect(diags.length).toBe(1);
+      expect(diags[0].file!.fileName).toContain('test.ts');
+      expect(getDiagnosticSourceCode(diags[0])).toBe('Unresolved');
+      expect(message).toContain(
+        `'imports' must be an array of components, directives, pipes, or NgModules.`,
+      );
+      expect(message).toContain(`Value is of type '[(not statically analyzable)]'.`);
+    });
+
     describe('empty and missing selectors', () => {
       it('should use default selector for Components when no selector present', () => {
         env.write(
@@ -2146,6 +2698,7 @@ runInEachFileSystem((os: string) => {
 
         @Component({
           template: '...',
+          standalone: false,
         })
         export class TestCmp {}
       `,
@@ -2166,6 +2719,7 @@ runInEachFileSystem((os: string) => {
         @Component({
           selector: '',
           template: '...',
+          standalone: false,
         })
         export class TestCmp {}
       `,
@@ -2193,7 +2747,8 @@ runInEachFileSystem((os: string) => {
           export abstract class EmptyDir {}
 
           @Directive({
-            inputs: ['a', 'b']
+            inputs: ['a', 'b'],
+            standalone: false,
           })
           export class TestDirWithInputs {}
         `,
@@ -2229,7 +2784,10 @@ runInEachFileSystem((os: string) => {
           import {NgModule, Directive} from '@angular/core';
           import {BaseClass} from 'lib1_built';
 
-          @Directive({selector: 'my-dir'})
+          @Directive({
+            selector: 'my-dir',
+            standalone: false,
+          })
           export class MyDirective extends BaseClass {}
 
           @NgModule({declarations: [MyDirective]})
@@ -2246,7 +2804,9 @@ runInEachFileSystem((os: string) => {
           `
           import {Directive, NgModule} from '@angular/core';
 
-          @Directive({})
+          @Directive({
+            standalone: false,
+          })
           export class BaseDir {}
 
           @NgModule({
@@ -2268,7 +2828,8 @@ runInEachFileSystem((os: string) => {
         import {Directive} from '@angular/core';
 
         @Directive({
-          selector: ''
+          selector: '',
+          standalone: false,
         })
         export class TestDir {}
       `,
@@ -2786,7 +3347,7 @@ runInEachFileSystem((os: string) => {
 
           const NOT_A_FUNCTION: any = null!;
 
-          @Directive({selector: '[dir]', standalone: true})
+          @Directive({selector: '[dir]'})
           export class Dir {
             @Input({transform: NOT_A_FUNCTION}) value!: number;
           }
@@ -2806,7 +3367,6 @@ runInEachFileSystem((os: string) => {
 
           @Directive({
             selector: '[dir]',
-            standalone: true,
             inputs: [{
               name: 'value',
               transform: NOT_A_FUNCTION
@@ -2831,7 +3391,7 @@ runInEachFileSystem((os: string) => {
           `
               import {Directive, Input} from '@angular/core';
 
-              @Directive({selector: '[dir]', standalone: true})
+              @Directive({selector: '[dir]'})
               export class Dir {
                 @Input({transform: (val) => 1}) value!: number;
               }
@@ -2850,7 +3410,7 @@ runInEachFileSystem((os: string) => {
           `
           import {Directive, Input} from '@angular/core';
 
-          @Directive({selector: '[dir]', standalone: true})
+          @Directive({selector: '[dir]'})
           export class Dir {
             @Input({transform: <T>(val: T) => 1}) value!: number;
           }
@@ -2869,7 +3429,7 @@ runInEachFileSystem((os: string) => {
           `
           import {Directive, Input} from '@angular/core';
 
-          @Directive({selector: '[dir]', standalone: true})
+          @Directive({selector: '[dir]'})
           export class Dir {
             @Input({transform: (val: string) => 1}) value!: number;
 
@@ -2902,7 +3462,7 @@ runInEachFileSystem((os: string) => {
             import {Directive, Input} from '@angular/core';
             import {toNumber} from './util';
 
-            @Directive({selector: '[dir]', standalone: true})
+            @Directive({selector: '[dir]'})
             export class Dir {
               @Input({transform: toNumber}) value!: number;
             }
@@ -2933,7 +3493,7 @@ runInEachFileSystem((os: string) => {
               import {Directive, Input} from '@angular/core';
               import {toNumber} from './util';
 
-              @Directive({selector: '[dir]', standalone: true})
+              @Directive({selector: '[dir]'})
               export class Dir {
                 @Input({transform: toNumber}) value!: number;
               }
@@ -2968,7 +3528,7 @@ runInEachFileSystem((os: string) => {
               import {Directive, Input} from '@angular/core';
               import {toNumber} from './util';
 
-              @Directive({selector: '[dir]', standalone: true})
+              @Directive({selector: '[dir]'})
               export class Dir {
                 @Input({transform: toNumber}) value!: number;
               }
@@ -2991,7 +3551,7 @@ runInEachFileSystem((os: string) => {
             foo: boolean;
           }
 
-          @Directive({selector: '[dir]', standalone: true})
+          @Directive({selector: '[dir]'})
           export class Dir {
             @Input({transform: (val: InternalType) => 1}) val!: number;
           }
@@ -3014,7 +3574,7 @@ runInEachFileSystem((os: string) => {
             return (innerValue: string) => outerValue;
           }
 
-          @Directive({selector: '[dir]', standalone: true})
+          @Directive({selector: '[dir]'})
           export class Dir {
             @Input({transform: createTransform(1)}) value!: number;
           }
@@ -3076,15 +3636,25 @@ runInEachFileSystem((os: string) => {
           `
         import {Component, Directive, Injectable, NgModule, Pipe} from '@angular/core';
 
-        @Component({selector: 'test', template: 'test'})
+        @Component({
+          selector: 'test',
+          template: 'test',
+          standalone: false,
+        })
         @Injectable()
         export class TestCmp {}
 
-        @Directive({selector: 'test'})
+        @Directive({
+          selector: 'test',
+          standalone: false,
+        })
         @Injectable()
         export class TestDir {}
 
-        @Pipe({name: 'test'})
+        @Pipe({
+          name: 'test',
+          standalone: false,
+        })
         @Injectable()
         export class TestPipe {}
 
@@ -3130,7 +3700,11 @@ runInEachFileSystem((os: string) => {
           `
         import {Component, Directive} from '@angular/core';
 
-        @Component({selector: 'test', template: 'test'})
+        @Component({
+          selector: 'test',
+          template: 'test',
+          standalone: false,
+        })
         @Directive({selector: 'test'})
         class ShouldNotCompile {}
       `,
@@ -3150,6 +3724,7 @@ runInEachFileSystem((os: string) => {
         @Directive({
           selector: 'test',
           jit: true,
+          standalone: false,
         })
         export class Test {
           constructor(@Inject('foo') foo: string) {}
@@ -4554,7 +5129,7 @@ runInEachFileSystem((os: string) => {
       env.driveMain();
       const jsContents = env.getContents('test.js');
       expect(jsContents).toContain(
-        `FooCmp.ɵfac = function FooCmp_Factory(__ngFactoryType__) { return new (__ngFactoryType__ || FooCmp)(i0.ɵɵinjectAttribute("test"), i0.ɵɵdirectiveInject(i0.ChangeDetectorRef), i0.ɵɵdirectiveInject(i0.ElementRef), i0.ɵɵdirectiveInject(i0.Injector), i0.ɵɵdirectiveInject(i0.Renderer2), i0.ɵɵdirectiveInject(i0.TemplateRef), i0.ɵɵdirectiveInject(i0.ViewContainerRef)); }`,
+        `FooCmp.ɵfac = function FooCmp_Factory(__ngFactoryType__) { /* @ts-ignore */\nreturn new (__ngFactoryType__ || FooCmp)(i0.ɵɵinjectAttribute("test"), i0.ɵɵdirectiveInject(i0.ChangeDetectorRef), i0.ɵɵdirectiveInject(i0.ElementRef), i0.ɵɵdirectiveInject(i0.Injector), i0.ɵɵdirectiveInject(i0.Renderer2), i0.ɵɵdirectiveInject(i0.TemplateRef), i0.ɵɵdirectiveInject(i0.ViewContainerRef)); }`,
       );
     });
 
@@ -4703,6 +5278,7 @@ runInEachFileSystem((os: string) => {
         @Component({
           selector: 'test',
           template: '<ng-content></ng-content> <ng-content select=".foo"></ng-content>',
+          standalone: false,
         })
         export class TestCmp {
         }
@@ -4746,9 +5322,11 @@ runInEachFileSystem((os: string) => {
       expect(jsContents).toMatch(varRegExp('test2'));
       expect(jsContents).toMatch(varRegExp('accessor'));
       // match `i0.ɵɵcontentQuery(dirIndex, _c1, 5, TemplateRef)`
-      expect(jsContents).toMatch(contentQueryRegExp('\\w+', 5, 'TemplateRef'));
+      expect(jsContents).toMatch(
+        contentQueryRegExp([{predicate: '\\w+', flags: 5, ref: 'TemplateRef'}]),
+      );
       // match `i0.ɵɵviewQuery(_c2, 5, null)`
-      expect(jsContents).toMatch(viewQueryRegExp('\\w+', 5));
+      expect(jsContents).toMatch(viewQueryRegExp([{predicate: '\\w+', flags: 5}]));
     });
 
     it('should generate queries for directives', () => {
@@ -4781,13 +5359,15 @@ runInEachFileSystem((os: string) => {
       expect(jsContents).toMatch(varRegExp('test2'));
       expect(jsContents).toMatch(varRegExp('accessor'));
       // match `i0.ɵɵcontentQuery(dirIndex, _c1, 5, TemplateRef)`
-      expect(jsContents).toMatch(contentQueryRegExp('\\w+', 5, 'TemplateRef'));
+      expect(jsContents).toMatch(
+        contentQueryRegExp([{predicate: '\\w+', flags: 5, ref: 'TemplateRef'}]),
+      );
 
       // match `i0.ɵɵviewQuery(_c2, 5)`
       // Note that while ViewQuery doesn't necessarily make sense on a directive,
       // because it doesn't have a view, we still need to handle it because a component
       // could extend the directive.
-      expect(jsContents).toMatch(viewQueryRegExp('\\w+', 5));
+      expect(jsContents).toMatch(viewQueryRegExp([{predicate: '\\w+', flags: 5}]));
     });
 
     it('should handle queries that use forwardRef', () => {
@@ -4812,13 +5392,15 @@ runInEachFileSystem((os: string) => {
 
       env.driveMain();
       const jsContents = env.getContents('test.js');
-      // match `i0.ɵɵcontentQuery(dirIndex, TemplateRef, 5, null)`
-      expect(jsContents).toMatch(contentQueryRegExp('TemplateRef', 5));
-      // match `i0.ɵɵcontentQuery(dirIndex, ViewContainerRef, 5, null)`
-      expect(jsContents).toMatch(contentQueryRegExp('ViewContainerRef', 5));
-      // match `i0.ɵɵcontentQuery(dirIndex, _c0, 5, null)`
+      // match `i0.ɵɵcontentQuery(dirIndex, TemplateRef, 5, null)(dirIndex, ViewContainerRef, 5, null)(dirIndex, _c0, 5, null)`
+      expect(jsContents).toMatch(
+        contentQueryRegExp([
+          {predicate: 'TemplateRef', flags: 5},
+          {predicate: 'ViewContainerRef', flags: 5},
+          {predicate: '_c0', flags: 5},
+        ]),
+      );
       expect(jsContents).toContain('_c0 = ["parens"];');
-      expect(jsContents).toMatch(contentQueryRegExp('_c0', 5));
     });
 
     it('should handle queries that use an InjectionToken', () => {
@@ -4843,9 +5425,9 @@ runInEachFileSystem((os: string) => {
       env.driveMain();
       const jsContents = env.getContents('test.js');
       // match `i0.ɵɵviewQuery(TOKEN, 5, null)`
-      expect(jsContents).toMatch(viewQueryRegExp('TOKEN', 5));
+      expect(jsContents).toMatch(viewQueryRegExp([{predicate: 'TOKEN', flags: 5}]));
       // match `i0.ɵɵcontentQuery(dirIndex, TOKEN, 5, null)`
-      expect(jsContents).toMatch(contentQueryRegExp('TOKEN', 5));
+      expect(jsContents).toMatch(contentQueryRegExp([{predicate: 'TOKEN', flags: 5}]));
     });
 
     it('should compile expressions that write keys', () => {
@@ -4881,13 +5463,13 @@ runInEachFileSystem((os: string) => {
         })
         class FooCmp {
           @HostListener('click')
-          onClick(event: any): void {}
+          onClick(): void {}
 
           @HostListener('document:click', ['$event.target'])
-          onDocumentClick(eventTarget: HTMLElement): void {}
+          onDocumentClick(eventTarget: EventTarget | null): void {}
 
           @HostListener('window:scroll')
-          onWindowScroll(event: any): void {}
+          onWindowScroll(): void {}
         }
     `,
       );
@@ -4897,7 +5479,7 @@ runInEachFileSystem((os: string) => {
       const hostBindingsFn = `
       hostBindings: function FooCmp_HostBindings(rf, ctx) {
         if (rf & 1) {
-          i0.ɵɵlistener("click", function FooCmp_click_HostBindingHandler() { return ctx.onClick(); })("click", function FooCmp_click_HostBindingHandler($event) { return ctx.onDocumentClick($event.target); }, false, i0.ɵɵresolveDocument)("scroll", function FooCmp_scroll_HostBindingHandler() { return ctx.onWindowScroll(); }, false, i0.ɵɵresolveWindow);
+          i0.ɵɵlistener("click", function FooCmp_click_HostBindingHandler() { return ctx.onClick(); })("click", function FooCmp_click_HostBindingHandler($event) { return ctx.onDocumentClick($event.target); }, i0.ɵɵresolveDocument)("scroll", function FooCmp_scroll_HostBindingHandler() { return ctx.onWindowScroll(); }, i0.ɵɵresolveWindow);
         }
       }
     `;
@@ -4916,7 +5498,7 @@ runInEachFileSystem((os: string) => {
         })
         class FooCmp {
           @HostListener('UnknownTarget:click')
-          onClick(event: any): void {}
+          onClick(): void {}
         }
     `,
       );
@@ -4944,9 +5526,7 @@ runInEachFileSystem((os: string) => {
       );
 
       const errors = env.driveDiagnostics();
-      expect(getDiagnosticSourceCode(errors[0])).toBe(`{
-            '(click)': 'act() | pipe',
-          }`);
+      expect(getDiagnosticSourceCode(errors[0])).toBe(`'act() | pipe'`);
       expect(errors[0].messageText).toContain('/test.ts@7:17');
     });
 
@@ -4988,10 +5568,12 @@ runInEachFileSystem((os: string) => {
             class FooCmp {}
          `,
       );
-      const errors = env.driveDiagnostics();
-      expect(trim(errors[0].messageText as string)).toContain(
+      const diags = env.driveDiagnostics();
+      expect(diags.length).toBe(1);
+      expect(trim(diags[0].messageText as string)).toContain(
         'Host binding expression cannot contain pipes',
       );
+      expect(getDiagnosticSourceCode(diags[0])).toBe(`'id | myPipe'`);
     });
 
     it('should generate host bindings for directives', () => {
@@ -5007,17 +5589,24 @@ runInEachFileSystem((os: string) => {
             '[attr.hello]': 'foo',
             '(click)': 'onClick($event)',
             '(body:click)': 'onBodyClick($event)',
-            '[prop]': 'bar',
+            '[id]': 'bar',
           },
         })
         class FooCmp {
+          arg1: any;
+          arg2: any;
+          arg3: any;
+          foo: any;
+          bar: any;
+
           onClick(event: any): void {}
+          onBodyClick(event: any): void {}
 
           @HostBinding('class.someclass')
           get someClass(): boolean { return false; }
 
-          @HostListener('change', ['arg1', 'arg2', 'arg3'])
-          onChange(event: any, arg: any): void {}
+          @HostListener('change', ['$event', 'arg1', 'arg2', 'arg3'])
+          onChange(event: any, arg1: any, arg2: any, arg3: any): void {}
         }
     `,
       );
@@ -5028,10 +5617,10 @@ runInEachFileSystem((os: string) => {
       hostVars: 4,
       hostBindings: function FooCmp_HostBindings(rf, ctx) {
         if (rf & 1) {
-          i0.ɵɵlistener("click", function FooCmp_click_HostBindingHandler($event) { return ctx.onClick($event); })("click", function FooCmp_click_HostBindingHandler($event) { return ctx.onBodyClick($event); }, false, i0.ɵɵresolveBody)("change", function FooCmp_change_HostBindingHandler() { return ctx.onChange(ctx.arg1, ctx.arg2, ctx.arg3); });
+          i0.ɵɵlistener("click", function FooCmp_click_HostBindingHandler($event) { return ctx.onClick($event); })("click", function FooCmp_click_HostBindingHandler($event) { return ctx.onBodyClick($event); }, i0.ɵɵresolveBody)("change", function FooCmp_change_HostBindingHandler($event) { return ctx.onChange($event, ctx.arg1, ctx.arg2, ctx.arg3); });
         }
         if (rf & 2) {
-          i0.ɵɵhostProperty("prop", ctx.bar);
+          i0.ɵɵdomProperty("id", ctx.bar);
           i0.ɵɵattribute("hello", ctx.foo);
           i0.ɵɵclassProp("someclass", ctx.someClass);
         }
@@ -5078,7 +5667,7 @@ runInEachFileSystem((os: string) => {
 
       env.driveMain();
       expect(env.getContents('test.js')).toContain(
-        `ɵɵlistener("click", function TestCmp_Template_div_click_0_listener() { return 123; });`,
+        `ɵɵdomListener("click", function TestCmp_Template_div_click_0_listener() { return 123; });`,
       );
     });
 
@@ -5149,6 +5738,8 @@ runInEachFileSystem((os: string) => {
           selector: '[test]',
         })
         class Dir {
+          arg: any;
+
           @HostListener('change', ['$event', 'arg'])
           onChange(event: any, arg: any): void {}
         }
@@ -5354,27 +5945,6 @@ runInEachFileSystem((os: string) => {
       );
     });
 
-    it("@Component's `interpolation` should override default interpolation config", () => {
-      env.write(
-        `test.ts`,
-        `
-      import {Component} from '@angular/core';
-      @Component({
-        selector: 'cmp-with-custom-interpolation-a',
-        template: \`<div>{%text%}</div>\`,
-        interpolation: ['{%', '%}']
-      })
-      class ComponentWithCustomInterpolationA {
-        text = 'Custom Interpolation A';
-      }
-    `,
-      );
-
-      env.driveMain();
-      const jsContents = env.getContents('test.js');
-      expect(jsContents).toContain('ɵɵtextInterpolate(ctx.text)');
-    });
-
     it('should handle `encapsulation` field', () => {
       env.write(
         `test.ts`,
@@ -5417,7 +5987,7 @@ runInEachFileSystem((os: string) => {
       expect(messageText).toContain("Value is of type 'string'.");
     });
 
-    it('should handle `changeDetection` field', () => {
+    it('should handle `changeDetection` field with the "default" value: OnPush', () => {
       env.write(
         `test.ts`,
         `
@@ -5433,7 +6003,27 @@ runInEachFileSystem((os: string) => {
 
       env.driveMain();
       const jsContents = env.getContents('test.js');
-      expect(jsContents).toContain('changeDetection: 0');
+      // because this default value is implicit
+      expect(jsContents).not.toContain('changeDetection: 0');
+    });
+
+    it('should handle `changeDetection` field', () => {
+      env.write(
+        `test.ts`,
+        `
+      import {Component, ChangeDetectionStrategy} from '@angular/core';
+      @Component({
+        selector: 'comp-a',
+        template: '...',
+        changeDetection: ChangeDetectionStrategy.Eager
+      })
+      class CompA {}
+    `,
+      );
+
+      env.driveMain();
+      const jsContents = env.getContents('test.js');
+      expect(jsContents).toContain('changeDetection: 1');
     });
 
     it('should throw if `changeDetection` contains invalid value', () => {
@@ -5497,12 +6087,14 @@ runInEachFileSystem((os: string) => {
 
         @Directive({
           selector: '[dir]',
+          standalone: false,
         })
         export class Dir {}
 
         @Component({
           selector: 'test',
           template: '<div dir>Test</div>',
+          standalone: false,
         })
         export class Comp {}
     `,
@@ -5522,6 +6114,7 @@ runInEachFileSystem((os: string) => {
         @Directive({
           selector: '[test]',
           exportAs: 'foo',
+          standalone: false,
         })
         class Dir {}
     `,
@@ -5542,6 +6135,7 @@ runInEachFileSystem((os: string) => {
         @Directive({
           selector: '[test]',
           exportAs: 'foo, bar',
+          standalone: false,
         })
         class Dir {}
     `,
@@ -5561,7 +6155,8 @@ runInEachFileSystem((os: string) => {
 
         @Component({
           template: '<div *tmpl [(bananaInABox)]="prop"></div>',
-          selector: 'test'
+          selector: 'test',
+          standalone: false,
         })
         class TestCmp {}
     `,
@@ -5599,7 +6194,7 @@ runInEachFileSystem((os: string) => {
       const jsContents = env.getContents('test.js');
 
       expect(jsContents).toContain(
-        'function Base_Factory(__ngFactoryType__) { return new (__ngFactoryType__ || Base)(i0.ɵɵinject(Dep)); }',
+        'function Base_Factory(__ngFactoryType__) { /* @ts-ignore */\nreturn new (__ngFactoryType__ || Base)(i0.ɵɵinject(Dep)); }',
       );
       expect(jsContents).toContain(
         '(() => { let ɵChild_BaseFactory; return function Child_Factory(__ngFactoryType__) { return (ɵChild_BaseFactory || (ɵChild_BaseFactory = i0.ɵɵgetInheritedFactory(Child)))(__ngFactoryType__ || Child); }; })();',
@@ -5644,12 +6239,14 @@ runInEachFileSystem((os: string) => {
         @Component({
           selector: 'cmp-a',
           template: '<cmp-b></cmp-b>',
+          standalone: false,
         })
         class CmpA {}
 
         @Component({
           selector: 'cmp-b',
           template: 'This is B',
+          standalone: false,
         })
         class CmpB {}
 
@@ -5693,6 +6290,7 @@ runInEachFileSystem((os: string) => {
         @Component({
           selector: 'comp',
           template: '<custom-el></custom-el>',
+          standalone: false,
         })
         class MyComp {}
         @NgModule({
@@ -5710,6 +6308,7 @@ runInEachFileSystem((os: string) => {
         MyComp.ɵcmp = /*@__PURE__*/ i0.ɵɵdefineComponent({
           type: MyComp,
           selectors: [["comp"]],
+          standalone: false,
           decls: 1,
           vars: 0,
           template: function MyComp_Template(rf, ctx) {
@@ -5732,11 +6331,11 @@ runInEachFileSystem((os: string) => {
         `
       import {Component, Directive, Injectable, NgModule, Pipe} from '@angular/core';
 
-      @Component({selector: 'cmp', template: 'I am a component!'}) class TestComponent {}
-      @Directive({selector: 'dir'}) class TestDirective {}
+      @Component({selector: 'cmp', template: 'I am a component!', standalone: false}) class TestComponent {}
+      @Directive({selector: 'dir', standalone: false}) class TestDirective {}
       @Injectable() class TestInjectable {}
       @NgModule({declarations: [TestComponent, TestDirective]}) class TestNgModule {}
-      @Pipe({name: 'pipe'}) class TestPipe {}
+      @Pipe({name: 'pipe', standalone: false}) class TestPipe {}
     `,
       );
 
@@ -5754,11 +6353,11 @@ runInEachFileSystem((os: string) => {
         `
       import {Component, Directive, Injectable, NgModule, Pipe} from '@angular/core';
 
-      @Component({selector: 'cmp', template: 'I am a component!'}) class TestComponent {}
-      @Directive({selector: 'dir'}) class TestDirective {}
+      @Component({selector: 'cmp', template: 'I am a component!', standalone: false}) class TestComponent {}
+      @Directive({selector: 'dir', standalone: false}) class TestDirective {}
       @Injectable() class TestInjectable {}
       @NgModule({declarations: [TestComponent, TestDirective]}) class TestNgModule {}
-      @Pipe({name: 'pipe'}) class TestPipe {}
+      @Pipe({name: 'pipe', standalone: false}) class TestPipe {}
     `,
       );
 
@@ -5776,11 +6375,11 @@ runInEachFileSystem((os: string) => {
         `
       import {Component, Directive, Injectable, NgModule, Pipe} from '@angular/core';
 
-      @Component({selector: 'cmp', template: 'I am a component!'}) class TestComponent {}
-      @Directive({selector: 'dir'}) class TestDirective {}
+      @Component({selector: 'cmp', template: 'I am a component!', standalone: false}) class TestComponent {}
+      @Directive({selector: 'dir', standalone: false}) class TestDirective {}
       @Injectable() class TestInjectable {}
       @NgModule({declarations: [TestComponent, TestDirective]}) class TestNgModule {}
-      @Pipe({name: 'pipe'}) class TestPipe {}
+      @Pipe({name: 'pipe', standalone: false}) class TestPipe {}
     `,
       );
 
@@ -5795,11 +6394,11 @@ runInEachFileSystem((os: string) => {
         `
       import {Component, Directive, Injectable, NgModule, Pipe} from '@angular/core';
 
-      @Component({selector: 'cmp', template: 'I am a component!'}) class TestComponent {}
-      @Directive({selector: 'dir'}) class TestDirective {}
+      @Component({selector: 'cmp', template: 'I am a component!', standalone: false}) class TestComponent {}
+      @Directive({selector: 'dir', standalone: false}) class TestDirective {}
       @Injectable() class TestInjectable {}
       @NgModule({declarations: [TestComponent, TestDirective]}) class TestNgModule {}
-      @Pipe({name: 'pipe'}) class TestPipe {}
+      @Pipe({name: 'pipe', standalone: false}) class TestPipe {}
     `,
       );
 
@@ -5821,11 +6420,11 @@ runInEachFileSystem((os: string) => {
         `
       import {Component, Directive, Injectable, NgModule, Pipe} from '@angular/core';
 
-      @Component({selector: 'cmp', template: 'I am a component!'}) class TestComponent {}
-      @Directive({selector: 'dir'}) class TestDirective {}
+      @Component({selector: 'cmp', template: 'I am a component!', standalone: false}) class TestComponent {}
+      @Directive({selector: 'dir', standalone: false}) class TestDirective {}
       @Injectable() class TestInjectable {}
       @NgModule({declarations: [TestComponent, TestDirective]}) class TestNgModule {}
-      @Pipe({name: 'pipe'}) class TestPipe {}
+      @Pipe({name: 'pipe', standalone: false}) class TestPipe {}
     `,
       );
 
@@ -5847,11 +6446,11 @@ runInEachFileSystem((os: string) => {
         `
       import {Component, Directive, Injectable, NgModule, Pipe} from '@angular/core';
 
-      @Component({selector: 'cmp', template: 'I am a component!'}) class TestComponent {}
-      @Directive({selector: 'dir'}) class TestDirective {}
+      @Component({selector: 'cmp', template: 'I am a component!', standalone: false}) class TestComponent {}
+      @Directive({selector: 'dir', standalone: false}) class TestDirective {}
       @Injectable() class TestInjectable {}
       @NgModule({declarations: [TestComponent, TestDirective]}) class TestNgModule {}
-      @Pipe({name: 'pipe'}) class TestPipe {}
+      @Pipe({name: 'pipe', standalone: false}) class TestPipe {}
     `,
       );
 
@@ -5977,6 +6576,7 @@ runInEachFileSystem((os: string) => {
               </rect>
             </svg>
           \`,
+          standalone: false,
         })
         export class SvgCmp {}
         @NgModule({
@@ -6317,14 +6917,21 @@ runInEachFileSystem((os: string) => {
         `
       import {Component, Directive, NgModule} from '@angular/core';
 
-      @Directive({selector: '[test]'})
+      @Directive({
+        selector: '[test]',
+        standalone: false,
+      })
       class DirA {}
 
-      @Directive({selector: '[test]'})
+      @Directive({
+        selector: '[test]',
+        standalone: false,
+      })
       class DirB {}
 
       @Component({
         template: '<div test></div>',
+        standalone: false,
       })
       class Cmp {}
 
@@ -6351,6 +6958,7 @@ runInEachFileSystem((os: string) => {
         @Component({
           selector: 'cyclic-component',
           template: 'Importing this causes a cycle',
+          standalone: false,
         })
         export class CyclicComponent {}
 
@@ -6369,6 +6977,7 @@ runInEachFileSystem((os: string) => {
         @Component({
           selector: 'normal-component',
           template: '<cyclic-component></cyclic-component>',
+          standalone: false,
         })
         export class NormalComponent {}
       `,
@@ -6402,6 +7011,7 @@ runInEachFileSystem((os: string) => {
         @Component({
           selector: 'a-cmp',
           template: '<b-cmp></b-cmp>',
+          standalone: false,
         })
         export class ACmp {}
       `,
@@ -6414,6 +7024,7 @@ runInEachFileSystem((os: string) => {
         @Component({
           selector: 'b-cmp',
           template: '<a-cmp></a-cmp>',
+          standalone: false,
         })
         export class BCmp {}
       `,
@@ -6445,6 +7056,7 @@ runInEachFileSystem((os: string) => {
         @Component({
           selector: 'a-cmp',
           template: '<b-cmp></b-cmp>',
+          standalone: false,
         })
         export class ACmp {}
       `,
@@ -6457,6 +7069,7 @@ runInEachFileSystem((os: string) => {
         @Component({
           selector: 'b-cmp',
           template: 'does not use a-cmp',
+          standalone: false,
         })
         export class BCmp {}
       `,
@@ -6486,6 +7099,7 @@ runInEachFileSystem((os: string) => {
         @Component({
           selector: 'a-cmp',
           template: '<b-cmp></b-cmp>',
+          standalone: false,
         })
         export class ACmp {}
       `,
@@ -6499,6 +7113,7 @@ runInEachFileSystem((os: string) => {
         @Component({
           selector: 'b-cmp',
           template: 'does not use a-cmp',
+          standalone: false,
         })
         export class BCmp {
           a: ACmp;
@@ -6530,12 +7145,14 @@ runInEachFileSystem((os: string) => {
               @Component({
                 selector: 'shared-one-cmp',
                 template: '<cyclic-cmp></cyclic-cmp>',
+                standalone: false,
               })
               export class SharedOne {}
 
               @Component({
                 selector: 'shared-two-cmp',
                 template: '<cyclic-cmp></cyclic-cmp>',
+                standalone: false,
               })
               export class SharedTwo {}
             `,
@@ -6549,6 +7166,7 @@ runInEachFileSystem((os: string) => {
               @Component({
                 selector: 'cyclic-cmp',
                 template: 'does not use shared components',
+                standalone: false,
               })
               export class CyclicCmp {
                 one: SharedOne;
@@ -6573,6 +7191,7 @@ runInEachFileSystem((os: string) => {
           @Component({
             selector: 'cyclic-component',
             template: 'Importing this causes a cycle',
+            standalone: false,
           })
           export class CyclicComponent {}
 
@@ -6591,6 +7210,7 @@ runInEachFileSystem((os: string) => {
           @Component({
             selector: 'normal-component',
             template: '<cyclic-component></cyclic-component>',
+            standalone: false,
           })
           export class NormalComponent {}
         `,
@@ -6604,6 +7224,7 @@ runInEachFileSystem((os: string) => {
           @Component({
             selector: 'other-component',
             template: 'An unused other component',
+            standalone: false,
           })
           export class OtherComponent {}
         `,
@@ -6628,6 +7249,7 @@ runInEachFileSystem((os: string) => {
         @Component({
           selector: 'cyclic-component',
           template: 'Importing this causes a cycle',
+          standalone: false,
         })
         export class CyclicComponent {}
 
@@ -6646,6 +7268,7 @@ runInEachFileSystem((os: string) => {
         @Component({
           selector: 'normal-component',
           template: '<cyclic-component></cyclic-component>',
+          standalone: false,
         })
         export class NormalComponent {}
       `,
@@ -6691,7 +7314,11 @@ runInEachFileSystem((os: string) => {
       const getComponentScript = (template: string): string => `
       import {Component, Directive, NgModule} from '@angular/core';
 
-      @Component({selector: 'my-cmp', template: \`${template}\`})
+      @Component({
+        selector: 'my-cmp',
+        template: \`${template}\`,
+        standalone: false,
+      })
       class Cmp {}
 
       @NgModule({declarations: [Cmp]})
@@ -6725,8 +7352,8 @@ runInEachFileSystem((os: string) => {
       `,
       ];
 
-      cases.forEach((template) => {
-        it('should not throw', () => {
+      cases.forEach((template, index) => {
+        it(`should not throw [id=${index}]`, () => {
           env.write('test.ts', getComponentScript(template));
           const errors = env.driveDiagnostics();
           expect(errors.length).toBe(0);
@@ -6779,7 +7406,10 @@ runInEachFileSystem((os: string) => {
         `
         import {Directive, Input} from '@angular/core';
 
-        @Directive({selector: '[dir]'})
+        @Directive({
+          selector: '[dir]',
+          standalone: false,
+        })
         export class TestDir {
           @Input() noArgs: any;
           @Input('aliasedStringArg') stringArg: any;
@@ -6817,7 +7447,8 @@ runInEachFileSystem((os: string) => {
             {name: 'aliasedLiteral', alias: 'alisedLiteralAlias'},
             {name: 'requiredLiteral', required: true},
             {name: 'requiredAlisedLiteral', alias: 'requiredAlisedLiteralAlias', required: true}
-          ]
+          ],
+          standalone: false,
         })
         export class TestDir {
           plainLiteral: any;
@@ -6936,6 +7567,133 @@ runInEachFileSystem((os: string) => {
           'Is it missing an @NgModule annotation?',
         );
       });
+
+      it('should report if an NgModule imports itself', () => {
+        env.write(
+          'test.ts',
+          `
+          import {NgModule} from '@angular/core';
+
+          @NgModule({imports: [MyModule]})
+          export class MyModule {}
+        `,
+        );
+
+        const diags = env.driveDiagnostics();
+        expect(diags.length).toBe(1);
+        expect(diags[0].messageText).toBe('NgModule "import" field contains a cycle');
+      });
+
+      it('should report if an NgModule exports itself', () => {
+        env.write(
+          'test.ts',
+          `
+          import {NgModule} from '@angular/core';
+
+          @NgModule({exports: [MyModule]})
+          export class MyModule {}
+        `,
+        );
+
+        const diags = env.driveDiagnostics();
+        expect(diags.length).toBe(1);
+        expect(diags[0].messageText).toBe('NgModule "export" field contains a cycle');
+      });
+
+      it('should report if an NgModule imports itself transitively', () => {
+        env.write(
+          'dep-2.ts',
+          `
+          import {NgModule} from '@angular/core';
+          import {MyModule} from './test';
+
+          @NgModule({imports: [MyModule]})
+          export class DepModule2 {}
+        `,
+        );
+
+        env.write(
+          'dep.ts',
+          `
+          import {NgModule} from '@angular/core';
+          import {DepModule2} from './dep-2';
+
+          @NgModule({imports: [DepModule2]})
+          export class DepModule {}
+        `,
+        );
+
+        env.write(
+          'test.ts',
+          `
+          import {NgModule} from '@angular/core';
+          import {DepModule} from './dep';
+
+          @NgModule({imports: [DepModule]})
+          export class MyModule {}
+        `,
+        );
+
+        const diags = env.driveDiagnostics();
+        expect(diags.length).toBe(3);
+        expect(diags[0].messageText).toBe(
+          'This import contains errors, which may affect components that depend on this NgModule.',
+        );
+        expect(diags[1].messageText).toBe('NgModule "import" field contains a cycle');
+        expect(diags[2].messageText).toBe(
+          'This import contains errors, which may affect components that depend on this NgModule.',
+        );
+      });
+
+      it('should report if an NgModule imports itself via a forwardRef', () => {
+        env.write(
+          'test.ts',
+          `
+          import {NgModule, forwardRef} from '@angular/core';
+
+          @NgModule({imports: [forwardRef(() => MyModule)]})
+          export class DepModule {}
+
+          @NgModule({imports: [DepModule]})
+          export class MyModule {}
+        `,
+        );
+
+        const diags = env.driveDiagnostics();
+        expect(diags.length).toBe(2);
+        expect(diags[0].messageText).toBe(
+          'This import contains errors, which may affect components that depend on this NgModule.',
+        );
+        expect(diags[1].messageText).toBe('NgModule "import" field contains a cycle');
+      });
+
+      it('should report if an NgModule imports itself via a forwardRef (nested)', () => {
+        env.write(
+          'test.ts',
+          `
+          import {NgModule, forwardRef} from '@angular/core';
+
+          @NgModule({imports: [forwardRef(() => ModB)]})
+          class ModA {}
+
+          @NgModule({imports: [forwardRef(() => ModC)]})
+          class ModB {}
+
+          @NgModule({imports: [ModB]})
+          class ModC {}
+        `,
+        );
+
+        const diags = env.driveDiagnostics();
+        expect(diags.length).toBe(3);
+        expect(diags[0].messageText).toBe(
+          'This import contains errors, which may affect components that depend on this NgModule.',
+        );
+        expect(diags[1].messageText).toBe(
+          'This import contains errors, which may affect components that depend on this NgModule.',
+        );
+        expect(diags[2].messageText).toBe('NgModule "import" field contains a cycle');
+      });
     });
 
     describe('when processing external directives', () => {
@@ -6962,6 +7720,7 @@ runInEachFileSystem((os: string) => {
 
         @Component({
           template: '<div test></div>',
+          standalone: false,
         })
         class Cmp {}
 
@@ -7011,6 +7770,7 @@ runInEachFileSystem((os: string) => {
 
         @Component({
           template: '<div test></div>',
+          standalone: false,
         })
         class Cmp {}
 
@@ -7057,7 +7817,9 @@ runInEachFileSystem((os: string) => {
           );
 
           const diags = await driveDiagnostics();
-          expect(diags[0].messageText).toBe('component is missing a template');
+          expect(diags[0].messageText).toBe(
+            '@Component is missing a template. Add either a `template` or `templateUrl`',
+          );
           expect(diags[0].file!.fileName).toBe(absoluteFrom('/test.ts'));
         });
 
@@ -7188,7 +7950,10 @@ runInEachFileSystem((os: string) => {
         import {Directive, NgModule} from '@angular/core';
 
         // The directive is not exported.
-        @Directive({selector: 'test'})
+        @Directive({
+          selector: 'test',
+          standalone: false,
+        })
         class Dir {}
 
         // The module is, which makes the directive visible.
@@ -7219,9 +7984,7 @@ runInEachFileSystem((os: string) => {
           `
         import {Directive, NgModule} from '@angular/core';
 
-        @Directive({
-          standalone: true,
-        })
+        @Directive()
         class HostDir {}
 
         // The directive is not exported.
@@ -7243,7 +8006,10 @@ runInEachFileSystem((os: string) => {
         import {Directive, NgModule} from '@angular/core';
 
         // The directive is not exported.
-        @Directive({selector: 'test'})
+        @Directive({
+          selector: 'test',
+          standalone: false,
+        })
         class Dir {}
 
         // Neither is the module which declares it - meaning the directive is not visible here.
@@ -7278,7 +8044,10 @@ runInEachFileSystem((os: string) => {
         import {Directive, NgModule} from '@angular/core';
 
         // The directive is exported.
-        @Directive({selector: 'test'})
+        @Directive({
+          selector: 'test',
+          standalone: false,
+        })
         export class Dir {}
 
         // The module which declares it is not.
@@ -7308,7 +8077,10 @@ runInEachFileSystem((os: string) => {
         import {Directive, NgModule} from '@angular/core';
 
         // The directive is not exported.
-        @Directive({selector: 'test'})
+        @Directive({
+          selector: 'test',
+          standalone: false,
+        })
         class Dir {}
 
         // Neither is the module which declares it.
@@ -7374,6 +8146,7 @@ runInEachFileSystem((os: string) => {
 
           @Directive({
             selector: 'dir',
+            standalone: false,
           })
           export class Dir {}
         `,
@@ -7384,7 +8157,10 @@ runInEachFileSystem((os: string) => {
           import {Directive, NgModule} from '@angular/core';
           import {Dir} from './dir';
 
-          @Directive({selector: '[inline]'})
+          @Directive({
+            selector: '[inline]',
+            standalone: false,
+          })
           export class InlineDir {}
 
           @NgModule({
@@ -7413,6 +8189,7 @@ runInEachFileSystem((os: string) => {
 
           @Directive({
             selector: 'dir',
+            standalone: false,
           })
           export class Dir {}
 
@@ -7452,6 +8229,7 @@ runInEachFileSystem((os: string) => {
 
              @Directive({
                selector: 'dir',
+               standalone: false,
              })
              export class Dir {}
            `,
@@ -7486,6 +8264,7 @@ runInEachFileSystem((os: string) => {
 
           @Directive({
             selector: 'dir',
+            standalone: false,
           })
           export class Dir {}
         `,
@@ -7556,6 +8335,7 @@ runInEachFileSystem((os: string) => {
 
           @Directive({
             selector: 'dir',
+            standalone: false,
           })
           export class Dir {}
         `,
@@ -7567,6 +8347,7 @@ runInEachFileSystem((os: string) => {
 
           @Directive({
             selector: 'dir',
+            standalone: false,
           })
           export class Dir {}
         `,
@@ -7599,6 +8380,7 @@ runInEachFileSystem((os: string) => {
 
              @Directive({
                selector: 'dir',
+               standalone: false,
              })
              export class Dir {}
            `,
@@ -7610,6 +8392,7 @@ runInEachFileSystem((os: string) => {
 
              @Directive({
                selector: 'dir',
+               standalone: false,
              })
              export class Dir {}
            `,
@@ -7669,6 +8452,7 @@ runInEachFileSystem((os: string) => {
           @Component({
             selector: 'test-cmp',
             template: '<div test></div>',
+            standalone: false,
           })
           class Cmp {}
 
@@ -7697,6 +8481,7 @@ runInEachFileSystem((os: string) => {
 
           @Directive({
             selector: 'dir',
+            standalone: false,
           })
           export class Dir {}
         `,
@@ -7765,7 +8550,8 @@ runInEachFileSystem((os: string) => {
         import {Component, Directive, HostBinding, NgModule, Input} from '@angular/core';
 
         @Directive({
-          selector: '[unsafeAttrs]'
+          selector: '[unsafeAttrs]',
+          standalone: false,
         })
         class UnsafeAttrsDirective {
           @HostBinding('attr.href')
@@ -7791,7 +8577,8 @@ runInEachFileSystem((os: string) => {
 
         @Component({
           selector: 'foo',
-          template: '<a [unsafeAttrs]="ctxProp">Link Title</a>'
+          template: '<a [unsafeAttrs]="ctxProp">Link Title</a>',
+          standalone: false,
         })
         class FooCmp {
           ctxProp = '';
@@ -7808,34 +8595,25 @@ runInEachFileSystem((os: string) => {
         hostVars: 6,
         hostBindings: function UnsafeAttrsDirective_HostBindings(rf, ctx) {
           if (rf & 2) {
-            i0.ɵɵattribute("href", ctx.attrHref, i0.ɵɵsanitizeUrlOrResourceUrl)("src", ctx.attrSrc, i0.ɵɵsanitizeUrlOrResourceUrl)("action", ctx.attrAction, i0.ɵɵsanitizeUrl)("profile", ctx.attrProfile, i0.ɵɵsanitizeResourceUrl)("innerHTML", ctx.attrInnerHTML, i0.ɵɵsanitizeHtml)("title", ctx.attrSafeTitle);
+            i0.ɵɵattribute("href", ctx.attrHref, i0.ɵɵsanitizeUrlOrResourceUrl)("src", ctx.attrSrc, i0.ɵɵsanitizeUrlOrResourceUrl)("action", ctx.attrAction, i0.ɵɵsanitizeUrl)("profile", ctx.attrProfile)("innerHTML", ctx.attrInnerHTML, i0.ɵɵsanitizeHtml)("title", ctx.attrSafeTitle);
           }
         }
       `;
         expect(trim(jsContents)).toContain(trim(hostBindingsFn));
       });
 
-      it('should generate sanitizers for unsafe properties in hostBindings fn in Directives', () => {
+      it('should generate sanitizers for unsafe properties in hostBindings function in Directives', () => {
         env.write(
           `test.ts`,
           `
-        import {Component, Directive, HostBinding, Input, NgModule} from '@angular/core';
+        import {Component, Directive, HostBinding, Input} from '@angular/core';
 
         @Directive({
-          selector: '[unsafeProps]'
+          selector: 'a[unsafeProps]',
         })
         class UnsafePropsDirective {
           @HostBinding('href')
           propHref: string;
-
-          @HostBinding('src')
-          propSrc: string;
-
-          @HostBinding('action')
-          propAction: string;
-
-          @HostBinding('profile')
-          propProfile: string;
 
           @HostBinding('innerHTML')
           propInnerHTML: string;
@@ -7848,28 +8626,54 @@ runInEachFileSystem((os: string) => {
 
         @Component({
           selector: 'foo',
-          template: '<a [unsafeProps]="ctxProp">Link Title</a>'
+          template: '<a [unsafeProps]="ctxProp">Link Title</a>',
+          imports: [UnsafePropsDirective]
         })
         class FooCmp {
           ctxProp = '';
         }
-
-        @NgModule({declarations: [FooCmp, UnsafePropsDirective]})
-        class MyModule {}
       `,
         );
 
         env.driveMain();
         const jsContents = env.getContents('test.js');
         const hostBindingsFn = `
-        hostVars: 6,
+        hostVars: 3,
         hostBindings: function UnsafePropsDirective_HostBindings(rf, ctx) {
           if (rf & 2) {
-            i0.ɵɵhostProperty("href", ctx.propHref, i0.ɵɵsanitizeUrlOrResourceUrl)("src", ctx.propSrc, i0.ɵɵsanitizeUrlOrResourceUrl)("action", ctx.propAction, i0.ɵɵsanitizeUrl)("profile", ctx.propProfile, i0.ɵɵsanitizeResourceUrl)("innerHTML", ctx.propInnerHTML, i0.ɵɵsanitizeHtml)("title", ctx.propSafeTitle);
+            i0.ɵɵdomProperty("href", ctx.propHref, i0.ɵɵsanitizeUrl)("innerHTML", ctx.propInnerHTML, i0.ɵɵsanitizeHtml)("title", ctx.propSafeTitle);
           }
         }
       `;
         expect(trim(jsContents)).toContain(trim(hostBindingsFn));
+      });
+
+      it('should generate sanitizers for URL properties in SVG script fn in Component', () => {
+        env.write(
+          'test.ts',
+          `
+            import {Component} from '@angular/core';
+
+            @Component({
+              selector: 'test-cmp',
+              template: \`
+                <svg>
+                  <script [attr.xlink:href]="attr" [attr.href]="attr"></script>
+                </svg>
+              \`,
+            })
+            export class TestCmp {
+              attr = './script.js';
+            }
+          `,
+        );
+
+        env.driveMain();
+
+        const jsContents = env.getContents('test.js');
+        expect(jsContents).toContain(
+          'i0.ɵɵattribute("href", ctx.attr, i0.ɵɵsanitizeResourceUrl, "xlink")("href", ctx.attr, i0.ɵɵsanitizeResourceUrl);',
+        );
       });
 
       it('should not generate sanitizers for URL properties in hostBindings fn in Component', () => {
@@ -7879,10 +8683,9 @@ runInEachFileSystem((os: string) => {
         import {Component} from '@angular/core';
 
         @Component({
-          selector: 'foo',
+          selector: 'a[foo]',
           template: '<a href="example.com">Link Title</a>',
           host: {
-            '[src]': 'srcProp',
             '[href]': 'hrefProp',
             '[title]': 'titleProp',
             '[attr.src]': 'srcAttr',
@@ -7890,18 +8693,24 @@ runInEachFileSystem((os: string) => {
             '[attr.title]': 'titleAttr',
           }
         })
-        class FooCmp {}
+        class FooCmp {
+          hrefProp: any;
+          titleProp: any;
+          srcAttr: any;
+          hrefAttr: any;
+          titleAttr: any;
+        }
       `,
         );
 
         env.driveMain();
         const jsContents = env.getContents('test.js');
         const hostBindingsFn = `
-        hostVars: 6,
+        hostVars: 5,
         hostBindings: function FooCmp_HostBindings(rf, ctx) {
           if (rf & 2) {
-            i0.ɵɵhostProperty("src", ctx.srcProp)("href", ctx.hrefProp)("title", ctx.titleProp);
-            i0.ɵɵattribute("src", ctx.srcAttr)("href", ctx.hrefAttr)("title", ctx.titleAttr);
+            i0.ɵɵdomProperty("href", ctx.hrefProp, i0.ɵɵsanitizeUrl)("title", ctx.titleProp);
+            i0.ɵɵattribute("src", ctx.srcAttr)("href", ctx.hrefAttr, i0.ɵɵsanitizeUrl)("title", ctx.titleAttr);
           }
         }
       `;
@@ -7953,6 +8762,7 @@ runInEachFileSystem((os: string) => {
         @Component({
           selector: 'cmp',
           template: '<div test></div>',
+          standalone: false,
         })
         export class Cmp {}
 
@@ -8014,6 +8824,7 @@ runInEachFileSystem((os: string) => {
         @Component({
           selector: 'cmp',
           template: '<div test></div>',
+          standalone: false,
         })
         export class Cmp {}
 
@@ -8069,7 +8880,10 @@ runInEachFileSystem((os: string) => {
         import {Directive, NgModule} from '@angular/core';
         import {ExternalModule} from './external';
 
-        @Directive({selector: '[foo]'})
+        @Directive({
+          selector: '[foo]',
+          standalone: false,
+        })
         export class FooDir {}
 
         @NgModule({
@@ -8088,6 +8902,7 @@ runInEachFileSystem((os: string) => {
         @Component({
           selector: 'index',
           template: '<div foo test lib></div>',
+          standalone: false,
         })
         export class IndexCmp {}
 
@@ -8142,7 +8957,10 @@ runInEachFileSystem((os: string) => {
         import {Directive, NgModule} from '@angular/core';
         import {ExternalModule} from './external';
 
-        @Directive({selector: '[foo]'})
+        @Directive({
+          selector: '[foo]',
+          standalone: false,
+        })
         export class FooDir {}
 
         @NgModule({
@@ -8161,6 +8979,7 @@ runInEachFileSystem((os: string) => {
         @Component({
           selector: 'index',
           template: '<div foo test lib></div>',
+          standalone: false,
         })
         export class IndexCmp {}
 
@@ -8185,7 +9004,10 @@ runInEachFileSystem((os: string) => {
           `
         import {Directive, NgModule} from '@angular/core';
 
-        @Directive({selector: 'test'})
+        @Directive({
+          selector: 'test',
+          standalone: false,
+        })
         export class TestDir {}
 
         @NgModule({
@@ -8534,17 +9356,13 @@ runInEachFileSystem((os: string) => {
             @Input({required: true}) input: any;
           }
 
-          @Directive({
-            selector: '[dir]',
-            standalone: true
-          })
+          @Directive({selector: '[dir]'})
           export class Dir extends BaseDir {}
 
           @Component({
             selector: 'test-cmp',
             template: '<div dir></div>',
-            standalone: true,
-            imports: [Dir]
+                        imports: [Dir]
           })
           export class Cmp {}
         `,
@@ -8568,16 +9386,12 @@ runInEachFileSystem((os: string) => {
             @Input({required: true}) input: any;
           }
 
-          @Directive({
-            selector: '[dir]',
-            standalone: true
-          })
+          @Directive({selector: '[dir]'})
           export class Dir extends BaseDir {}
 
           @Component({
             selector: 'test-cmp',
             template: '<div dir [input]="value"></div>',
-            standalone: true,
             imports: [Dir]
           })
           export class Cmp {
@@ -8587,6 +9401,68 @@ runInEachFileSystem((os: string) => {
         );
         const diags = env.driveDiagnostics();
         expect(diags.length).toBe(0);
+      });
+
+      it('should emit `declare` fields without runtime initialization in decorated classes', () => {
+        env.tsconfig();
+        env.write(
+          'test.ts',
+          `
+          import {Directive} from '@angular/core';
+
+          function Log(target: any, key: string): void {}
+
+          @Directive({selector: '[child]'})
+          export class Child {
+            @Log declare value: string;
+          }
+        `,
+        );
+
+        env.driveMain();
+
+        const jsContents = trim(env.getContents('test.js'));
+        expect(jsContents).toContain(
+          trim(`
+            import { Directive } from '@angular/core';
+            import * as i0 from "@angular/core";
+            function Log(target, key) { }
+            export class Child {
+            }
+            Child.ɵfac = function Child_Factory(__ngFactoryType__) { return new (__ngFactoryType__ || Child)(); };
+            Child.ɵdir = /*@__PURE__*/ i0.ɵɵdefineDirective({ type: Child, selectors: [["", "child", ""]] });
+            __decorate([
+                Log
+            ], Child.prototype, "value", void 0);
+          `),
+        );
+      });
+    });
+
+    describe('SVG animation processing', () => {
+      it('should generate SVG animation validation instruction', () => {
+        env.write(
+          'test.ts',
+          `
+            import {Component} from '@angular/core';
+
+            @Component({
+              selector: 'test-cmp',
+              template: '<svg><animate [attr.attributeName]="attr"></animate></svg>',
+              standalone: false,
+            })
+            export class TestCmp {
+              attr = 'opacity';
+            }
+          `,
+        );
+
+        env.driveMain();
+
+        const jsContents = env.getContents('test.js');
+        expect(jsContents).toContain(
+          'i0.ɵɵattribute("attributeName", ctx.attr, i0.ɵɵvalidateAttribute);',
+        );
       });
     });
 
@@ -9011,11 +9887,11 @@ runInEachFileSystem((os: string) => {
         // Only `sandbox` has an extra validation fn (since it's security-sensitive),
         // the `title` property doesn't have an extra validation fn.
         expect(jsContents).toContain(
-          'ɵɵproperty("sandbox", "", i0.ɵɵvalidateIframeAttribute)("title", "Hi!")',
+          'ɵɵdomProperty("sandbox", "", i0.ɵɵvalidateAttribute)("title", "Hi!")',
         );
 
         // The `allow` property is also security-sensitive, thus an extra validation fn.
-        expect(jsContents).toContain('ɵɵattribute("allow", "", i0.ɵɵvalidateIframeAttribute)');
+        expect(jsContents).toContain('ɵɵattribute("allow", "", i0.ɵɵvalidateAttribute)');
       });
 
       it(
@@ -9045,7 +9921,7 @@ runInEachFileSystem((os: string) => {
           // Make sure that the `sandbox` has an extra validation fn,
           // and the check is case-insensitive (since the `setAttribute` DOM API
           // is case-insensitive as well).
-          expect(jsContents).toContain('ɵɵattribute("SANDBOX", "", i0.ɵɵvalidateIframeAttribute)');
+          expect(jsContents).toContain('ɵɵattribute("SANDBOX", "", i0.ɵɵvalidateAttribute)');
         },
       );
 
@@ -9056,14 +9932,12 @@ runInEachFileSystem((os: string) => {
                 import {Component, Directive} from '@angular/core';
 
                 @Directive({
-                  standalone: true,
                   selector: '[sandbox]',
                   inputs: ['sandbox']
                 })
                 class Dir {}
 
                 @Component({
-                  standalone: true,
                   imports: [Dir],
                   template: \`
                     <div [sandbox]="''" [title]="'Hi!'"></div>
@@ -9088,6 +9962,7 @@ runInEachFileSystem((os: string) => {
               import {Directive} from '@angular/core';
 
               @Directive({
+                selector: 'iframe[someDir]',
                 host: {
                   '[sandbox]': "''",
                   '[attr.allow]': "''",
@@ -9104,11 +9979,11 @@ runInEachFileSystem((os: string) => {
         // The `sandbox` is potentially a security-sensitive attribute of an <iframe>.
         // Generate an extra validation function to invoke at runtime, which would
         // check if an underlying host element is an <iframe>.
-        expect(jsContents).toContain('ɵɵhostProperty("sandbox", "", i0.ɵɵvalidateIframeAttribute)');
+        expect(jsContents).toContain('ɵɵdomProperty("sandbox", "", i0.ɵɵvalidateAttribute)');
 
         // Similar to the above, but for an attribute binding (host attributes are
         // represented via `ɵɵattribute`).
-        expect(jsContents).toContain('ɵɵattribute("allow", "", i0.ɵɵvalidateIframeAttribute)');
+        expect(jsContents).toContain('ɵɵattribute("allow", "", i0.ɵɵvalidateAttribute)');
       });
 
       it(
@@ -9134,7 +10009,7 @@ runInEachFileSystem((os: string) => {
 
           // Make sure that we generate a validation fn for the `sandbox` attribute,
           // even when it was declared as `SANDBOX`.
-          expect(jsContents).toContain('ɵɵattribute("SANDBOX", "", i0.ɵɵvalidateIframeAttribute)');
+          expect(jsContents).toContain('ɵɵattribute("SANDBOX", "", i0.ɵɵvalidateAttribute)');
         },
       );
     });
@@ -9248,7 +10123,8 @@ runInEachFileSystem((os: string) => {
 
           @Directive({
             selector: '[some-dir]',
-            providers: [NotAService]
+            providers: [NotAService],
+            standalone: false,
           })
           class SomeDirective {}
 
@@ -9277,7 +10153,8 @@ runInEachFileSystem((os: string) => {
           @Component({
             selector: 'some-comp',
             template: '',
-            providers: [NotAService]
+            providers: [NotAService],
+            standalone: false,
           })
           class SomeComponent {}
 
@@ -9306,7 +10183,8 @@ runInEachFileSystem((os: string) => {
           @Component({
             selector: 'some-comp',
             template: '',
-            viewProviders: [NotAService]
+            viewProviders: [NotAService],
+            standalone: false,
           })
           class SomeComponent {}
 
@@ -9329,7 +10207,8 @@ runInEachFileSystem((os: string) => {
           import {NgModule, Pipe} from '@angular/core';
 
           @Pipe({
-            name: 'some-pipe'
+            name: 'some-pipe',
+            standalone: false,
           })
           class SomePipe {}
 
@@ -9373,7 +10252,7 @@ runInEachFileSystem((os: string) => {
 
       it('should not error when an undecorated class from a declaration file is provided', () => {
         env.write(
-          'node_modules/@angular/core/testing/index.d.ts',
+          'node_modules/@angular/core/types/testing.d.ts',
           `
           export declare class Testability {
           }
@@ -9398,7 +10277,7 @@ runInEachFileSystem((os: string) => {
 
       it('should not error when an undecorated class without a constructor from a declaration file is provided via useClass', () => {
         env.write(
-          'node_modules/@angular/core/testing/index.d.ts',
+          'node_modules/@angular/core/types/testing.d.ts',
           `
             export declare class Testability {
             }
@@ -9454,7 +10333,7 @@ runInEachFileSystem((os: string) => {
       // can be updated.
       xit('should error when an undecorated class with a non-trivial constructor in a declaration file is provided via useClass', () => {
         env.write(
-          'node_modules/@angular/core/testing/index.d.ts',
+          'node_modules/@angular/core/types/testing.d.ts',
           `
             export declare class NgZone {}
 
@@ -9486,7 +10365,7 @@ runInEachFileSystem((os: string) => {
 
       it('should not error when an class with a factory definition and a non-trivial constructor in a declaration file is provided via useClass', () => {
         env.write(
-          'node_modules/@angular/core/testing/index.d.ts',
+          'node_modules/@angular/core/types/testing.d.ts',
           `
             import * as i0 from '@angular/core';
 
@@ -9599,7 +10478,7 @@ runInEachFileSystem((os: string) => {
           expect(diags.length).toBe(2);
           expect(diags[0].messageText).toEqual(`Type 'string' is not assignable to type 'number'.`);
           expect(diags[1].messageText).toContain(
-            'Parser Error: Bindings cannot contain assignments at column 5 in [ {{x = 2}}]',
+            'Parser Error: Bindings cannot contain assignments at column 5 in [x = 2]',
           );
         });
       });
@@ -9927,8 +10806,7 @@ runInEachFileSystem((os: string) => {
         import {Component, NgModule} from '@angular/core';
 
         @Component({
-          standalone: true,
-          selector: 'standalone-component',
+                    selector: 'standalone-component',
           template: '...',
         })
         class StandaloneComponent {}
@@ -9954,8 +10832,7 @@ runInEachFileSystem((os: string) => {
         import {Component, NgModule, forwardRef} from '@angular/core';
 
         @Component({
-          standalone: true,
-          selector: 'standalone-component',
+                    selector: 'standalone-component',
           template: '...',
         })
         class StandaloneComponent {}
@@ -9972,26 +10849,54 @@ runInEachFileSystem((os: string) => {
       expect(codes).toEqual([ngErrorCode(ErrorCode.NGMODULE_BOOTSTRAP_IS_STANDALONE)]);
     });
 
-    it('should be able to turn off control flow using a compiler flag', () => {
-      env.tsconfig({_enableBlockSyntax: false});
-      env.write(
-        '/test.ts',
-        `
-        import { Component } from '@angular/core';
+    [true, false].forEach((strictTemplates) => {
+      it(`[strictTemplates: ${strictTemplates}] should compile a component with a complex generic`, () => {
+        env.tsconfig({strictTemplates});
+        env.write(
+          'test.ts',
+          `
+          import {Component} from '@angular/core';
 
-        @Component({
-          standalone: true,
-          template: 'My email is foo@bar.com',
-        })
-        export class TestCmp {}
-      `,
-      );
+          @Component({
+            selector: 'app-root',
+            template: '',
+          })
+          export class App<
+            T extends object = object,
+            TOptions extends { [K in keyof T]?: T[K] } = object
+          > {}
+        `,
+        );
 
-      env.driveMain();
+        const diags = env.driveDiagnostics();
+        expect(diags.length).toBe(0);
+      });
 
-      // If blocks are enabled, this test will fail since `@bar.com` is an incomplete block.
-      const jsContents = env.getContents('test.js');
-      expect(jsContents).toContain('text(0, "My email is foo@bar.com")');
+      // See #67704.
+      it(`[strictTemplates: ${strictTemplates}] should compile a directive with a generic that has type parameters`, () => {
+        env.tsconfig({strictTemplates});
+        env.write(
+          'test.ts',
+          `
+            import {Directive} from '@angular/core';
+
+            type Foo<T> = {prop: T};
+
+            @Directive({
+              host: {
+                '[class.some-class]': 'foo || bar' // Only necessary to enable type checking.
+              },
+            })
+            export class TestDir<T, U = T extends Foo<infer V> ? V : never> {
+              foo?: T;
+              bar?: U;
+            }
+        `,
+        );
+
+        const diags = env.driveDiagnostics();
+        expect(diags.length).toBe(0);
+      });
     });
 
     describe('InjectorDef emit optimizations for standalone', () => {
@@ -10010,7 +10915,6 @@ runInEachFileSystem((os: string) => {
           export class DepModule {}
 
           @Component({
-            standalone: true,
             selector: 'standalone-cmp',
             imports: [DepModule],
             template: '',
@@ -10096,7 +11000,6 @@ runInEachFileSystem((os: string) => {
         const dtsContents = env.getContents('test.d.ts');
 
         expect(jsContents).toContain('inputs: { value: [2, "value", "value", toNumber] }');
-        expect(jsContents).toContain('features: [i0.ɵɵInputTransformsFeature]');
         expect(dtsContents).toContain('static ngAcceptInputType_value: boolean | string;');
       });
 
@@ -10121,9 +11024,6 @@ runInEachFileSystem((os: string) => {
         const dtsContents = env.getContents('test.d.ts');
 
         expect(jsContents).toContain('inputs: { value: [2, "value", "value", toNumber] }');
-        expect(jsContents).toContain(
-          'features: [i0.ɵɵInputTransformsFeature, i0.ɵɵStandaloneFeature]',
-        );
         expect(dtsContents).toContain('static ngAcceptInputType_value: boolean | string;');
       });
 
@@ -10157,7 +11057,6 @@ runInEachFileSystem((os: string) => {
         const dtsContents = env.getContents('test.d.ts');
 
         expect(jsContents).toContain('inputs: { value: [2, "value", "value", toNumber] }');
-        expect(jsContents).toContain('features: [i0.ɵɵInputTransformsFeature]');
         expect(dtsContents).toContain('import * as i1 from "./types"');
         expect(dtsContents).toContain(
           'static ngAcceptInputType_value: boolean | string | i1.GenericWrapper<string>;',
@@ -10204,7 +11103,6 @@ runInEachFileSystem((os: string) => {
         const dtsContents = env.getContents('test.d.ts');
 
         expect(jsContents).toContain('inputs: { value: [2, "value", "value", toNumber] }');
-        expect(jsContents).toContain('features: [i0.ɵɵInputTransformsFeature]');
         expect(dtsContents).toContain('import * as i1 from "./types"');
         expect(dtsContents).toContain('import * as i2 from "./other-types"');
         expect(dtsContents).toContain(
@@ -10246,7 +11144,6 @@ runInEachFileSystem((os: string) => {
 
         expect(jsContents).toContain(`import { externalToNumber } from 'external';`);
         expect(jsContents).toContain('inputs: { value: [2, "value", "value", externalToNumber] }');
-        expect(jsContents).toContain('features: [i0.ɵɵInputTransformsFeature]');
         expect(dtsContents).toContain('import * as i1 from "external";');
         expect(dtsContents).toContain('static ngAcceptInputType_value: i1.ExternalToNumberType;');
       });
@@ -10284,7 +11181,6 @@ runInEachFileSystem((os: string) => {
         expect(jsContents).toContain(
           'inputs: { value: [2, "value", "value", (value) => value ? 1 : 0] }',
         );
-        expect(jsContents).toContain('features: [i0.ɵɵInputTransformsFeature]');
         expect(dtsContents).toContain('import * as i1 from "external";');
         expect(dtsContents).toContain('static ngAcceptInputType_value: i1.ExternalToNumberType;');
       });
@@ -10317,7 +11213,6 @@ runInEachFileSystem((os: string) => {
         const dtsContents = env.getContents('test.d.ts');
 
         expect(jsContents).toContain('inputs: { value: [2, "value", "value", toBoolean] }');
-        expect(jsContents).toContain('features: [i0.ɵɵInputTransformsFeature]');
         expect(dtsContents).toContain(
           `static ngAcceptInputType_value: boolean | "" | "true" | "false";`,
         );
@@ -10344,7 +11239,6 @@ runInEachFileSystem((os: string) => {
         const dtsContents = env.getContents('test.d.ts');
 
         expect(jsContents).toContain('inputs: { value: [2, "value", "value", toNumber] }');
-        expect(jsContents).toContain('features: [i0.ɵɵInputTransformsFeature]');
         expect(dtsContents).toContain('static ngAcceptInputType_value: boolean | string;');
       });
 
@@ -10369,38 +11263,7 @@ runInEachFileSystem((os: string) => {
         const dtsContents = env.getContents('test.d.ts');
 
         expect(jsContents).toContain('inputs: { value: [2, "value", "value", toNumber] }');
-        expect(jsContents).toContain('features: [i0.ɵɵInputTransformsFeature]');
         expect(dtsContents).toContain('static ngAcceptInputType_value: unknown;');
-      });
-
-      it('should insert the InputTransformsFeature before the InheritDefinitionFeature', () => {
-        env.write(
-          '/test.ts',
-          `
-          import {Directive, Input} from '@angular/core';
-
-          function toNumber(value: boolean | string) { return 1; }
-
-          @Directive()
-          export class ParentDir {}
-
-          @Directive()
-          export class Dir extends ParentDir {
-            @Input({transform: toNumber}) value!: number;
-          }
-        `,
-        );
-
-        env.driveMain();
-
-        const jsContents = env.getContents('test.js');
-        const dtsContents = env.getContents('test.d.ts');
-
-        expect(jsContents).toContain('inputs: { value: [2, "value", "value", toNumber] }');
-        expect(jsContents).toContain(
-          'features: [i0.ɵɵInputTransformsFeature, i0.ɵɵInheritDefinitionFeature]',
-        );
-        expect(dtsContents).toContain('static ngAcceptInputType_value: boolean | string;');
       });
 
       it('should compile an input with using an ambient type in the transform function', () => {
@@ -10434,10 +11297,27 @@ runInEachFileSystem((os: string) => {
         expect(jsContents).toContain(
           'inputs: { element: [2, "element", "element", coerceElement] }',
         );
-        expect(jsContents).toContain('features: [i0.ɵɵInputTransformsFeature]');
         expect(dtsContents).toContain(
           'static ngAcceptInputType_element: HTMLElement | i0.ElementRef<HTMLElement>;',
         );
+      });
+
+      it('should compile an input with a transform function and whose name needs to be quoted', () => {
+        env.write(
+          '/test.ts',
+          `
+          import {Directive, Input} from '@angular/core';
+
+          @Directive({selector: '[dir]'})
+          export class Dir {
+            @Input({transform: (value: string) => value}) 'aria-label': string = '';
+          }
+        `,
+        );
+
+        env.driveMain();
+        const dtsContents = env.getContents('test.d.ts');
+        expect(dtsContents).toContain('static "ngAcceptInputType_aria-label": string;');
       });
     });
 
@@ -10486,7 +11366,6 @@ runInEachFileSystem((os: string) => {
             import {Component} from '@angular/core';
 
             @Component({
-              standalone: true,
               template: '...',
             })
             export class Comp {}
@@ -10579,6 +11458,145 @@ runInEachFileSystem((os: string) => {
         expect(emitSkipped).toBe(false);
 
         expect(env.getContents('/test.js')).toContain(`* @fileoverview Closure comment`);
+      });
+    });
+
+    describe('standalone by default opt-out', () => {
+      it('should consider declarations as standalone by default', () => {
+        env.write(
+          '/test.ts',
+          `
+            import {Directive, Component, Pipe, NgModule} from '@angular/core';
+
+            @Directive()
+            export class TestDir {}
+
+            @Component({template: ''})
+            export class TestComp {}
+
+            @Pipe({name: 'test'})
+            export class TestPipe {}
+
+            @NgModule({
+              declarations: [TestDir, TestComp, TestPipe]
+            })
+            export class TestModule {}
+          `,
+        );
+
+        const diags = env.driveDiagnostics();
+        expect(diags.length).toBe(3);
+        expect(diags[0].messageText).toContain(
+          'Directive TestDir is standalone, and cannot be declared in an NgModule.',
+        );
+        expect(diags[1].messageText).toContain(
+          'Component TestComp is standalone, and cannot be declared in an NgModule.',
+        );
+        expect(diags[2].messageText).toContain(
+          'Pipe TestPipe is standalone, and cannot be declared in an NgModule.',
+        );
+      });
+
+      it('should consider declarations as standalone by default in v19 pre-release versions', () => {
+        env.tsconfig({
+          _angularCoreVersion: '19.1.0-next.0',
+        });
+
+        env.write(
+          '/test.ts',
+          `
+            import {Directive, Component, Pipe, NgModule} from '@angular/core';
+
+            @Directive()
+            export class TestDir {}
+
+            @Component({template: ''})
+            export class TestComp {}
+
+            @Pipe({name: 'test'})
+            export class TestPipe {}
+
+            @NgModule({
+              declarations: [TestDir, TestComp, TestPipe]
+            })
+            export class TestModule {}
+          `,
+        );
+
+        const diags = env.driveDiagnostics();
+        expect(diags.length).toBe(3);
+        expect(diags[0].messageText).toContain(
+          'Directive TestDir is standalone, and cannot be declared in an NgModule.',
+        );
+        expect(diags[1].messageText).toContain(
+          'Component TestComp is standalone, and cannot be declared in an NgModule.',
+        );
+        expect(diags[2].messageText).toContain(
+          'Pipe TestPipe is standalone, and cannot be declared in an NgModule.',
+        );
+      });
+
+      it('should disable standalone by default on versions older than 19', () => {
+        env.tsconfig({
+          _angularCoreVersion: '18.2.10',
+        });
+
+        env.write(
+          '/test.ts',
+          `
+            import {Directive, Component, Pipe, NgModule} from '@angular/core';
+
+            @Directive()
+            export class TestDir {}
+
+            @Component({template: ''})
+            export class TestComp {}
+
+            @Pipe({name: 'test'})
+            export class TestPipe {}
+
+            @NgModule({
+              imports: [TestDir, TestComp, TestPipe]
+            })
+            export class TestModule {}
+          `,
+        );
+
+        const diags = env.driveDiagnostics();
+        expect(diags.length).toBe(3);
+        expect(diags[0].messageText).toContain(
+          `The directive 'TestDir' appears in 'imports', but is not standalone`,
+        );
+        expect(diags[1].messageText).toContain(
+          `The component 'TestComp' appears in 'imports', but is not standalone`,
+        );
+        expect(diags[2].messageText).toContain(
+          `The pipe 'TestPipe' appears in 'imports', but is not standalone`,
+        );
+      });
+
+      it('should not recurse when a non-standalone component is both declared and imported', () => {
+        env.write(
+          '/test.ts',
+          `
+            import {Component, NgModule} from '@angular/core';
+
+            @Component({standalone: false, template: ''})
+            export class TestComp {}
+
+            @NgModule({
+              declarations: [TestComp],
+              imports: [TestComp],
+            })
+            export class TestModule {}
+          `,
+        );
+
+        const diags = env.driveDiagnostics();
+        expect(diags.length).toBe(1);
+        expect(diags[0].messageText).toContain(
+          `The component 'TestComp' appears in 'imports', but is not standalone`,
+        );
       });
     });
   });

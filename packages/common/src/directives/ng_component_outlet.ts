@@ -11,9 +11,9 @@ import {
   createNgModule,
   Directive,
   DoCheck,
+  EnvironmentInjector,
   Injector,
   Input,
-  NgModuleFactory,
   NgModuleRef,
   OnChanges,
   OnDestroy,
@@ -23,7 +23,7 @@ import {
 } from '@angular/core';
 
 /**
- * Instantiates a {@link Component} type and inserts its Host View into the current View.
+ * Instantiates a {@link /api/core/Component Component} type and inserts its Host View into the current View.
  * `NgComponentOutlet` provides a declarative approach for dynamic component creation.
  *
  * `NgComponentOutlet` requires a component type, if a falsy value is set the view will clear and
@@ -41,32 +41,32 @@ import {
  * * `ngComponentOutletInjector`: Optional custom {@link Injector} that will be used as parent for
  * the Component. Defaults to the injector of the current view container.
  *
+ * * `ngComponentOutletEnvironmentInjector`: Optional custom {@link EnvironmentInjector} which will
+ * provide the component's environment.
+ *
  * * `ngComponentOutletContent`: Optional list of projectable nodes to insert into the content
  * section of the component, if it exists.
  *
  * * `ngComponentOutletNgModule`: Optional NgModule class reference to allow loading another
  * module dynamically, then loading a component from that module.
  *
- * * `ngComponentOutletNgModuleFactory`: Deprecated config option that allows providing optional
- * NgModule factory to allow loading another module dynamically, then loading a component from that
- * module. Use `ngComponentOutletNgModule` instead.
  *
  * ### Syntax
  *
  * Simple
- * ```
+ * ```html
  * <ng-container *ngComponentOutlet="componentTypeExpression"></ng-container>
  * ```
  *
  * With inputs
- * ```
+ * ```html
  * <ng-container *ngComponentOutlet="componentTypeExpression;
  *                                   inputs: inputsExpression;">
  * </ng-container>
  * ```
  *
  * Customized injector/content
- * ```
+ * ```html
  * <ng-container *ngComponentOutlet="componentTypeExpression;
  *                                   injector: injectorExpression;
  *                                   content: contentNodesExpression;">
@@ -74,7 +74,7 @@ import {
  * ```
  *
  * Customized NgModule reference
- * ```
+ * ```html
  * <ng-container *ngComponentOutlet="componentTypeExpression;
  *                                   ngModule: ngModuleClass;">
  * </ng-container>
@@ -90,25 +90,25 @@ import {
  *
  * @publicApi
  * @ngModule CommonModule
+ *
+ * @see [Using NgComponentOutlet](guide/components/programmatic-rendering#using-ngcomponentoutlet)
  */
 @Directive({
   selector: '[ngComponentOutlet]',
-  standalone: true,
+  exportAs: 'ngComponentOutlet',
 })
-export class NgComponentOutlet implements OnChanges, DoCheck, OnDestroy {
-  @Input() ngComponentOutlet: Type<any> | null = null;
+export class NgComponentOutlet<T = any> implements OnChanges, DoCheck, OnDestroy {
+  /** Component that should be rendered in the outlet. */
+  @Input() ngComponentOutlet: Type<T> | null = null;
 
   @Input() ngComponentOutletInputs?: Record<string, unknown>;
   @Input() ngComponentOutletInjector?: Injector;
-  @Input() ngComponentOutletContent?: any[][];
+  @Input() ngComponentOutletEnvironmentInjector?: EnvironmentInjector;
+  @Input() ngComponentOutletContent?: Node[][];
 
   @Input() ngComponentOutletNgModule?: Type<any>;
-  /**
-   * @deprecated This input is deprecated, use `ngComponentOutletNgModule` instead.
-   */
-  @Input() ngComponentOutletNgModuleFactory?: NgModuleFactory<any>;
 
-  private _componentRef: ComponentRef<any> | undefined;
+  private _componentRef: ComponentRef<T> | undefined;
   private _moduleRef: NgModuleRef<any> | undefined;
 
   /**
@@ -118,16 +118,21 @@ export class NgComponentOutlet implements OnChanges, DoCheck, OnDestroy {
    */
   private _inputsUsed = new Map<string, boolean>();
 
+  /**
+   * Gets the instance of the currently-rendered component.
+   * Will be null if no component has been rendered.
+   */
+  get componentInstance(): T | null {
+    return this._componentRef?.instance ?? null;
+  }
+
   constructor(private _viewContainerRef: ViewContainerRef) {}
 
   private _needToReCreateNgModuleInstance(changes: SimpleChanges): boolean {
     // Note: square brackets property accessor is safe for Closure compiler optimizations (the
     // `changes` argument of the `ngOnChanges` lifecycle hook retains the names of the fields that
     // were changed).
-    return (
-      changes['ngComponentOutletNgModule'] !== undefined ||
-      changes['ngComponentOutletNgModuleFactory'] !== undefined
-    );
+    return changes['ngComponentOutletNgModule'] !== undefined;
   }
 
   private _needToReCreateComponentInstance(changes: SimpleChanges): boolean {
@@ -138,11 +143,12 @@ export class NgComponentOutlet implements OnChanges, DoCheck, OnDestroy {
       changes['ngComponentOutlet'] !== undefined ||
       changes['ngComponentOutletContent'] !== undefined ||
       changes['ngComponentOutletInjector'] !== undefined ||
+      changes['ngComponentOutletEnvironmentInjector'] !== undefined ||
       this._needToReCreateNgModuleInstance(changes)
     );
   }
 
-  /** @nodoc */
+  /** @docs-private */
   ngOnChanges(changes: SimpleChanges) {
     if (this._needToReCreateComponentInstance(changes)) {
       this._viewContainerRef.clear();
@@ -160,10 +166,6 @@ export class NgComponentOutlet implements OnChanges, DoCheck, OnDestroy {
               this.ngComponentOutletNgModule,
               getParentInjector(injector),
             );
-          } else if (this.ngComponentOutletNgModuleFactory) {
-            this._moduleRef = this.ngComponentOutletNgModuleFactory.create(
-              getParentInjector(injector),
-            );
           } else {
             this._moduleRef = undefined;
           }
@@ -173,12 +175,13 @@ export class NgComponentOutlet implements OnChanges, DoCheck, OnDestroy {
           injector,
           ngModuleRef: this._moduleRef,
           projectableNodes: this.ngComponentOutletContent,
+          environmentInjector: this.ngComponentOutletEnvironmentInjector,
         });
       }
     }
   }
 
-  /** @nodoc */
+  /** @docs-private */
   ngDoCheck() {
     if (this._componentRef) {
       if (this.ngComponentOutletInputs) {
@@ -191,7 +194,7 @@ export class NgComponentOutlet implements OnChanges, DoCheck, OnDestroy {
     }
   }
 
-  /** @nodoc */
+  /** @docs-private */
   ngOnDestroy() {
     this._moduleRef?.destroy();
   }

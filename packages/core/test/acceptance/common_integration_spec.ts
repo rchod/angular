@@ -6,19 +6,44 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
-import {Component, Directive} from '@angular/core';
-import {TestBed} from '@angular/core/testing';
 import {By} from '@angular/platform-browser';
+import {
+  Component,
+  Directive,
+  provideZoneChangeDetection,
+  ChangeDetectionStrategy,
+} from '../../src/core';
+import {TestBed} from '../../testing';
 
 describe('@angular/common integration', () => {
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [provideZoneChangeDetection()],
+    });
+  });
   describe('NgForOf', () => {
-    @Directive({selector: '[dir]'})
+    @Directive({
+      selector: '[dir]',
+      standalone: false,
+    })
     class MyDirective {}
 
-    @Component({selector: 'app-child', template: '<div dir>comp text</div>'})
+    @Component({
+      selector: 'app-child',
+      template: '<div dir>comp text</div>',
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
     class ChildComponent {}
 
-    @Component({selector: 'app-root', template: ''})
+    @Component({
+      selector: 'app-root',
+      template: '',
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
     class AppComponent {
       items: string[] = ['first', 'second'];
     }
@@ -130,9 +155,12 @@ describe('@angular/common integration', () => {
       @Component({
         selector: 'app-toggle',
         template: `<button (click)="toggle()">Toggle List</button>
-         <ul>
-            <li *ngFor="let item of items">{{item}}</li>
-         </ul>`,
+          <ul>
+            <li *ngFor="let item of items">{{ item }}</li>
+          </ul>`,
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class ToggleComponent {
         private _data: number[] = [1, 2, 3];
@@ -183,9 +211,14 @@ describe('@angular/common integration', () => {
         selector: 'app-multi',
         template: `<ul>
           <li *ngFor="let row of items">
-            <span *ngFor="let cell of row.data">{{cell}} - {{ row.value }} - {{ items.length }}</span>
+            <span *ngFor="let cell of row.data"
+              >{{ cell }} - {{ row.value }} - {{ items.length }}</span
+            >
           </li>
-       </ul>`,
+        </ul>`,
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class MultiLevelComponent {
         items: any[] = [
@@ -260,6 +293,9 @@ describe('@angular/common integration', () => {
             {{ row.value }} - {{ name }}
           </p>
         </div>`,
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class MultiLevelWithListenerComponent {
         items: any[] = [{data: ['1'], value: 'first'}];
@@ -295,10 +331,13 @@ describe('@angular/common integration', () => {
       @Component({
         selector: 'app-multi',
         template: `<div *ngFor="let row of items">
-           <div *ngFor="let cell of row">
-              <span *ngFor="let span of cell.data">{{ cell.value }} - {{ name }}</span>
-           </div>
+          <div *ngFor="let cell of row">
+            <span *ngFor="let span of cell.data">{{ cell.value }} - {{ name }}</span>
+          </div>
         </div>`,
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class SkippingContextComponent {
         name = 'app';
@@ -334,22 +373,31 @@ describe('@angular/common integration', () => {
       @Component({
         selector: 'app-multi',
         template: `<div *ngFor="let item0 of items">
-            <span *ngFor="let item1 of item0.data">
-               <span *ngFor="let item2 of item1.data">
-                   <span *ngFor="let item3 of item2.data">
-                       <span *ngFor="let item4 of item3.data">
-                           <span *ngFor="let item5 of item4.data">
-                               <span *ngFor="let item6 of item5.data">
-                                   <span *ngFor="let item7 of item6.data">
-                                       <span *ngFor="let item8 of item7.data">{{ item8 }}.{{ item7.value }}.{{ item6.value }}.{{ item5.value }}.{{ item4.value }}.{{ item3.value }}.{{ item2.value }}.{{ item1.value }}.{{ item0.value }}.{{ value }}</span>
-                                   </span>
-                               </span>
-                           </span>
-                       </span>
-                   </span>
-               </span>
+          <span *ngFor="let item1 of item0.data">
+            <span *ngFor="let item2 of item1.data">
+              <span *ngFor="let item3 of item2.data">
+                <span *ngFor="let item4 of item3.data">
+                  <span *ngFor="let item5 of item4.data">
+                    <span *ngFor="let item6 of item5.data">
+                      <span *ngFor="let item7 of item6.data">
+                        <span *ngFor="let item8 of item7.data"
+                          >{{ item8 }}.{{ item7.value }}.{{ item6.value }}.{{ item5.value }}.{{
+                            item4.value
+                          }}.{{ item3.value }}.{{ item2.value }}.{{ item1.value }}.{{
+                            item0.value
+                          }}.{{ value }}</span
+                        >
+                      </span>
+                    </span>
+                  </span>
+                </span>
+              </span>
             </span>
-         </div>`,
+          </span>
+        </div>`,
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class NineLevelsComponent {
         value = 'App';
@@ -486,6 +534,9 @@ describe('@angular/common integration', () => {
           <div *ngIf="showing">{{ valueOne }}</div>
           <div *ngIf="showing">{{ valueTwo }}</div>
         `,
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class SimpleConditionComponent {
         showing = true;
@@ -514,10 +565,12 @@ describe('@angular/common integration', () => {
         selector: 'app-multi',
         template: `<div *ngIf="showing">
           <div *ngIf="outerShowing">
-              <div *ngIf="innerShowing">{{ name }}</div>
-            </div>
+            <div *ngIf="innerShowing">{{ name }}</div>
           </div>
-        `,
+        </div> `,
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class NestedConditionsComponent {
         showing = true;
@@ -541,12 +594,14 @@ describe('@angular/common integration', () => {
   });
 
   describe('NgTemplateOutlet', () => {
-    it('should create and remove embedded views', () => {
+    it('should create and remove embedded views (ng-template)', () => {
       @Component({
         selector: 'app-multi',
         template: `<ng-template #tpl>from tpl</ng-template>
-          <ng-template [ngTemplateOutlet]="showing ? tpl : null"></ng-template>
-        `,
+          <ng-template [ngTemplateOutlet]="showing ? tpl : null"></ng-template> `,
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class EmbeddedViewsComponent {
         showing = false;
@@ -567,12 +622,14 @@ describe('@angular/common integration', () => {
       expect(fixture.nativeElement.textContent).not.toBe('from tpl');
     });
 
-    it('should create and remove embedded views', () => {
+    it('should create and remove embedded views (ng-container)', () => {
       @Component({
         selector: 'app-multi',
         template: `<ng-template #tpl>from tpl</ng-template>
-          <ng-container [ngTemplateOutlet]="showing ? tpl : null"></ng-container>
-        `,
+          <ng-container [ngTemplateOutlet]="showing ? tpl : null"></ng-container> `,
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class NgContainerComponent {
         showing = false;

@@ -33,7 +33,6 @@ export const enum NotificationSource {
   // but we should execute render hooks:
   // Render hooks are guaranteed to execute with the schedulers timing.
   RenderHook,
-  DeferredRenderHook,
   // Views might be created outside and manipulated in ways that
   // we cannot be aware of. When a view is attached, Angular now "knows"
   // about it and we now know that DOM might have changed (and we should
@@ -52,6 +51,8 @@ export const enum NotificationSource {
   PendingTaskRemoved,
   // An `effect()` outside of the view tree became dirty and might need to run.
   RootEffect,
+  // An `effect()` within the view tree became dirty.
+  ViewEffect,
 }
 
 /**
@@ -65,17 +66,13 @@ export abstract class ChangeDetectionScheduler {
 /** Token used to indicate if zoneless was enabled via provideZonelessChangeDetection(). */
 export const ZONELESS_ENABLED = new InjectionToken<boolean>(
   typeof ngDevMode === 'undefined' || ngDevMode ? 'Zoneless enabled' : '',
-  {providedIn: 'root', factory: () => false},
+  {factory: () => true},
 );
 
-/** Token used to indicate `provideExperimentalZonelessChangeDetection` was used. */
+/** Token used to indicate `provideZonelessChangeDetection` was used. */
 export const PROVIDED_ZONELESS = new InjectionToken<boolean>(
   typeof ngDevMode === 'undefined' || ngDevMode ? 'Zoneless provided' : '',
-  {providedIn: 'root', factory: () => false},
-);
-
-export const ZONELESS_SCHEDULER_DISABLED = new InjectionToken<boolean>(
-  typeof ngDevMode === 'undefined' || ngDevMode ? 'scheduler disabled' : '',
+  {factory: () => false},
 );
 
 // TODO(atscott): Remove in v19. Scheduler should be done with runOutsideAngular.

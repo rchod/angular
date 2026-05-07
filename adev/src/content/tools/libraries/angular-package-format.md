@@ -12,7 +12,7 @@ You can find the versions of the specification prior to v13 in this [google doc]
 
 ## Why specify a package format?
 
-In today's JavaScript landscape, developers consume packages in many different ways, using many different toolchains \(Webpack, rollup, esbuild, etc.\).
+In today's JavaScript landscape, developers consume packages in many different ways, using many different toolchains \(webpack, Rollup, esbuild, etc.\).
 These tools may understand and require different inputs - some tools may be able to process the latest ES language version, while others may benefit from directly consuming an older ES version.
 
 The Angular distribution format supports all of the commonly used development tools and workflows, and adds emphasis on optimizations that result either in smaller application payload size or faster development iteration cycle \(build time\).
@@ -28,49 +28,45 @@ The following example shows a simplified version of the `@angular/core` package'
 node_modules/@angular/core
 ├── README.md
 ├── package.json
-├── index.d.ts
 ├── fesm2022
-│   ├── core.mjs
-│   ├── core.mjs.map
-│   ├── testing.mjs
-│   └── testing.mjs.map
-└── testing
-    └── index.d.ts
+│ ├── core.mjs
+│ ├── core.mjs.map
+│ ├── testing.mjs
+│ └── testing.mjs.map
+└── types
+│ ├── core.d.ts
+│ ├── testing.d.ts
 ```
 
 This table describes the file layout under `node_modules/@angular/core` annotated to describe the purpose of files and directories:
 
-| Files                                                                                                                                                     | Purpose |
-|:---                                                                                                                                                       |:---     |
+| Files                                                                                                                                                     | Purpose                                                                                                                                                                                                        |
+| :-------------------------------------------------------------------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `README.md`                                                                                                                                               | Package README, used by npmjs web UI.                                                                                                                                                                          |
 | `package.json`                                                                                                                                            | Primary `package.json`, describing the package itself as well as all available entrypoints and code formats. This file contains the "exports" mapping used by runtimes and tools to perform module resolution. |
-| `index.d.ts`                                                                                                                                               | Bundled `.d.ts` for the primary entrypoint `@angular/core`.                                                                                                                                                    |
-| `fesm2022/` <br /> &nbsp;&nbsp;─ `core.mjs` <br /> &nbsp;&nbsp;─ `core.mjs.map` <br /> &nbsp;&nbsp;─ `testing.mjs` <br /> &nbsp;&nbsp;─ `testing.mjs.map` | Code for all entrypoints in flattened \(FESM\) ES2022 format, along with source maps.                                                                                                                           |
-| `testing/`                                                                                                                                                | Directory representing the "testing" entrypoint.                                                                                                                                                               |
-| `testing/index.d.ts`                                                                                                                                    | Bundled `.d.ts` for the `@angular/core/testing` entrypoint.                                                                                                                                                     |
+| `fesm2022/` <br /> &nbsp;&nbsp;─ `core.mjs` <br /> &nbsp;&nbsp;─ `core.mjs.map` <br /> &nbsp;&nbsp;─ `testing.mjs` <br /> &nbsp;&nbsp;─ `testing.mjs.map` | Code for all entrypoints in flattened \(FESM\) ES2022 format, along with source maps.                                                                                                                          |
+| `types/` <br /> &nbsp;&nbsp;─ `core.d.ts` <br /> &nbsp;&nbsp;─ `testing.d.ts`                                                                             | Bundled TypeScript type definitions for all public entrypoints.                                                                                                                                                |
 
 ## `package.json`
 
 The primary `package.json` contains important package metadata, including the following:
 
-* It [declares](#esm-declaration) the package to be in EcmaScript Module \(ESM\) format
-* It contains an [`"exports"` field](#exports) which defines the available source code formats of all entrypoints
-* It contains [keys](#legacy-resolution-keys) which define the available source code formats of the primary `@angular/core` entrypoint, for tools which do not understand `"exports"`.
-    These keys are considered deprecated, and could be removed as the support for `"exports"` rolls out across the ecosystem.
+- It [declares](#esm-declaration) the package to be in EcmaScript Module \(ESM\) format
+- It contains an `"exports"` field which defines the available source code formats of all entrypoints
+- It contains [keys](#legacy-resolution-keys) which define the available source code formats of the primary `@angular/core` entrypoint, for tools which do not understand `"exports"`.
+  These keys are considered deprecated, and could be removed as the support for `"exports"` rolls out across the ecosystem.
 
-* It declares whether the package contains [side effects](#side-effects)
+- It declares whether the package contains [side effects](#side-effects)
 
 ### ESM declaration
 
 The top-level `package.json` contains the key:
 
-<docs-code language="javascript">
-
+```js
 {
   "type": "module"
 }
-
-</docs-code>
+```
 
 This informs resolvers that code within the package is using EcmaScript Modules as opposed to CommonJS modules.
 
@@ -78,8 +74,7 @@ This informs resolvers that code within the package is using EcmaScript Modules 
 
 The `"exports"` field has the following structure:
 
-<docs-code language="javascript">
-
+```js
 "exports": {
   "./schematics/*": {
     "default": "./schematics/*.js"
@@ -88,24 +83,23 @@ The `"exports"` field has the following structure:
     "default": "./package.json"
   },
   ".": {
-    "types": "./core.d.ts",
+    "types": "./types/core.d.ts",
     "default": "./fesm2022/core.mjs"
   },
   "./testing": {
-    "types": "./testing/testing.d.ts",
+    "types": "./types/testing.d.ts",
     "default": "./fesm2022/testing.mjs"
   }
 }
-
-</docs-code>
+```
 
 Of primary interest are the `"."` and the `"./testing"` keys, which define the available code formats for the `@angular/core` primary entrypoint and the `@angular/core/testing` secondary entrypoint, respectively.
 For each entrypoint, the available formats are:
 
-| Formats                   | Details |
-|:---                       |:---     |
-| Typings \(`.d.ts` files\) | `.d.ts` files are used by TypeScript when depending on a given package.                                                                                                           |
-| `default`               | ES2022 code flattened into a single source.
+| Formats                   | Details                                                                 |
+| :------------------------ | :---------------------------------------------------------------------- |
+| Typings \(`.d.ts` files\) | `.d.ts` files are used by TypeScript when depending on a given package. |
+| `default`                 | ES2022 code flattened into a single source.                             |
 
 Tooling that is aware of these keys may preferentially select a desirable code format from `"exports"`.
 
@@ -118,14 +112,12 @@ For more information, see [Managing assets in a library](tools/libraries/creatin
 In addition to `"exports"`, the top-level `package.json` also defines legacy module resolution keys for resolvers that don't support `"exports"`.
 For `@angular/core` these are:
 
-<docs-code language="javascript">
-
+```js
 {
   "module": "./fesm2022/core.mjs",
-  "typings": "./core.d.ts",
+  "typings": "./types/core.d.ts",
 }
-
-</docs-code>
+```
 
 As shown in the preceding code snippet, a module resolver can use these keys to load a specific code format.
 
@@ -133,13 +125,11 @@ As shown in the preceding code snippet, a module resolver can use these keys to 
 
 The last function of `package.json` is to declare whether the package has [side effects](#sideeffects-flag).
 
-<docs-code language="javascript">
-
+```js
 {
   "sideEffects": false
 }
-
-</docs-code>
+```
 
 Most Angular packages should not depend on top-level side effects, and thus should include this declaration.
 
@@ -150,15 +140,15 @@ Entrypoints serve several functions.
 
 1. They define the module specifiers from which users import code \(for example, `@angular/core` and `@angular/core/testing`\).
 
-    Users typically perceive these entrypoints as distinct groups of symbols, with different purposes or capability.
+   Users typically perceive these entrypoints as distinct groups of symbols, with different purposes or capability.
 
-    Specific entrypoints might only be used for special purposes, such as testing.
-    Such APIs can be separated out from the primary entrypoint to reduce the chance of them being used accidentally or incorrectly.
+   Specific entrypoints might only be used for special purposes, such as testing.
+   Such APIs can be separated out from the primary entrypoint to reduce the chance of them being used accidentally or incorrectly.
 
 1. They define the granularity at which code can be lazily loaded.
 
-    Many modern build tools are only capable of "code splitting" \(aka lazy loading\) at the ES Module level.
-    The Angular Package Format uses primarily a single "flat" ES Module per entry point. This means that most build tooling is not able to split code with a single entry point into multiple output chunks.
+   Many modern build tools are only capable of "code splitting" \(aka lazy loading\) at the ES Module level.
+   The Angular Package Format uses primarily a single "flat" ES Module per entry point. This means that most build tooling is not able to split code with a single entry point into multiple output chunks.
 
 The general rule for APF packages is to use entrypoints for the smallest sets of logically connected code possible.
 For example, the Angular Material package publishes each logical component or set of components as a separate entrypoint - one for Button, one for Tabs, etc.
@@ -178,16 +168,11 @@ The README file in the Markdown format that is used to display description of a 
 
 Example README content of @angular/core package:
 
-<docs-code language="html">
-
-Angular
-&equals;&equals;&equals;&equals;&equals;&equals;&equals;
-
-The sources for this package are in the main [Angular](https://github.com/angular/angular) repo.Please file issues and pull requests against that repo.
-
-License: MIT
-
-</docs-code>
+```html
+Angular &equals;&equals;&equals;&equals;&equals;&equals;&equals; The sources for this package are in
+the main [Angular](https://github.com/angular/angular) repo.Please file issues and pull requests
+against that repo. License: MIT
+```
 
 ## Partial compilation
 
@@ -196,16 +181,14 @@ This is a compilation mode for `ngc` which produces compiled Angular code that i
 
 To partially compile Angular code, use the `compilationMode` flag in the `angularCompilerOptions` property of your `tsconfig.json`:
 
-<docs-code language="javascript">
-
+```js
 {
   …
   "angularCompilerOptions": {
     "compilationMode": "partial",
   }
 }
-
-</docs-code>
+```
 
 Partially compiled library code is then converted to fully compiled code during the application build process by the Angular CLI.
 
@@ -219,19 +202,19 @@ The Angular Package Format specifies that code be published in "flattened" ES mo
 This significantly reduces the build time of Angular applications as well as download and parse time of the final application bundle.
 Please check out the excellent post ["The cost of small modules"](https://nolanlawson.com/2016/08/15/the-cost-of-small-modules) by Nolan Lawson.
 
-The Angular compiler can generate index ES module files. Tools like Rollup can use these files to generate flattened modules in a *Flattened ES Module* (FESM) file format.
+The Angular compiler can generate index ES module files. Tools like Rollup can use these files to generate flattened modules in a _Flattened ES Module_ (FESM) file format.
 
 FESM is a file format created by flattening all ES Modules accessible from an entrypoint into a single ES Module.
 It's formed by following all imports from a package and copying that code into a single file while preserving all public ES exports and removing all private imports.
+However, in some cases, the FESM may depend on shared chunks that are shared between multiple entry points.
 
-The abbreviated name, FESM, pronounced *phe-som*, can be followed by a number such as FESM2020.
+The abbreviated name, FESM, pronounced _phe-som_, can be followed by a number such as FESM2020.
 The number refers to the language level of the JavaScript inside the module.
 Accordingly a FESM2022 file would be ESM+ES2022 and include import/export statements and ES2022 source code.
 
 To generate a flattened ES Module index file, use the following configuration options in your tsconfig.json file:
 
-<docs-code language="javascript">
-
+```js
 {
   "compilerOptions": {
     …
@@ -245,8 +228,7 @@ To generate a flattened ES Module index file, use the following configuration op
     "flatModuleId": "my-ui-lib"
   }
 }
-
-</docs-code>
+```
 
 Once the index file \(for example, `my-ui-lib.js`\) is generated by ngc, bundlers and optimizers like Rollup can be used to produce the flattened ESM file.
 
@@ -256,7 +238,7 @@ By default, EcmaScript Modules are side-effectful: importing from a module ensur
 This is often undesirable, as most side-effectful code in typical modules is not truly side-effectful, but instead only affects specific symbols.
 If those symbols are not imported and used, it's often desirable to remove them in an optimization process known as tree-shaking, and the side-effectful code can prevent this.
 
-Build tools such as Webpack support a flag which allows packages to declare that they do not depend on side-effectful code at the top level of their modules, giving the tools more freedom to tree-shake code from the package.
+Build tools such as webpack support a flag which allows packages to declare that they do not depend on side-effectful code at the top level of their modules, giving the tools more freedom to tree-shake code from the package.
 The end result of these optimizations should be smaller bundle size and better code distribution in bundle chunks after code-splitting.
 This optimization can break your code if it contains non-local side-effects - this is however not common in Angular applications and it's usually a sign of bad design.
 The recommendation is for all packages to claim the side-effect free status by setting the `sideEffects` property to `false`, and that developers follow the [Angular Style Guide](/style-guide) which naturally results in code without non-local side-effects.
@@ -270,10 +252,14 @@ The Angular CLI down-levels the bundle to a language level that is supported by 
 
 ### d.ts bundling / type definition flattening
 
-As of APF v8 it is now preferred to run [API Extractor](https://api-extractor.com), to bundle TypeScript definitions so that the entire API appears in a single file.
+As of APF v8, it is recommended to bundle TypeScript definitions.
+Bundling of type definitions can significantly speed up compilations for users, especially if there are many individual `.ts` source files in your library.
 
-In prior APF versions each entry point would have a `src` directory next to the .d.ts entry point and this directory contained individual d.ts files matching the structure of the original source code.
-While this distribution format is still allowed and supported, it is highly discouraged because it confuses tools like IDEs that then offer incorrect autocompletion, and allows users to depend on deep-import paths which are typically not considered to be public API of a library or a package.
+Angular uses [`rollup-plugin-dts`](https://github.com/Swatinem/rollup-plugin-dts) to flatten `.d.ts` files (using `rollup`, similar to how FESM files are created).
+
+Using rollup for `.d.ts` bundling is beneficial as it supports code splitting between entry-points.
+For example, consider you have multiple entrypoints relying on the same shared type, a shared `.d.ts` file would be created along with the larger flattened `.d.ts` files.
+This is desirable and avoids duplication of types.
 
 ### Tslib
 
@@ -283,8 +269,8 @@ This is because the tslib version is tied to the TypeScript version used to comp
 ## Examples
 
 <docs-pill-row>
-  <docs-pill href="https://unpkg.com/browse/@angular/core@17.0.0/" title="@angular/core package"/>
-  <docs-pill href="https://unpkg.com/browse/@angular/material@17.0.0/" title="@angular/material package"/>
+  <docs-pill href="https://app.unpkg.com/@angular/core@21.0.6" title="@angular/core package"/>
+  <docs-pill href="https://app.unpkg.com/@angular/material@21.0.3" title="@angular/material package"/>
 </docs-pill-row>
 
 ## Definition of terms
@@ -315,6 +301,7 @@ Short for ECMAScript Modules \(see above\).
 ### FESM
 
 Short for Flattened ES Modules and consists of a file format created by flattening all ES Modules accessible from an entry point into a single ES Module.
+Note that FESM is typically a single file, but it can depend on a shared chunk that is shared with other FESMs.
 
 ### Module ID
 
@@ -339,7 +326,7 @@ Because of this, the Angular team often uses the language level specifier as a s
 
 ### Bundle
 
-An artifact in the form of a single JS file, produced by a build tool \(for example, [Webpack](https://webpack.js.org) or [Rollup](https://rollupjs.org)\) that contains symbols originating in one or more modules.
+An artifact in the form of a single JS file, produced by a build tool \(for example, [webpack](https://webpack.js.org) or [Rollup](https://rollupjs.org)\) that contains symbols originating in one or more modules.
 Bundles are a browser-specific workaround that reduce network strain that would be caused if browsers were to start downloading hundreds if not tens of thousands of files.
 Node.js typically doesn't use bundles.
 Common bundle formats are UMD and System.register.
@@ -378,4 +365,4 @@ The Ahead of Time Compiler for Angular.
 
 ### Flattened type definitions
 
-The bundled TypeScript definitions generated from [API Extractor](https://api-extractor.com).
+The bundled TypeScript definitions generated using tools like [API Extractor](https://api-extractor.com) or [rollup-plugin-dts](https://github.com/Swatinem/rollup-plugin-dts).

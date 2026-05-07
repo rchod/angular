@@ -3,6 +3,7 @@
     "target": "angular-docs",
     "public": "./build/browser",
     "ignore": ["**/.*"],
+    "trailingSlash": false,
     "headers": [
       {
         "source": "assets/images/tutorials/common/*.jpg",
@@ -18,7 +19,20 @@
         ]
       },
       {
-        "source": "*.[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f].+(css|js)",
+        "source": "assets/others/versions.json",
+        "headers": [
+          {
+            "key": "Cross-Origin-Resource-Policy",
+            "value": "cross-origin"
+          },
+          {
+            "key": "Access-Control-Allow-Origin",
+            "value": "*"
+          }
+        ]
+      },
+      {
+        "source": "/**/*-[0-9A-Za-z_][0-9A-Za-z_][0-9A-Za-z_][0-9A-Za-z_][0-9A-Za-z_][0-9A-Za-z_][0-9A-Za-z_][0-9A-Za-z_].*",
         "headers": [
           {
             "key": "Cache-Control",
@@ -55,7 +69,6 @@
             "key": "Cross-Origin-Opener-Policy",
             "value": "same-origin"
           },
-
           {
             "key": "Cross-Origin-Embedder-Policy",
             "value": "require-corp"

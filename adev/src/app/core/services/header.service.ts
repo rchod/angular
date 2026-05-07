@@ -1,12 +1,20 @@
+/**
+ * @license
+ * Copyright Google LLC All Rights Reserved.
+ *
+ * Use of this source code is governed by an MIT-style license that can be
+ * found in the LICENSE file at https://angular.dev/license
+ */
+
 import {DOCUMENT} from '@angular/common';
-import {Injectable, inject} from '@angular/core';
+import {inject, Service} from '@angular/core';
 
 const ANGULAR_DEV = 'https://angular.dev';
 
 /**
  * Information about the deployment of this application.
  */
-@Injectable({providedIn: 'root'})
+@Service()
 export class HeaderService {
   private readonly document = inject(DOCUMENT);
 

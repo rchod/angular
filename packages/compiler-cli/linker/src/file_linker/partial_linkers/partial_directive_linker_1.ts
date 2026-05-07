@@ -11,7 +11,6 @@ import {
   ForwardRefHandling,
   LegacyInputPartialMapping,
   makeBindingParser,
-  outputAst as o,
   ParseLocation,
   ParseSourceFile,
   ParseSourceSpan,
@@ -26,13 +25,19 @@ import {
   R3QueryMetadata,
 } from '@angular/compiler';
 
-import {AbsoluteFsPath} from '../../../../src/ngtsc/file_system';
+import semver from 'semver';
 import {Range} from '../../ast/ast_host';
 import {AstObject, AstValue} from '../../ast/ast_value';
 import {FatalLinkerError} from '../../fatal_linker_error';
 
+import {AbsoluteFsPath} from '../../../../src/ngtsc/file_system/src/types';
 import {LinkedDefinition, PartialLinker} from './partial_linker';
-import {extractForwardRef, wrapReference} from './util';
+import {
+  extractForwardRef,
+  getDefaultStandaloneValue,
+  PLACEHOLDER_VERSION,
+  wrapReference,
+} from './util';
 
 /**
  * A `PartialLinker` that is designed to process `ɵɵngDeclareDirective()` call expressions.
@@ -46,8 +51,9 @@ export class PartialDirectiveLinkerVersion1<TExpression> implements PartialLinke
   linkPartialDeclaration(
     constantPool: ConstantPool,
     metaObj: AstObject<R3PartialDeclaration, TExpression>,
+    version: string,
   ): LinkedDefinition {
-    const meta = toR3DirectiveMeta(metaObj, this.code, this.sourceUrl);
+    const meta = toR3DirectiveMeta(metaObj, this.code, this.sourceUrl, version);
     return compileDirectiveFromMetadata(meta, constantPool, makeBindingParser());
   }
 }
@@ -59,7 +65,9 @@ export function toR3DirectiveMeta<TExpression>(
   metaObj: AstObject<R3DeclareDirectiveMetadata, TExpression>,
   code: string,
   sourceUrl: AbsoluteFsPath,
+  version: string,
 ): R3DirectiveMetadata {
+  const {major} = new semver.SemVer(version);
   const typeExpr = metaObj.getValue('type');
   const typeName = typeExpr.getSymbolName();
   if (typeName === null) {
@@ -86,7 +94,6 @@ export function toR3DirectiveMeta<TExpression>(
       ? metaObj.getArray('viewQueries').map((entry) => toQueryMetadata(entry.getObject()))
       : [],
     providers: metaObj.has('providers') ? metaObj.getOpaque('providers') : null,
-    fullInheritance: false,
     selector: metaObj.has('selector') ? metaObj.getString('selector') : null,
     exportAs: metaObj.has('exportAs')
       ? metaObj.getArray('exportAs').map((entry) => entry.getString())
@@ -94,13 +101,19 @@ export function toR3DirectiveMeta<TExpression>(
     lifecycle: {
       usesOnChanges: metaObj.has('usesOnChanges') ? metaObj.getBoolean('usesOnChanges') : false,
     },
+    controlCreate: metaObj.has('controlCreate')
+      ? toControlCreate(metaObj.getObject('controlCreate'))
+      : null,
     name: typeName,
     usesInheritance: metaObj.has('usesInheritance') ? metaObj.getBoolean('usesInheritance') : false,
-    isStandalone: metaObj.has('isStandalone') ? metaObj.getBoolean('isStandalone') : false,
+    isStandalone: metaObj.has('isStandalone')
+      ? metaObj.getBoolean('isStandalone')
+      : getDefaultStandaloneValue(version),
     isSignal: metaObj.has('isSignal') ? metaObj.getBoolean('isSignal') : false,
     hostDirectives: metaObj.has('hostDirectives')
       ? toHostDirectivesMetadata(metaObj.getValue('hostDirectives'))
       : null,
+    legacyOptionalChaining: major < 22 && version !== PLACEHOLDER_VERSION,
   };
 }
 
@@ -128,6 +141,15 @@ function toInputMapping<TExpression>(
     key,
     value as AstValue<LegacyInputPartialMapping, TExpression>,
   );
+}
+
+function toControlCreate<TExpression>(
+  controlCreate: AstObject<NonNullable<R3DeclareDirectiveMetadata['controlCreate']>, TExpression>,
+) {
+  const passThroughValue = controlCreate.getValue('passThroughInput');
+  return {
+    passThroughInput: passThroughValue.isNull() ? null : passThroughValue.getString(),
+  };
 }
 
 /**

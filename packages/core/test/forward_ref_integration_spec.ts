@@ -17,9 +17,9 @@ import {
   NgModule,
   NO_ERRORS_SCHEMA,
   QueryList,
-} from '@angular/core';
-import {TestBed} from '@angular/core/testing';
-import {expect} from '@angular/platform-browser/testing/src/matchers';
+} from '../src/core';
+import {TestBed} from '../testing';
+import {expect} from '@angular/private/testing/matchers';
 
 class Frame {
   name: string = 'frame';
@@ -54,12 +54,15 @@ class Module {}
   selector: 'app',
   viewProviders: [forwardRef(() => Frame)],
   template: `<door><lock></lock></door>`,
+  standalone: false,
 })
 class App {}
 
 @Component({
   selector: 'door',
-  template: `{{frame.name}}(<span *ngFor="let lock of locks">{{lock.name}}</span>)`,
+  template: `{{ frame.name }}(<span *ngFor="let lock of locks">{{ lock.name }}</span
+    >)`,
+  standalone: false,
 })
 class Door {
   @ContentChildren(forwardRef(() => Lock)) locks!: QueryList<Lock>;
@@ -70,7 +73,10 @@ class Door {
   }
 }
 
-@Directive({selector: 'lock'})
+@Directive({
+  selector: 'lock',
+  standalone: false,
+})
 class Lock {
   name: string = 'lock';
 }

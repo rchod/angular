@@ -6,8 +6,6 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
-import {initMockFileSystem} from '@angular/compiler-cli/src/ngtsc/file_system/testing';
-
 import {
   assertFileNames,
   createModuleAndProjectWithDeclarations,
@@ -16,10 +14,6 @@ import {
 } from '../testing';
 
 describe('get template location for component', () => {
-  beforeEach(() => {
-    initMockFileSystem('Native');
-  });
-
   it('finds location of inline template', () => {
     const files = {
       'app.ts': `
@@ -27,6 +21,7 @@ describe('get template location for component', () => {
 
       @Component({
         template: '<div>{{ myProp }}</div>',
+        standalone: false,
       })
       export class AppCmp {
         myProp!: string;
@@ -50,6 +45,7 @@ describe('get template location for component', () => {
 
             @Component({
               templateUrl: './app.html',
+              standalone: false,
             })
             export class AppCmp {
               myProp!: string;
@@ -73,11 +69,13 @@ describe('get template location for component', () => {
 
       @Component({
         templateUrl: './template1.html',
+        standalone: false,
       })
       export class Template1 {
       }
       @Component({
         templateUrl: './template2.html',
+        standalone: false,
       })
       export class Template2 {
       }
@@ -99,12 +97,15 @@ describe('get template location for component', () => {
     assertFileNames([result2], ['template2.html']);
   });
 
-  it('returns nothing when cursor is not in a component', () => {
+  it('returns nothing when cursor is not in a component (directive)', () => {
     const files = {
       'app.ts': `
       import {Directive} from '@angular/core';
 
-      @Directive({selector: 'my-dir'})
+      @Directive({
+        selector: 'my-dir',
+        standalone: false,
+      })
       export class MyDir {
       }`,
     };
@@ -117,14 +118,17 @@ describe('get template location for component', () => {
     expect(appFile.getTemplateLocationForComponent()).toBeUndefined();
   });
 
-  it('returns nothing when cursor is not in a component', () => {
+  it('returns nothing when cursor is not in a component (external const)', () => {
     const files = {
       'app.ts': `
       import {Component} from '@angular/core';
 
       const x = 1;
 
-      @Component({template: 'abc'})
+      @Component({
+        template: 'abc',
+        standalone: false,
+      })
       export class MyDir {
       }`,
     };
@@ -142,7 +146,10 @@ describe('get template location for component', () => {
       'app.ts': `
       import {Component} from '@angular/core';
 
-      @Component({template: 'abc'})
+      @Component({
+        template: 'abc',
+        standalone: false,
+      })
       export class MyDir {
       }`,
     };

@@ -6,7 +6,7 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
-import {ASTWithSource, EmptyExpr} from '../expression_parser/ast';
+import {AST, ASTWithSource, EmptyExpr, RecursiveAstVisitor} from '../expression_parser/ast';
 import * as html from '../ml_parser/ast';
 import {ParseError, ParseSourceSpan} from '../parse_util';
 import {BindingParser} from '../template_parser/binding_parser';
@@ -20,13 +20,16 @@ const FOR_LOOP_EXPRESSION_PATTERN = /^\s*([0-9A-Za-z_$]*)\s+of\s+([\S\s]*)/;
 const FOR_LOOP_TRACK_PATTERN = /^track\s+([\S\s]*)/;
 
 /** Pattern for the `as` expression in a conditional block. */
-const CONDITIONAL_ALIAS_PATTERN = /^(as\s)+(.*)/;
+const CONDITIONAL_ALIAS_PATTERN = /^(as\s+)(.*)/;
 
 /** Pattern used to identify an `else if` block. */
 const ELSE_IF_PATTERN = /^else[^\S\r\n]+if/;
 
 /** Pattern used to identify a `let` parameter. */
 const FOR_LOOP_LET_PATTERN = /^let\s+([\S\s]*)/;
+
+/** Pattern used to validate a JavaScript identifier. */
+const IDENTIFIER_PATTERN = /^[$A-Z_][0-9A-Z_$]*$/i;
 
 /**
  * Pattern to group a string into leading whitespace, non whitespace, and trailing whitespace.
@@ -192,6 +195,7 @@ export function createForLoop(
         ast.sourceSpan.start,
         endSpan?.end ?? ast.sourceSpan.end,
       );
+      validateTrackByExpression(params.trackBy.expression, params.trackBy.keywordSpan, errors);
       node = new t.ForLoopBlock(
         params.itemName,
         params.expression,
@@ -224,9 +228,11 @@ export function createSwitchBlock(
     ast.parameters.length > 0
       ? parseBlockParameterToBinding(ast.parameters[0], bindingParser)
       : bindingParser.parseBinding('', false, ast.sourceSpan, 0);
-  const cases: t.SwitchBlockCase[] = [];
+  const groups: t.SwitchBlockCaseGroup[] = [];
   const unknownBlocks: t.UnknownBlock[] = [];
-  let defaultCase: t.SwitchBlockCase | null = null;
+  let collectedCases: t.SwitchBlockCase[] = [];
+  let firstCaseStart: ParseSourceSpan | null = null;
+  let exhaustiveCheck: t.SwitchExhaustiveCheck | null = null;
 
   // Here we assume that all the blocks are valid given that we validated them above.
   for (const node of ast.children) {
@@ -234,47 +240,123 @@ export function createSwitchBlock(
       continue;
     }
 
-    if ((node.name !== 'case' || node.parameters.length === 0) && node.name !== 'default') {
+    if (
+      (node.name !== 'case' || node.parameters.length === 0) &&
+      node.name !== 'default' &&
+      node.name !== 'default never'
+    ) {
       unknownBlocks.push(new t.UnknownBlock(node.name, node.sourceSpan, node.nameSpan));
       continue;
     }
 
-    const expression =
-      node.name === 'case' ? parseBlockParameterToBinding(node.parameters[0], bindingParser) : null;
-    const ast = new t.SwitchBlockCase(
+    if (exhaustiveCheck !== null) {
+      errors.push(
+        new ParseError(
+          node.sourceSpan,
+          '@default block with "never" parameter must be the last case in a switch',
+        ),
+      );
+    }
+
+    const isCase = node.name === 'case';
+    let expression: AST | null = null;
+
+    if (isCase) {
+      expression = parseBlockParameterToBinding(node.parameters[0], bindingParser);
+    } else if (node.name === 'default never') {
+      if (node.parameters.length > 0) {
+        expression = parseBlockParameterToBinding(node.parameters[0], bindingParser);
+      }
+
+      if (
+        node.children.length > 0 ||
+        (node.endSourceSpan !== null &&
+          node.endSourceSpan.start.offset !== node.endSourceSpan.end.offset)
+      ) {
+        errors.push(
+          new ParseError(
+            node.sourceSpan,
+            '@default block with "never" parameter cannot have a body',
+          ),
+        );
+      }
+
+      if (collectedCases.length > 0) {
+        errors.push(
+          new ParseError(
+            node.sourceSpan,
+            'A @case block with no body cannot be followed by a @default block with "never" parameter',
+          ),
+        );
+      }
+
+      exhaustiveCheck = new t.SwitchExhaustiveCheck(
+        expression,
+        node.sourceSpan,
+        node.startSourceSpan,
+        node.endSourceSpan,
+        node.nameSpan,
+      );
+      continue;
+    }
+
+    const switchCase = new t.SwitchBlockCase(
       expression,
-      html.visitAll(visitor, node.children, node.children),
       node.sourceSpan,
       node.startSourceSpan,
       node.endSourceSpan,
       node.nameSpan,
+    );
+    collectedCases.push(switchCase);
+
+    // We need to take into account that some cases might have an empty body. ({})
+    const caseWithoutBody =
+      node.children.length === 0 &&
+      node.endSourceSpan !== null &&
+      node.endSourceSpan.start.offset === node.endSourceSpan.end.offset;
+
+    if (caseWithoutBody) {
+      if (firstCaseStart === null) {
+        firstCaseStart = node.sourceSpan;
+      }
+      // we'll collect the cases until we find a body.
+      continue;
+    }
+
+    let sourceSpan = node.sourceSpan;
+    let startSourceSpan = node.startSourceSpan;
+    if (firstCaseStart !== null) {
+      // We need to create a new sourceSpan that represents all the cases that fallthrough to a single block body
+      sourceSpan = new ParseSourceSpan(firstCaseStart.start, node.sourceSpan.end);
+      startSourceSpan = new ParseSourceSpan(firstCaseStart.start, node.startSourceSpan.end);
+      firstCaseStart = null;
+    }
+
+    const group = new t.SwitchBlockCaseGroup(
+      collectedCases,
+      html.visitAll(visitor, node.children, node.children),
+      sourceSpan,
+      startSourceSpan,
+      node.endSourceSpan,
+      node.nameSpan,
       node.i18n,
     );
-
-    if (expression === null) {
-      defaultCase = ast;
-    } else {
-      cases.push(ast);
-    }
+    groups.push(group);
+    collectedCases = [];
   }
 
-  // Ensure that the default case is last in the array.
-  if (defaultCase !== null) {
-    cases.push(defaultCase);
-  }
+  const node = new t.SwitchBlock(
+    primaryExpression,
+    groups,
+    unknownBlocks,
+    exhaustiveCheck,
+    ast.sourceSpan,
+    ast.startSourceSpan,
+    ast.endSourceSpan,
+    ast.nameSpan,
+  );
 
-  return {
-    node: new t.SwitchBlock(
-      primaryExpression,
-      cases,
-      unknownBlocks,
-      ast.sourceSpan,
-      ast.startSourceSpan,
-      ast.endSourceSpan,
-      ast.nameSpan,
-    ),
-    errors,
-  };
+  return {node, errors};
 }
 
 /** Parses the parameters of a `for` loop block. */
@@ -386,11 +468,23 @@ function parseForLoopParameters(
     }
 
     errors.push(
-      new ParseError(param.sourceSpan, `Unrecognized @for loop paramater "${param.expression}"`),
+      new ParseError(param.sourceSpan, `Unrecognized @for loop parameter "${param.expression}"`),
     );
   }
 
   return result;
+}
+
+function validateTrackByExpression(
+  expression: ASTWithSource<AST>,
+  parseSourceSpan: ParseSourceSpan,
+  errors: ParseError[],
+): void {
+  const visitor = new PipeVisitor();
+  expression.ast.visit(visitor);
+  if (visitor.hasPipe) {
+    errors.push(new ParseError(parseSourceSpan, 'Cannot use pipes in track expressions'));
+  }
 }
 
 /** Parses the `let` parameter of a `for` loop block. */
@@ -526,14 +620,24 @@ function validateSwitchBlock(ast: html.Block): ParseError[] {
       continue;
     }
 
-    if (!(node instanceof html.Block) || (node.name !== 'case' && node.name !== 'default')) {
+    if (
+      !(node instanceof html.Block) ||
+      (node.name !== 'case' && node.name !== 'default' && node.name !== 'default never')
+    ) {
       errors.push(
         new ParseError(node.sourceSpan, '@switch block can only contain @case and @default blocks'),
       );
       continue;
     }
 
-    if (node.name === 'default') {
+    if (node.name === 'default never') {
+      if (hasDefault) {
+        errors.push(
+          new ParseError(node.startSourceSpan, '@switch block can only have one @default block'),
+        );
+      }
+      hasDefault = true;
+    } else if (node.name === 'default') {
       if (hasDefault) {
         errors.push(
           new ParseError(node.startSourceSpan, '@switch block can only have one @default block'),
@@ -614,14 +718,14 @@ function parseConditionalBlockParameters(
       errors.push(
         new ParseError(
           param.sourceSpan,
-          `Unrecognized conditional paramater "${param.expression}"`,
+          `Unrecognized conditional parameter "${param.expression}"`,
         ),
       );
-    } else if (block.name !== 'if') {
+    } else if (block.name !== 'if' && !ELSE_IF_PATTERN.test(block.name)) {
       errors.push(
         new ParseError(
           param.sourceSpan,
-          '"as" expression is only allowed on the primary @if block',
+          '"as" expression is only allowed on `@if` and `@else if` blocks',
         ),
       );
     } else if (expressionAlias !== null) {
@@ -630,9 +734,16 @@ function parseConditionalBlockParameters(
       );
     } else {
       const name = aliasMatch[2].trim();
-      const variableStart = param.sourceSpan.start.moveBy(aliasMatch[1].length);
-      const variableSpan = new ParseSourceSpan(variableStart, variableStart.moveBy(name.length));
-      expressionAlias = new t.Variable(name, name, variableSpan, variableSpan);
+
+      if (IDENTIFIER_PATTERN.test(name)) {
+        const variableStart = param.sourceSpan.start.moveBy(aliasMatch[1].length);
+        const variableSpan = new ParseSourceSpan(variableStart, variableStart.moveBy(name.length));
+        expressionAlias = new t.Variable(name, name, variableSpan, variableSpan);
+      } else {
+        errors.push(
+          new ParseError(param.sourceSpan, '"as" expression must be a valid JavaScript identifier'),
+        );
+      }
     }
   }
 
@@ -686,4 +797,11 @@ function stripOptionalParentheses(param: html.BlockParameter, errors: ParseError
   }
 
   return expression.slice(start, end);
+}
+
+class PipeVisitor extends RecursiveAstVisitor {
+  hasPipe = false;
+  override visitPipe(): any {
+    this.hasPipe = true;
+  }
 }

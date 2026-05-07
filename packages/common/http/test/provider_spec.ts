@@ -6,7 +6,7 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
-import {DOCUMENT, XhrFactory} from '@angular/common';
+import {DOCUMENT, XhrFactory} from '../../index';
 import {
   FetchBackend,
   HTTP_INTERCEPTORS,
@@ -20,16 +20,13 @@ import {
   HttpResponse,
   HttpXhrBackend,
   JsonpClientBackend,
-} from '@angular/common/http';
-import {
-  HttpClientTestingModule,
-  HttpTestingController,
-  provideHttpClientTesting,
-} from '@angular/common/http/testing';
+} from '../index';
+import {HttpClientTestingModule, HttpTestingController, provideHttpClientTesting} from '../testing';
 import {
   ApplicationRef,
   createEnvironmentInjector,
   EnvironmentInjector,
+  ErrorHandler,
   inject,
   InjectionToken,
   PLATFORM_ID,
@@ -38,19 +35,20 @@ import {
 import {TestBed} from '@angular/core/testing';
 import {EMPTY, Observable, from} from 'rxjs';
 
-import {HttpInterceptorFn, resetFetchBackendWarningFlag} from '../src/interceptor';
+import {HttpInterceptorFn} from '../src/interceptor';
 import {
   HttpFeature,
   HttpFeatureKind,
   provideHttpClient,
-  withFetch,
   withInterceptors,
   withInterceptorsFromDi,
   withJsonpSupport,
   withNoXsrfProtection,
   withRequestsMadeViaParent,
+  withXhr,
   withXsrfConfiguration,
 } from '../src/provider';
+import {resetFetchBackendWarningFlag} from '../src/backend';
 
 describe('without provideHttpClientTesting', () => {
   it('should contribute to stability', async () => {
@@ -61,6 +59,7 @@ describe('without provideHttpClientTesting', () => {
     });
 
     let stable = false;
+    const appRef = TestBed.inject(ApplicationRef);
     TestBed.inject(ApplicationRef).isStable.subscribe((v) => {
       stable = v;
     });
@@ -68,8 +67,27 @@ describe('without provideHttpClientTesting', () => {
     expect(stable).toBe(true);
     TestBed.inject(HttpClient).get('/test', {responseType: 'text'}).subscribe();
     expect(stable).toBe(false);
-    await Promise.resolve();
-    expect(stable).toBe(true);
+    await expectAsync(appRef.whenStable()).toBeResolved();
+  });
+
+  it('can use an ErrorHandler that injects HttpClient', () => {
+    // This test ensures there is no circular dependency:
+    // possible loops are:
+    // INTERNAL_APPLICATION_ERROR_HANDLER -> ErrorHandler -> HttpClient -> PendingTasks -> ChangeDetectionScheduler -> INTERNAL_APPLICATION_ERROR_HANDLER
+    TestBed.configureTestingModule({
+      providers: [
+        provideHttpClient(withInterceptors([() => from(Promise.resolve(new HttpResponse()))])),
+        {
+          provide: ErrorHandler,
+          useClass: class extends ErrorHandler {
+            client = inject(HttpClient);
+            override handleError(error: any): void {}
+          },
+        },
+      ],
+    });
+
+    expect(() => TestBed.inject(ApplicationRef)).not.toThrow();
   });
 });
 
@@ -188,7 +206,7 @@ describe('provideHttpClient', () => {
 
     it('should allow injection from an interceptor context', () => {
       const ALPHA = new InjectionToken<string>('alpha', {
-        providedIn: 'root',
+        // Providing a factory implies that the token is provided in root by default
         factory: () => 'alpha',
       });
       const BETA = new InjectionToken<string>('beta', {providedIn: 'root', factory: () => 'beta'});
@@ -344,8 +362,8 @@ describe('provideHttpClient', () => {
     for (const backend of ['fetch', 'xhr']) {
       describe(`given '${backend}' backend`, () => {
         const commonHttpFeatures: HttpFeature<HttpFeatureKind>[] = [];
-        if (backend === 'fetch') {
-          commonHttpFeatures.push(withFetch());
+        if (backend === 'xhr') {
+          commonHttpFeatures.push(withXhr());
         }
 
         it('should have independent HTTP setups if not explicitly specified', async () => {
@@ -477,7 +495,7 @@ describe('provideHttpClient', () => {
           // `console.warn` produced for cases when `fetch`
           // is enabled and we are running in a browser.
           {provide: PLATFORM_ID, useValue: 'browser'},
-          provideHttpClient(withFetch()),
+          provideHttpClient(),
         ],
       });
       const fetchBackend = TestBed.inject(HttpBackend);
@@ -492,10 +510,7 @@ describe('provideHttpClient', () => {
 
       TestBed.resetTestingModule();
       TestBed.configureTestingModule({
-        providers: [
-          provideHttpClient(withFetch()),
-          {provide: HttpBackend, useClass: CustomBackendExtends},
-        ],
+        providers: [provideHttpClient(), {provide: HttpBackend, useClass: CustomBackendExtends}],
       });
 
       const backend = TestBed.inject(HttpBackend);
@@ -504,7 +519,7 @@ describe('provideHttpClient', () => {
 
     it(`fetch API should be used in child when 'withFetch' was used in parent injector`, () => {
       TestBed.configureTestingModule({
-        providers: [provideHttpClient(withFetch()), provideHttpClientTesting()],
+        providers: [provideHttpClient(), provideHttpClientTesting()],
       });
 
       const child = createEnvironmentInjector(
@@ -523,13 +538,7 @@ describe('provideHttpClient', () => {
 
       TestBed.resetTestingModule();
       TestBed.configureTestingModule({
-        providers: [
-          // Setting this flag to verify that there are no
-          // `console.warn` produced for cases when `fetch`
-          // is enabled and we are running in a browser.
-          {provide: PLATFORM_ID, useValue: 'browser'},
-          provideHttpClient(),
-        ],
+        providers: [provideHttpClient()],
       });
 
       TestBed.inject(HttpHandler);
@@ -539,6 +548,8 @@ describe('provideHttpClient', () => {
     });
 
     it('should warn during SSR if fetch is not configured', () => {
+      globalThis['ngServerMode'] = true;
+
       resetFetchBackendWarningFlag();
 
       const consoleWarnSpy = spyOn(console, 'warn');
@@ -550,7 +561,7 @@ describe('provideHttpClient', () => {
           // `console.warn` produced in case `fetch` is not
           // enabled while running code on the server.
           {provide: PLATFORM_ID, useValue: 'server'},
-          provideHttpClient(),
+          provideHttpClient(withXhr()),
         ],
       });
 
@@ -560,7 +571,48 @@ describe('provideHttpClient', () => {
       expect(consoleWarnSpy.calls.argsFor(0)[0]).toContain(
         'NG02801: Angular detected that `HttpClient` is not configured to use `fetch` APIs.',
       );
+
+      globalThis['ngServerMode'] = undefined;
     });
+  });
+});
+
+describe('without providers', () => {
+  beforeEach(() => {
+    setCookie('');
+    TestBed.resetTestingModule();
+  });
+
+  afterEach(() => {
+    let controller: HttpTestingController;
+    try {
+      controller = TestBed.inject(HttpTestingController);
+    } catch (err) {
+      // A failure here means that TestBed wasn't successfully configured. Some tests intentionally
+      // test configuration errors and therefore exit without setting up TestBed for HTTP, so just
+      // exit here without performing verification on the `HttpTestingController` in that case.
+      return;
+    }
+    controller.verify();
+  });
+
+  it('should work without providers', () => {
+    const client = TestBed.inject(HttpClient);
+    const backend = TestBed.inject(HttpBackend);
+
+    expect(client).toBeInstanceOf(HttpClient);
+    expect(backend).toBeInstanceOf(FetchBackend);
+  });
+
+  it('should not use legacy interceptors by default', () => {
+    TestBed.configureTestingModule({
+      providers: [provideLegacyInterceptor('legacy'), provideHttpClientTesting()],
+    });
+
+    TestBed.inject(HttpClient).get('/test', {responseType: 'text'}).subscribe();
+    const req = TestBed.inject(HttpTestingController).expectOne('/test');
+    expect(req.request.headers.has('X-Tag')).toBeFalse();
+    req.flush('');
   });
 });
 

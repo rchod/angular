@@ -14,8 +14,14 @@ import {
   producerUpdateValueVersion,
   REACTIVE_NODE,
   ReactiveNode,
+  runPostProducerCreatedFn,
+  setActiveConsumer,
   SIGNAL,
 } from './graph';
+
+// Required as the signals library is in a separate package, so we need to explicitly ensure the
+// global `ngDevMode` type is defined.
+declare const ngDevMode: boolean | undefined;
 
 /**
  * A computation, which derives a value from a declarative reactive expression.
@@ -50,9 +56,16 @@ export type ComputedGetter<T> = (() => T) & {
 /**
  * Create a computed signal which derives a reactive value from an expression.
  */
-export function createComputed<T>(computation: () => T): ComputedGetter<T> {
+export function createComputed<T>(
+  computation: () => T,
+  equal?: ValueEqualityFn<T>,
+): ComputedGetter<T> {
   const node: ComputedNode<T> = Object.create(COMPUTED_NODE);
   node.computation = computation;
+
+  if (equal !== undefined) {
+    node.equal = equal;
+  }
 
   const computed = () => {
     // Check if the value needs updating before returning it.
@@ -67,7 +80,15 @@ export function createComputed<T>(computation: () => T): ComputedGetter<T> {
 
     return node.value;
   };
+
   (computed as ComputedGetter<T>)[SIGNAL] = node;
+  if (typeof ngDevMode !== 'undefined' && ngDevMode) {
+    computed.toString = () =>
+      `[Computed${node.debugName ? ' (' + node.debugName + ')' : ''}: ${String(node.value)}]`;
+  }
+
+  runPostProducerCreatedFn(node);
+
   return computed as unknown as ComputedGetter<T>;
 }
 
@@ -75,32 +96,32 @@ export function createComputed<T>(computation: () => T): ComputedGetter<T> {
  * A dedicated symbol used before a computed value has been calculated for the first time.
  * Explicitly typed as `any` so we can use it as signal's value.
  */
-const UNSET: any = /* @__PURE__ */ Symbol('UNSET');
+export const UNSET: any = /* @__PURE__ */ Symbol('UNSET');
 
 /**
  * A dedicated symbol used in place of a computed signal value to indicate that a given computation
  * is in progress. Used to detect cycles in computation chains.
  * Explicitly typed as `any` so we can use it as signal's value.
  */
-const COMPUTING: any = /* @__PURE__ */ Symbol('COMPUTING');
+export const COMPUTING: any = /* @__PURE__ */ Symbol('COMPUTING');
 
 /**
  * A dedicated symbol used in place of a computed signal value to indicate that a given computation
  * failed. The thrown error is cached until the computation gets dirty again.
  * Explicitly typed as `any` so we can use it as signal's value.
  */
-const ERRORED: any = /* @__PURE__ */ Symbol('ERRORED');
+export const ERRORED: any = /* @__PURE__ */ Symbol('ERRORED');
 
 // Note: Using an IIFE here to ensure that the spread assignment is not considered
 // a side-effect, ending up preserving `COMPUTED_NODE` and `REACTIVE_NODE`.
-// TODO: remove when https://github.com/evanw/esbuild/issues/3392 is resolved.
-const COMPUTED_NODE = /* @__PURE__ */ (() => {
+const COMPUTED_NODE: Omit<ComputedNode<unknown>, 'computation'> = /* @__PURE__ */ (() => {
   return {
     ...REACTIVE_NODE,
     value: UNSET,
     dirty: true,
     error: null,
     equal: defaultEquals,
+    kind: 'computed',
 
     producerMustRecompute(node: ComputedNode<unknown>): boolean {
       // Force a recomputation if there's no current value, or if the current value is in the
@@ -111,7 +132,9 @@ const COMPUTED_NODE = /* @__PURE__ */ (() => {
     producerRecomputeValue(node: ComputedNode<unknown>): void {
       if (node.value === COMPUTING) {
         // Our computation somehow led to a cyclic read of itself.
-        throw new Error('Detected cycle in computations.');
+        throw new Error(
+          typeof ngDevMode !== 'undefined' && ngDevMode ? 'Detected cycle in computations.' : '',
+        );
       }
 
       const oldValue = node.value;
@@ -119,8 +142,17 @@ const COMPUTED_NODE = /* @__PURE__ */ (() => {
 
       const prevConsumer = consumerBeforeComputation(node);
       let newValue: unknown;
+      let wasEqual = false;
       try {
         newValue = node.computation();
+        // We want to mark this node as errored if calling `equal` throws; however, we don't want
+        // to track any reactive reads inside `equal`.
+        setActiveConsumer(null);
+        wasEqual =
+          oldValue !== UNSET &&
+          oldValue !== ERRORED &&
+          newValue !== ERRORED &&
+          node.equal(oldValue, newValue);
       } catch (err) {
         newValue = ERRORED;
         node.error = err;
@@ -128,12 +160,7 @@ const COMPUTED_NODE = /* @__PURE__ */ (() => {
         consumerAfterComputation(node, prevConsumer);
       }
 
-      if (
-        oldValue !== UNSET &&
-        oldValue !== ERRORED &&
-        newValue !== ERRORED &&
-        node.equal(oldValue, newValue)
-      ) {
+      if (wasEqual) {
         // No change to `valueVersion` - old and new values are
         // semantically equivalent.
         node.value = oldValue;

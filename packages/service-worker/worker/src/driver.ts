@@ -62,6 +62,28 @@ interface LatestEntry {
   latest: string;
 }
 
+// This is a bug in TypeScript, where they removed `PushSubscriptionChangeEvent`
+// based on the incorrect assumption that browsers don't support it.
+interface PushSubscriptionChangeEvent extends ExtendableEvent {
+  // https://w3c.github.io/push-api/#pushsubscriptionchangeeventinit-interface
+  oldSubscription: PushSubscription | null;
+  newSubscription: PushSubscription | null;
+}
+
+/**
+ * Determines if a given URL scope corresponds to localhost.
+ *
+ * @param scope The service worker registration scope URL to test
+ * @returns true if the scope is considered localhost, false otherwise
+ */
+export function isLocalhost(scope: string): boolean {
+  // Use non-capturing groups and ensure localhost is at word boundary
+  // This prevents matching domains like "mylocalhost.com" while allowing valid localhost URLs
+  return /(?:^https?:\/\/)?(?:(?:^|[^\w.])localhost|\[::1\]|127(?:\.\d{1,3}){3})(?::\d+)?(?:\/.*)?$/.test(
+    scope,
+  );
+}
+
 export enum DriverReadyState {
   // The SW is operating in a normal mode, responding to all traffic.
   NORMAL,
@@ -163,20 +185,6 @@ export class Driver implements Debuggable, UpdateSource {
           // As above, it's safe to take over from existing clients immediately, since the new SW
           // version will continue to serve the old application.
           await this.scope.clients.claim();
-
-          // Once all clients have been taken over, we can delete caches used by old versions of
-          // `@angular/service-worker`, which are no longer needed. This can happen in the background.
-          this.idle.schedule('activate: cleanup-old-sw-caches', async () => {
-            try {
-              await this.cleanupOldSwCaches();
-            } catch (err) {
-              // Nothing to do - cleanup failed. Just log it.
-              this.debugger.log(
-                err as Error,
-                'cleanupOldSwCaches @ activate: cleanup-old-sw-caches',
-              );
-            }
-          });
         })(),
       );
 
@@ -195,11 +203,19 @@ export class Driver implements Debuggable, UpdateSource {
       }
     });
 
-    // Handle the fetch, message, and push events.
+    // Handle the fetch, message, push, notificationclick,
+    // notificationclose, pushsubscriptionchange, messageerror, rejectionhandled,
+    // and unhandledrejection events.
     this.scope.addEventListener('fetch', (event) => this.onFetch(event!));
     this.scope.addEventListener('message', (event) => this.onMessage(event!));
     this.scope.addEventListener('push', (event) => this.onPush(event!));
-    this.scope.addEventListener('notificationclick', (event) => this.onClick(event!));
+    this.scope.addEventListener('notificationclick', (event) => this.onClick(event));
+    this.scope.addEventListener('notificationclose', (event) => this.onClose(event));
+    this.scope.addEventListener('pushsubscriptionchange', (event) =>
+      this.onPushSubscriptionChange(event),
+    );
+    this.scope.addEventListener('messageerror', (event) => this.onMessageError(event));
+    this.scope.addEventListener('unhandledrejection', (event) => this.onUnhandledRejection(event));
 
     // The debugger generates debug pages in response to debugging requests.
     this.debugger = new DebugHandler(this, this.adapter);
@@ -327,6 +343,34 @@ export class Driver implements Debuggable, UpdateSource {
     event.waitUntil(this.handleClick(event.notification, event.action));
   }
 
+  private onClose(event: NotificationEvent): void {
+    // Handle the close event and keep the SW alive until it's handled.
+    event.waitUntil(this.handleClose(event.notification, event.action));
+  }
+
+  private onPushSubscriptionChange(event: PushSubscriptionChangeEvent): void {
+    // Handle the pushsubscriptionchange event and keep the SW alive until it's handled.
+    event.waitUntil(this.handlePushSubscriptionChange(event));
+  }
+
+  private onMessageError(event: ExtendableMessageEvent): void {
+    // Handle message deserialization errors that occur when receiving messages
+    // that cannot be deserialized, typically due to corrupted data or unsupported formats.
+    this.debugger.log(
+      `Message error occurred - data could not be deserialized`,
+      `Driver.onMessageError(origin: ${event.origin})`,
+    );
+  }
+
+  private onUnhandledRejection(event: PromiseRejectionEvent): void {
+    // Handle unhandled promise rejections in the service worker.
+    // This is for debugging and preventing silent failures.
+    this.debugger.log(
+      `Unhandled promise rejection occurred`,
+      `Driver.onUnhandledRejection(reason: ${event.reason})`,
+    );
+  }
+
   private async ensureInitialized(event: ExtendableEvent): Promise<void> {
     // Since the SW may have just been started, it may or may not have been initialized already.
     // `this.initialized` will be `null` if initialization has not yet been attempted, or will be a
@@ -432,6 +476,49 @@ export class Driver implements Debuggable, UpdateSource {
     });
   }
 
+  /**
+   * Handles the closing of a notification by extracting its options and
+   * broadcasting a `NOTIFICATION_CLOSE` message.
+   *
+   * This is typically called when a notification is dismissed by the user
+   * or closed programmatically, and it relays that information to clients
+   * listening for service worker events.
+   *
+   * @param notification - The original `Notification` object that was closed.
+   * @param action - The action string associated with the close event, if any (usually an empty string).
+   */
+  private async handleClose(notification: Notification, action: string): Promise<void> {
+    const options: {-readonly [K in keyof Notification]?: Notification[K]} = {};
+    NOTIFICATION_OPTION_NAMES.filter((name) => name in notification).forEach(
+      (name) => (options[name] = notification[name]),
+    );
+
+    await this.broadcast({
+      type: 'NOTIFICATION_CLOSE',
+      data: {action, notification: options},
+    });
+  }
+
+  /**
+   * Handles changes to the push subscription by capturing the old and new
+   * subscription details and broadcasting a `PUSH_SUBSCRIPTION_CHANGE` message.
+   *
+   * This method is triggered when the browser invalidates an existing push
+   * subscription and creates a new one, which can happen without user interaction.
+   * It ensures that clients listening for service worker events are informed
+   * of the subscription update.
+   *
+   * @param event - The `PushSubscriptionChangeEvent` containing the old and new subscriptions.
+   */
+  private async handlePushSubscriptionChange(event: PushSubscriptionChangeEvent): Promise<void> {
+    const {oldSubscription, newSubscription} = event;
+
+    await this.broadcast({
+      type: 'PUSH_SUBSCRIPTION_CHANGE',
+      data: {oldSubscription, newSubscription},
+    });
+  }
+
   private async getLastFocusedMatchingClient(
     scope: ServiceWorkerGlobalScope,
   ): Promise<WindowClient | null> {
@@ -511,10 +598,14 @@ export class Driver implements Debuggable, UpdateSource {
     // Decide which version of the app to use to serve this request. This is asynchronous as in
     // some cases, a record will need to be written to disk about the assignment that is made.
     const appVersion = await this.assignVersion(event);
+    // If there's a configured max age, check whether this version is within that age.
+    const isVersionWithinMaxAge =
+      appVersion?.manifest.applicationMaxAge === undefined ||
+      this.adapter.time - appVersion.manifest.timestamp < appVersion.manifest.applicationMaxAge;
     let res: Response | null = null;
 
     try {
-      if (appVersion !== null) {
+      if (appVersion !== null && isVersionWithinMaxAge) {
         try {
           // Handle the request. First try the AppVersion. If that doesn't work, fall back on the
           // network.
@@ -710,7 +801,14 @@ export class Driver implements Debuggable, UpdateSource {
     //
     // NOTE: For navigation requests, we care about the `resultingClientId`. If it is undefined or
     //       the empty string (which is the case for sub-resource requests), we look at `clientId`.
-    const clientId = event.resultingClientId || event.clientId;
+    //
+    // NOTE: If a request is a worker script, we should use the `clientId`, as worker is a part
+    //       of requesting client.
+    const isWorkerScriptRequest =
+      event.request.destination === 'worker' && event.resultingClientId && event.clientId;
+    const clientId = isWorkerScriptRequest
+      ? event.clientId
+      : event.resultingClientId || event.clientId;
     if (clientId) {
       // Check if there is an assigned client id.
       if (this.clientVersionMap.has(clientId)) {
@@ -737,6 +835,18 @@ export class Driver implements Debuggable, UpdateSource {
           }
 
           appVersion = this.lookupVersionByHash(this.latestHash, 'assignVersion');
+        }
+
+        if (isWorkerScriptRequest) {
+          if (!this.clientVersionMap.has(event.resultingClientId)) {
+            // New worker hasn't been seen before; set this client to requesting client version
+            this.clientVersionMap.set(event.resultingClientId, hash);
+            await this.sync();
+          } else if (this.clientVersionMap.get(event.resultingClientId)! !== hash) {
+            throw new Error(
+              `Version mismatch between worker client ${event.resultingClientId} and requesting client ${clientId}`,
+            );
+          }
         }
 
         // TODO: make sure the version is valid.
@@ -771,6 +881,17 @@ export class Driver implements Debuggable, UpdateSource {
         // First validate the current state.
         if (this.latestHash === null) {
           throw new Error(`Invariant violated (assignVersion): latestHash was null`);
+        }
+
+        if (isWorkerScriptRequest) {
+          if (!this.clientVersionMap.has(event.resultingClientId)) {
+            // New worker hasn't been seen before; set this client to latest hash as well
+            this.clientVersionMap.set(event.resultingClientId, this.latestHash);
+          } else if (this.clientVersionMap.get(event.resultingClientId)! !== this.latestHash) {
+            throw new Error(
+              `Version mismatch between worker client ${event.resultingClientId} and requesting client ${clientId}`,
+            );
+          }
         }
 
         // Pin this client ID to the current latest version, indefinitely.
@@ -843,10 +964,11 @@ export class Driver implements Debuggable, UpdateSource {
         await this.versionFailed(appVersion, err);
       }
     };
-    // TODO: better logic for detecting localhost.
-    if (this.scope.registration.scope.indexOf('://localhost') > -1) {
+
+    if (isLocalhost(this.scope.registration.scope)) {
       return initialize();
     }
+
     this.idle.schedule(`initialization(${appVersion.manifestHash})`, initialize);
   }
 
@@ -1036,21 +1158,6 @@ export class Driver implements Debuggable, UpdateSource {
       // or when the SW revs its format version, which happens from time to time.
       this.debugger.log(err as Error, 'cleanupCaches');
     }
-  }
-
-  /**
-   * Delete caches that were used by older versions of `@angular/service-worker` to avoid running
-   * into storage quota limitations imposed by browsers.
-   * (Since at this point the SW has claimed all clients, it is safe to remove those caches.)
-   */
-  async cleanupOldSwCaches(): Promise<void> {
-    // This is an exceptional case, where we need to interact with caches that would not be
-    // generated by this ServiceWorker (but by old versions of it). Use the native `CacheStorage`
-    // directly.
-    const caches = this.adapter.caches.original;
-    const cacheNames = await caches.keys();
-    const oldSwCacheNames = cacheNames.filter((name) => /^ngsw:(?!\/)/.test(name));
-    await Promise.all(oldSwCacheNames.map((name) => caches.delete(name)));
   }
 
   /**

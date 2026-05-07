@@ -5,65 +5,12 @@
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.dev/license
  */
-import {AbsoluteSourceSpan, ParseSourceSpan} from '@angular/compiler';
 import ts from 'typescript';
 
-import {TemplateDiagnostic, TemplateId} from '../api';
+import {TemplateDiagnostic} from '../api';
 import {makeTemplateDiagnostic} from '../diagnostics';
 
-import {getTemplateMapping, TemplateSourceResolver} from './tcb_util';
-
-/**
- * Wraps the node in parenthesis such that inserted span comments become attached to the proper
- * node. This is an alias for `ts.factory.createParenthesizedExpression` with the benefit that it
- * signifies that the inserted parenthesis are for diagnostic purposes, not for correctness of the
- * rendered TCB code.
- *
- * Note that it is important that nodes and its attached comment are not wrapped into parenthesis
- * by default, as it prevents correct translation of e.g. diagnostics produced for incorrect method
- * arguments. Such diagnostics would then be produced for the parenthesised node whereas the
- * positional comment would be located within that node, resulting in a mismatch.
- */
-export function wrapForDiagnostics(expr: ts.Expression): ts.Expression {
-  return ts.factory.createParenthesizedExpression(expr);
-}
-
-/**
- * Wraps the node in parenthesis such that inserted span comments become attached to the proper
- * node. This is an alias for `ts.factory.createParenthesizedExpression` with the benefit that it
- * signifies that the inserted parenthesis are for use by the type checker, not for correctness of
- * the rendered TCB code.
- */
-export function wrapForTypeChecker(expr: ts.Expression): ts.Expression {
-  return ts.factory.createParenthesizedExpression(expr);
-}
-
-/**
- * Adds a synthetic comment to the expression that represents the parse span of the provided node.
- * This comment can later be retrieved as trivia of a node to recover original source locations.
- */
-export function addParseSpanInfo(node: ts.Node, span: AbsoluteSourceSpan | ParseSourceSpan): void {
-  let commentText: string;
-  if (span instanceof AbsoluteSourceSpan) {
-    commentText = `${span.start},${span.end}`;
-  } else {
-    commentText = `${span.start.offset},${span.end.offset}`;
-  }
-  ts.addSyntheticTrailingComment(
-    node,
-    ts.SyntaxKind.MultiLineCommentTrivia,
-    commentText,
-    /* hasTrailingNewLine */ false,
-  );
-}
-
-/**
- * Adds a synthetic comment to the function declaration that contains the template id
- * of the class declaration.
- */
-export function addTemplateId(tcb: ts.FunctionDeclaration, id: TemplateId): void {
-  ts.addSyntheticLeadingComment(tcb, ts.SyntaxKind.MultiLineCommentTrivia, id, true);
-}
+import {getSourceMapping, TypeCheckSourceResolver} from './tcb_util';
 
 /**
  * Determines if the diagnostic should be reported. Some diagnostics are produced because of the
@@ -94,12 +41,12 @@ export function shouldReportDiagnostic(diagnostic: ts.Diagnostic): boolean {
  */
 export function translateDiagnostic(
   diagnostic: ts.Diagnostic,
-  resolver: TemplateSourceResolver,
+  resolver: TypeCheckSourceResolver,
 ): TemplateDiagnostic | null {
   if (diagnostic.file === undefined || diagnostic.start === undefined) {
     return null;
   }
-  const fullMapping = getTemplateMapping(
+  const fullMapping = getSourceMapping(
     diagnostic.file,
     diagnostic.start,
     resolver,
@@ -109,7 +56,7 @@ export function translateDiagnostic(
     return null;
   }
 
-  const {sourceLocation, templateSourceMapping, span} = fullMapping;
+  const {sourceLocation, sourceMapping: templateSourceMapping, span} = fullMapping;
   return makeTemplateDiagnostic(
     sourceLocation.id,
     templateSourceMapping,
@@ -117,5 +64,12 @@ export function translateDiagnostic(
     diagnostic.category,
     diagnostic.code,
     diagnostic.messageText,
+    undefined,
+    diagnostic.reportsDeprecated !== undefined
+      ? {
+          reportsDeprecated: diagnostic.reportsDeprecated,
+          relatedMessages: diagnostic.relatedInformation,
+        }
+      : undefined,
   );
 }

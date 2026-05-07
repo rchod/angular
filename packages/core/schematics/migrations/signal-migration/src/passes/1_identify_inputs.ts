@@ -8,10 +8,11 @@
 
 import assert from 'assert';
 import ts from 'typescript';
-import {ReferenceEmitter} from '@angular/compiler-cli/src/ngtsc/imports';
-import {DtsMetadataReader} from '@angular/compiler-cli/src/ngtsc/metadata';
-import {PartialEvaluator} from '@angular/compiler-cli/src/ngtsc/partial_evaluator';
-import {TypeScriptReflectionHost} from '@angular/compiler-cli/src/ngtsc/reflection';
+import {
+  DtsMetadataReader,
+  PartialEvaluator,
+  TypeScriptReflectionHost,
+} from '@angular/compiler-cli/private/migrations';
 import {extractDecoratorInput} from '../input_detection/input_decorator';
 import {isInputContainerNode} from '../input_detection/input_node';
 import {KnownInputs} from '../input_detection/known_inputs';
@@ -19,7 +20,7 @@ import {MigrationHost} from '../migration_host';
 import {MigrationResult} from '../result';
 import {getInputDescriptor} from '../utils/input_id';
 import {prepareAndCheckForConversion} from '../convert-input/prepare_and_check';
-import {isInputMemberIncompatibility} from '../input_detection/incompatibility';
+import {isFieldIncompatibility} from './problematic_patterns/incompatibility';
 
 /**
  * Phase where we iterate through all source files of the program (including `.d.ts`)
@@ -32,7 +33,6 @@ export function pass1__IdentifySourceFileAndDeclarationInputs(
   reflector: TypeScriptReflectionHost,
   dtsMetadataReader: DtsMetadataReader,
   evaluator: PartialEvaluator,
-  refEmitter: ReferenceEmitter,
   knownDecoratorInputs: KnownInputs,
   result: MigrationResult,
 ) {
@@ -43,7 +43,6 @@ export function pass1__IdentifySourceFileAndDeclarationInputs(
       reflector,
       dtsMetadataReader,
       evaluator,
-      refEmitter,
     );
     if (decoratorInput !== null) {
       assert(isInputContainerNode(node), 'Expected input to be declared on accessor or property.');
@@ -62,7 +61,7 @@ export function pass1__IdentifySourceFileAndDeclarationInputs(
           host.compilerOptions,
         );
 
-        if (isInputMemberIncompatibility(conversionPreparation)) {
+        if (isFieldIncompatibility(conversionPreparation)) {
           knownDecoratorInputs.markFieldIncompatible(inputDescr, conversionPreparation);
           result.sourceInputs.set(inputDescr, null);
         } else {

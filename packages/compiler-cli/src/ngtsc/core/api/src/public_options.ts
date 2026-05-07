@@ -24,22 +24,6 @@ export interface LegacyNgcOptions {
   allowEmptyCodegenFiles?: boolean;
 
   /**
-   * Whether to type check the entire template.
-   *
-   * This flag currently controls a couple aspects of template type-checking, including
-   * whether embedded views are checked.
-   *
-   * For maximum type-checking, set this to `true`, and set `strictTemplates` to `true`.
-   *
-   * It is an error for this flag to be `false`, while `strictTemplates` is set to `true`.
-   *
-   * @deprecated The `fullTemplateTypeCheck` option has been superseded by the more granular
-   * `strictTemplates` family of compiler options. Usage of `fullTemplateTypeCheck` is therefore
-   * deprecated, `strictTemplates` and its related options should be used instead.
-   */
-  fullTemplateTypeCheck?: boolean;
-
-  /**
    * Whether to generate a flat module index of the given name and the corresponding
    * flat module metadata. This option is intended to be used when creating flat
    * modules similar to how `@angular/core` and `@angular/common` are packaged.
@@ -89,17 +73,18 @@ export interface LegacyNgcOptions {
 }
 
 /**
- * Options related to template type-checking and its strictness.
+ * Options related to Angular-specific type-checking and its strictness.
  *
  * @publicApi
  */
-export interface StrictTemplateOptions {
+export interface TypeCheckingOptions {
+  /** Whether type checking of host bindings is enabled. */
+  typeCheckHostBindings?: boolean;
+
   /**
    * If `true`, implies all template strictness flags below (unless individually disabled).
    *
-   * This flag is a superset of the deprecated `fullTemplateTypeCheck` option.
-   *
-   * Defaults to `false`, even if "fullTemplateTypeCheck" is `true`.
+   * Defaults to `true`
    */
   strictTemplates?: boolean;
 
@@ -112,7 +97,7 @@ export interface StrictTemplateOptions {
    * directive or component is receiving the binding. If set to `true`, both sides of the assignment
    * are checked.
    *
-   * Defaults to `false`, even if "fullTemplateTypeCheck" is set.
+   * Defaults to `false`.
    */
   strictInputTypes?: boolean;
 
@@ -120,7 +105,7 @@ export interface StrictTemplateOptions {
    * Whether to check if the input binding attempts to assign to a restricted field (readonly,
    * private, or protected) on the directive/component.
    *
-   * Defaults to `false`, even if "fullTemplateTypeCheck", "strictTemplates" and/or
+   * Defaults to `false`, even if "strictTemplates" and/or
    * "strictInputTypes" is set. Note that if `strictInputTypes` is not set, or set to `false`, this
    * flag has no effect.
    *
@@ -137,7 +122,7 @@ export interface StrictTemplateOptions {
    * binding expressions are wrapped in a non-null assertion operator to effectively disable strict
    * null checks.
    *
-   * Defaults to `false`, even if "fullTemplateTypeCheck" is set. Note that if `strictInputTypes` is
+   * Defaults to `false`. Note that if `strictInputTypes` is
    * not set, or set to `false`, this flag has no effect.
    */
   strictNullInputTypes?: boolean;
@@ -151,7 +136,7 @@ export interface StrictTemplateOptions {
    * without a value, so with this flag set to `true`, an error would be reported. If set to
    * `false`, text attributes will never report an error.
    *
-   * Defaults to `false`, even if "fullTemplateTypeCheck" is set. Note that if `strictInputTypes` is
+   * Defaults to `false`. Note that if `strictInputTypes` is
    * not set, or set to `false`, this flag has no effect.
    */
   strictAttributeTypes?: boolean;
@@ -163,7 +148,7 @@ export interface StrictTemplateOptions {
    * then the return type of `a?.b` for example will be the same as the type of the ternary
    * expression `a != null ? a.b : a`.
    *
-   * Defaults to `false`, even if "fullTemplateTypeCheck" is set.
+   * Defaults to `false`.
    */
   strictSafeNavigationTypes?: boolean;
 
@@ -174,7 +159,7 @@ export interface StrictTemplateOptions {
    * determined by the type of `document.createElement` for the given DOM node. If set to `false`,
    * the type of `ref` for DOM nodes will be `any`.
    *
-   * Defaults to `false`, even if "fullTemplateTypeCheck" is set.
+   * Defaults to `false`.
    */
   strictDomLocalRefTypes?: boolean;
 
@@ -186,7 +171,7 @@ export interface StrictTemplateOptions {
    * `EventEmitter`/`Subject` of the output. If set to `false`, the `$event` variable will be of
    * type `any`.
    *
-   * Defaults to `false`, even if "fullTemplateTypeCheck" is set.
+   * Defaults to `false`.
    */
   strictOutputEventTypes?: boolean;
 
@@ -197,7 +182,7 @@ export interface StrictTemplateOptions {
    * `HTMLElementEventMap`, with a fallback to the native `Event` type. If set to `false`, the
    * `$event` variable will be of type `any`.
    *
-   * Defaults to `false`, even if "fullTemplateTypeCheck" is set.
+   * Defaults to `false`.
    */
   strictDomEventTypes?: boolean;
 
@@ -210,7 +195,7 @@ export interface StrictTemplateOptions {
    * will be included in the context type for the template. If `false`, any generic parameters will
    * be set to `any` in the template context type.
    *
-   * Defaults to `false`, even if "fullTemplateTypeCheck" is set.
+   * Defaults to `false`.
    */
   strictContextGenerics?: boolean;
 
@@ -218,7 +203,7 @@ export interface StrictTemplateOptions {
    * Whether object or array literals defined in templates use their inferred type, or are
    * interpreted as `any`.
    *
-   * Defaults to `false` unless `fullTemplateTypeCheck` or `strictTemplates` are set.
+   * Defaults to `false` unless `strictTemplates` is set.
    */
   strictLiteralTypes?: boolean;
 }
@@ -288,14 +273,14 @@ export interface BazelAndG3Options {
    *
    * A consumer of such a path-mapped library will write an import like:
    *
-   * ```typescript
+   * ```ts
    * import {LibModule} from 'lib/deep/path/to/module';
    * ```
    *
    * The compiler will attempt to generate imports of directives/pipes from that same module
    * specifier (the compiler does not rewrite the user's given import path, unlike View Engine).
    *
-   * ```typescript
+   * ```ts
    * import {LibDir, LibCmp, LibPipe} from 'lib/deep/path/to/module';
    * ```
    *
@@ -339,6 +324,27 @@ export interface BazelAndG3Options {
    * extra imports are needed for bundling purposes in g3.
    */
   generateExtraImportsInLocalMode?: boolean;
+
+  /**
+   * Whether to allow the experimental declaration-only emission mode when the `emitDeclarationOnly`
+   * TS compiler option is enabled.
+   *
+   * The declaration-only emission mode relies on the local compilation mode for fast type
+   * declaration emission, i.e. emitting `.d.ts` files without type-checking. Certain restrictions
+   * on supported code constructs apply due to the absence of type information for external
+   * references.
+   *
+   * The mode is experimental and specifically tailored to support fast type declaration emission
+   * for the Gemini app in g3 for the initial phase of the experiment.
+   */
+  _experimentalAllowEmitDeclarationOnly?: boolean;
+
+  /**
+   * Whether to follow the Javascript optional chaining specs: returning `undefined` instead of `null` for null-safe navigation operations.
+   *
+   * Defaults to `false`.
+   */
+  legacyOptionalChaining?: boolean;
 }
 
 /**

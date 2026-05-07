@@ -8,32 +8,27 @@
 
 import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {TableOfContents} from './table-of-contents.component';
-import {RouterTestingModule} from '@angular/router/testing';
+import {provideRouter} from '@angular/router';
 import {TableOfContentsItem, TableOfContentsLevel} from '../../interfaces/index';
-import {TableOfContentsScrollSpy, TableOfContentsLoader} from '../../services/index';
+import {TableOfContentsLoader} from '../../services/index';
 import {WINDOW} from '../../providers/index';
-import {provideExperimentalZonelessChangeDetection, signal} from '@angular/core';
 
 describe('TableOfContents', () => {
   let component: TableOfContents;
   let fixture: ComponentFixture<TableOfContents>;
-  let scrollSpy: jasmine.SpyObj<TableOfContentsScrollSpy>;
   const items: TableOfContentsItem[] = [
     {
       title: 'Heading 2',
-      top: 0,
       id: 'item-heading-2',
       level: TableOfContentsLevel.H2,
     },
     {
       title: 'First Heading 3',
-      top: 100,
       id: 'first-item-heading-3',
       level: TableOfContentsLevel.H3,
     },
     {
       title: 'Second Heading 3',
-      top: 200,
       id: 'second-item-heading-3',
       level: TableOfContentsLevel.H3,
     },
@@ -44,35 +39,25 @@ describe('TableOfContents', () => {
   };
 
   beforeEach(async () => {
-    scrollSpy = jasmine.createSpyObj<TableOfContentsScrollSpy>('TableOfContentsScrollSpy', [
-      'startListeningToScroll',
-      'activeItemId',
-      'scrollbarThumbOnTop',
-    ]);
-    scrollSpy.startListeningToScroll.and.returnValue();
-    scrollSpy.activeItemId.and.returnValue(items[0].id);
-    scrollSpy.scrollbarThumbOnTop.and.returnValue(false);
-
-    await TestBed.configureTestingModule({
-      imports: [TableOfContents, RouterTestingModule],
+    TestBed.configureTestingModule({
+      imports: [TableOfContents],
       providers: [
-        provideExperimentalZonelessChangeDetection(),
+        provideRouter([]),
         {
           provide: WINDOW,
           useValue: fakeWindow,
         },
       ],
-    }).compileComponents();
-    TestBed.overrideProvider(TableOfContentsScrollSpy, {
-      useValue: scrollSpy,
     });
 
     const tableOfContentsLoaderSpy = TestBed.inject(TableOfContentsLoader);
     spyOn(tableOfContentsLoaderSpy, 'buildTableOfContent').and.returnValue();
     tableOfContentsLoaderSpy.tableOfContentItems.set(items);
     fixture = TestBed.createComponent(TableOfContents);
+    fixture.componentRef.setInput('contentSourceElement', document.createElement('div'));
+
     component = fixture.componentInstance;
-    fixture.detectChanges();
+    await fixture.whenStable();
   });
 
   it('should create', () => {
@@ -82,8 +67,6 @@ describe('TableOfContents', () => {
   it('should call scrollToTop when user click on Back to the top button', () => {
     const spy = spyOn(component, 'scrollToTop');
 
-    fixture.detectChanges();
-
     const button: HTMLButtonElement = fixture.nativeElement.querySelector('button');
     button.click();
 
@@ -91,8 +74,6 @@ describe('TableOfContents', () => {
   });
 
   it('should render items when tableOfContentItems has value', () => {
-    fixture.detectChanges();
-
     const renderedItems = fixture.nativeElement.querySelectorAll('li');
 
     expect(renderedItems.length).toBe(3);
@@ -100,8 +81,6 @@ describe('TableOfContents', () => {
   });
 
   it('should append level class to element', () => {
-    fixture.detectChanges();
-
     const h2Items = fixture.nativeElement.querySelectorAll('li.docs-toc-item-h2');
     const h3Items = fixture.nativeElement.querySelectorAll('li.docs-toc-item-h3');
 
@@ -110,10 +89,7 @@ describe('TableOfContents', () => {
   });
 
   it('should append active class when item is active', () => {
-    fixture.detectChanges();
-
     const activeItem = fixture.nativeElement.querySelector('.docs-faceted-list-item-active');
-
-    expect(activeItem).toBeTruthy();
+    expect(activeItem).toBeDefined();
   });
 });

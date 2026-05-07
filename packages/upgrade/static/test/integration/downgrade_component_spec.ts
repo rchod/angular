@@ -10,6 +10,7 @@ import {
   ChangeDetectionStrategy,
   Compiler,
   Component,
+  createComponent,
   destroyPlatform,
   Directive,
   ElementRef,
@@ -27,7 +28,7 @@ import {
 import {fakeAsync, tick, waitForAsync} from '@angular/core/testing';
 import {BrowserModule} from '@angular/platform-browser';
 import {platformBrowserDynamic} from '@angular/platform-browser-dynamic';
-import {downgradeComponent, UpgradeComponent, UpgradeModule} from '@angular/upgrade/static';
+import {downgradeComponent, UpgradeComponent, UpgradeModule} from '../../../static';
 
 import * as angular from '../../../src/common/src/angular1';
 import {$ROOT_SCOPE} from '../../../src/common/src/constants';
@@ -69,6 +70,8 @@ withEachNg1Version(() => {
           'literal: {{literal}}; interpolate: {{interpolate}}; ' +
           'oneWayA: {{oneWayA}}; oneWayB: {{oneWayB}}; ' +
           'twoWayA: {{twoWayA}}; twoWayB: {{twoWayB}}; ({{ngOnChangesCount}})',
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class Ng2Component implements OnChanges {
         ngOnChangesCount = 0;
@@ -181,6 +184,8 @@ withEachNg1Version(() => {
         selector: 'ng2',
         inputs: ['message'],
         template: 'Message: {{message()}}',
+        changeDetection: ChangeDetectionStrategy.Eager,
+        standalone: false,
       })
       class Ng2Component {
         message = input<string>('');
@@ -225,6 +230,7 @@ withEachNg1Version(() => {
         inputs: ['oneWayB'],
         template: 'oneWayB: {{oneWayB}}',
         changeDetection: ChangeDetectionStrategy.OnPush,
+        standalone: false,
       })
       class Ng2Component {
         ngOnChangesCount = 0;
@@ -262,7 +268,12 @@ withEachNg1Version(() => {
         $rootScope['listener'] = listenerSpy;
       });
 
-      @Component({selector: 'ng2', template: `model: {{ model }};`})
+      @Component({
+        selector: 'ng2',
+        template: `model: {{ model }};`,
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class Ng2Component implements OnChanges {
         ngOnChangesCount = 0;
         @Input() model = '?';
@@ -306,7 +317,12 @@ withEachNg1Version(() => {
     it('should run change-detection on every digest (by default)', waitForAsync(() => {
       let ng2Component: Ng2Component;
 
-      @Component({selector: 'ng2', template: '{{ value1 }} | {{ value2 }}'})
+      @Component({
+        selector: 'ng2',
+        template: '{{ value1 }} | {{ value2 }}',
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class Ng2Component {
         @Input() value1 = -1;
         @Input() value2 = -1;
@@ -371,7 +387,12 @@ withEachNg1Version(() => {
     it('should not run change-detection on every digest when opted out', waitForAsync(() => {
       let ng2Component: Ng2Component;
 
-      @Component({selector: 'ng2', template: '{{ value1 }} | {{ value2 }}'})
+      @Component({
+        selector: 'ng2',
+        template: '{{ value1 }} | {{ value2 }}',
+        changeDetection: ChangeDetectionStrategy.Eager,
+        standalone: false,
+      })
       class Ng2Component {
         @Input() value1 = -1;
         @Input() value2 = -1;
@@ -432,7 +453,12 @@ withEachNg1Version(() => {
     }));
 
     it('should still run normal Angular change-detection regardless of `propagateDigest`', fakeAsync(() => {
-      @Component({selector: 'ng2', template: '{{ value }}'})
+      @Component({
+        selector: 'ng2',
+        template: '{{ value }}',
+        changeDetection: ChangeDetectionStrategy.Eager,
+        standalone: false,
+      })
       class Ng2Component {
         value = 'foo';
         constructor() {
@@ -468,6 +494,8 @@ withEachNg1Version(() => {
         selector: 'ng2',
         template: ` ngOnChangesCount: {{ ngOnChangesCount }} | firstChangesCount:
           {{ firstChangesCount }} | initialValue: {{ initialValue }}`,
+        changeDetection: ChangeDetectionStrategy.Eager,
+        standalone: false,
       })
       class Ng2Component implements OnChanges {
         ngOnChangesCount = 0;
@@ -525,7 +553,12 @@ withEachNg1Version(() => {
       });
 
       let ng2Instance: Ng2;
-      @Component({selector: 'ng2', template: '<span>{{_value}}</span>'})
+      @Component({
+        selector: 'ng2',
+        template: '<span>{{_value}}</span>',
+        changeDetection: ChangeDetectionStrategy.Eager,
+        standalone: false,
+      })
       class Ng2 {
         private _value: any = '';
         private _onChangeCallback: (_: any) => void = () => {};
@@ -588,7 +621,12 @@ withEachNg1Version(() => {
 
     it('should properly run cleanup when ng1 directive is destroyed', waitForAsync(() => {
       let destroyed = false;
-      @Component({selector: 'ng2', template: '<ul><li>test1</li><li>test2</li></ul>'})
+      @Component({
+        selector: 'ng2',
+        template: '<ul><li>test1</li><li>test2</li></ul>',
+        changeDetection: ChangeDetectionStrategy.Eager,
+        standalone: false,
+      })
       class Ng2Component implements OnDestroy {
         ngOnDestroy() {
           destroyed = true;
@@ -652,19 +690,29 @@ withEachNg1Version(() => {
       @Component({
         selector: 'ng2-outer',
         template: '<div *ngIf="!destroyIt"><ng1></ng1></div>',
+        changeDetection: ChangeDetectionStrategy.Eager,
+        standalone: false,
       })
       class Ng2OuterComponent {
         @Input() destroyIt = false;
       }
 
-      @Component({selector: 'ng2-inner', template: 'test'})
+      @Component({
+        selector: 'ng2-inner',
+        template: 'test',
+        changeDetection: ChangeDetectionStrategy.Eager,
+        standalone: false,
+      })
       class Ng2InnerComponent implements OnDestroy {
         ngOnDestroy() {
           destroyed = true;
         }
       }
 
-      @Directive({selector: 'ng1'})
+      @Directive({
+        selector: 'ng1',
+        standalone: false,
+      })
       class Ng1ComponentFacade extends UpgradeComponent {
         constructor(elementRef: ElementRef, injector: Injector) {
           super('ng1', elementRef, injector);
@@ -699,7 +747,12 @@ withEachNg1Version(() => {
     }));
 
     it('should destroy the AngularJS app when `PlatformRef` is destroyed', waitForAsync(() => {
-      @Component({selector: 'ng2', template: '<span>NG2</span>'})
+      @Component({
+        selector: 'ng2',
+        template: '<span>NG2</span>',
+        changeDetection: ChangeDetectionStrategy.Eager,
+        standalone: false,
+      })
       class Ng2Component {}
 
       @NgModule({
@@ -758,7 +811,12 @@ withEachNg1Version(() => {
     }));
 
     it('should work when compiled outside the dom (by fallback to the root ng2.injector)', waitForAsync(() => {
-      @Component({selector: 'ng2', template: 'test'})
+      @Component({
+        selector: 'ng2',
+        template: 'test',
+        changeDetection: ChangeDetectionStrategy.Eager,
+        standalone: false,
+      })
       class Ng2Component {}
 
       @NgModule({declarations: [Ng2Component], imports: [BrowserModule, UpgradeModule]})
@@ -799,7 +857,12 @@ withEachNg1Version(() => {
     }));
 
     it('should allow attribute selectors for downgraded components', waitForAsync(() => {
-      @Component({selector: '[itWorks]', template: 'It works'})
+      @Component({
+        selector: '[itWorks]',
+        template: 'It works',
+        changeDetection: ChangeDetectionStrategy.Eager,
+        standalone: false,
+      })
       class WorksComponent {}
 
       @NgModule({declarations: [WorksComponent], imports: [BrowserModule, UpgradeModule]})
@@ -819,10 +882,20 @@ withEachNg1Version(() => {
     }));
 
     it('should allow attribute selectors for components in ng2', waitForAsync(() => {
-      @Component({selector: '[itWorks]', template: 'It works'})
+      @Component({
+        selector: '[itWorks]',
+        template: 'It works',
+        changeDetection: ChangeDetectionStrategy.Eager,
+        standalone: false,
+      })
       class WorksComponent {}
 
-      @Component({selector: 'root-component', template: '<span itWorks></span>!'})
+      @Component({
+        selector: 'root-component',
+        template: '<span itWorks></span>!',
+        changeDetection: ChangeDetectionStrategy.Eager,
+        standalone: false,
+      })
       class RootComponent {}
 
       @NgModule({
@@ -845,10 +918,19 @@ withEachNg1Version(() => {
     }));
 
     it('should respect hierarchical dependency injection for ng2', waitForAsync(() => {
-      @Component({selector: 'parent', template: 'parent(<ng-content></ng-content>)'})
+      @Component({
+        selector: 'parent',
+        template: 'parent(<ng-content></ng-content>)',
+        standalone: false,
+      })
       class ParentComponent {}
 
-      @Component({selector: 'child', template: 'child'})
+      @Component({
+        selector: 'child',
+        template: 'child',
+        changeDetection: ChangeDetectionStrategy.Eager,
+        standalone: false,
+      })
       class ChildComponent {
         constructor(parent: ParentComponent) {}
       }
@@ -874,10 +956,19 @@ withEachNg1Version(() => {
     }));
 
     it('should be compiled synchronously, if possible', waitForAsync(() => {
-      @Component({selector: 'ng2A', template: '<ng-content></ng-content>'})
+      @Component({
+        selector: 'ng2A',
+        template: '<ng-content></ng-content>',
+        standalone: false,
+      })
       class Ng2ComponentA {}
 
-      @Component({selector: 'ng2B', template: "{{ 'Ng2 template' }}"})
+      @Component({
+        selector: 'ng2B',
+        template: "{{ 'Ng2 template' }}",
+        changeDetection: ChangeDetectionStrategy.Eager,
+        standalone: false,
+      })
       class Ng2ComponentB {}
 
       @NgModule({
@@ -903,7 +994,12 @@ withEachNg1Version(() => {
     it('should work with ng2 lazy loaded components', waitForAsync(() => {
       let componentInjector: Injector;
 
-      @Component({selector: 'ng2', template: ''})
+      @Component({
+        selector: 'ng2',
+        template: '',
+        changeDetection: ChangeDetectionStrategy.Eager,
+        standalone: false,
+      })
       class Ng2Component {
         constructor(injector: Injector) {
           componentInjector = injector;
@@ -918,7 +1014,11 @@ withEachNg1Version(() => {
         ngDoBootstrap() {}
       }
 
-      @Component({template: ''})
+      @Component({
+        template: '',
+        changeDetection: ChangeDetectionStrategy.Eager,
+        standalone: false,
+      })
       class LazyLoadedComponent {
         constructor(public module: NgModuleRef<any>) {}
       }
@@ -940,16 +1040,22 @@ withEachNg1Version(() => {
         const compiler = modInjector.get(Compiler);
         const modFactory = compiler.compileModuleSync(LazyLoadedModule);
         const childMod = modFactory.create(modInjector);
-        const cmpFactory =
-          childMod.componentFactoryResolver.resolveComponentFactory(LazyLoadedComponent)!;
-        const lazyCmp = cmpFactory.create(componentInjector);
+        const lazyCmp = createComponent(LazyLoadedComponent, {
+          environmentInjector: childMod.injector,
+          elementInjector: componentInjector,
+        });
 
         expect(lazyCmp.instance.module.injector === childMod.injector).toBe(true);
       });
     }));
 
     it('should throw if `downgradedModule` is specified', waitForAsync(() => {
-      @Component({selector: 'ng2', template: ''})
+      @Component({
+        selector: 'ng2',
+        template: '',
+        changeDetection: ChangeDetectionStrategy.Eager,
+        standalone: false,
+      })
       class Ng2Component {}
 
       @NgModule({
@@ -986,7 +1092,11 @@ withEachNg1Version(() => {
     afterEach(() => destroyPlatform());
 
     it('should downgrade a standalone component using NgModule APIs', waitForAsync(() => {
-      @Component({selector: 'ng2', standalone: true, template: 'Hi from Angular!'})
+      @Component({
+        selector: 'ng2',
+        template: 'Hi from Angular!',
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class Ng2Component {}
 
       const ng1Module = angular

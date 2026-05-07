@@ -3,25 +3,24 @@
 Angular directives offer a great way to encapsulate reusable behaviors— directives can apply
 attributes, CSS classes, and event listeners to an element.
 
-The *directive composition API* lets you apply directives to a component's host element from
-*within* the component TypeScript class.
+The _directive composition API_ lets you apply directives to a component's host element from
+_within_ the component TypeScript class.
 
 ## Adding directives to a component
 
 You apply directives to a component by adding a `hostDirectives` property to a component's
-decorator. We call such directives *host directives*.
+decorator. We call such directives _host directives_.
 
 In this example, we apply the directive `MenuBehavior` to the host element of `AdminMenu`. This
 works similarly to applying the `MenuBehavior` to the `<admin-menu>` element in a template.
 
 ```typescript
 @Component({
-  standalone: true,
   selector: 'admin-menu',
   template: 'admin-menu.html',
   hostDirectives: [MenuBehavior],
 })
-export class AdminMenu { }
+export class AdminMenu {}
 ```
 
 When the framework renders a component, Angular also creates an instance of each host directive. The
@@ -32,7 +31,7 @@ and outputs are not exposed as part of the component's public API. See
 **Angular applies host directives statically at compile time.** You cannot dynamically add
 directives at runtime.
 
-**Directives used in `hostDirectives` must be `standalone: true`.**
+**Directives used in `hostDirectives` may not specify `standalone: false`.**
 
 **Angular ignores the `selector` of directives applied in the `hostDirectives` property.**
 
@@ -44,24 +43,24 @@ in your component's API by expanding the entry in `hostDirectives`:
 
 ```typescript
 @Component({
-  standalone: true,
   selector: 'admin-menu',
   template: 'admin-menu.html',
-  hostDirectives: [{
-    directive: MenuBehavior,
-    inputs: ['menuId'],
-    outputs: ['menuClosed'],
-  }],
+  hostDirectives: [
+    {
+      directive: MenuBehavior,
+      inputs: ['menuId'],
+      outputs: ['menuClosed'],
+    },
+  ],
 })
-export class AdminMenu { }
+export class AdminMenu {}
 ```
 
 By explicitly specifying the inputs and outputs, consumers of the component with `hostDirective` can
 bind them in a template:
 
 ```angular-html
-
-<admin-menu menuId="top-menu" (menuClosed)="logMenuClosed()">
+<admin-menu menuId="top-menu" (menuClosed)="logMenuClosed()"></admin-menu>
 ```
 
 Furthermore, you can alias inputs and outputs from `hostDirective` to customize the API of your
@@ -69,21 +68,21 @@ component:
 
 ```typescript
 @Component({
-  standalone: true,
   selector: 'admin-menu',
   template: 'admin-menu.html',
-  hostDirectives: [{
-    directive: MenuBehavior,
-    inputs: ['menuId: id'],
-    outputs: ['menuClosed: closed'],
-  }],
+  hostDirectives: [
+    {
+      directive: MenuBehavior,
+      inputs: ['menuId: id'],
+      outputs: ['menuClosed: closed'],
+    },
+  ],
 })
-export class AdminMenu { }
+export class AdminMenu {}
 ```
 
 ```angular-html
-
-<admin-menu id="top-menu" (closed)="logMenuClosed()">
+<admin-menu id="top-menu" (closed)="logMenuClosed()"></admin-menu>
 ```
 
 ## Adding directives to another directive
@@ -108,14 +107,12 @@ export class Tooltip { }
 
 // MenuWithTooltip can compose behaviors from multiple other directives
 @Directive({
-  standalone: true,
   hostDirectives: [Tooltip, Menu],
 })
 export class MenuWithTooltip { }
 
 // CustomWidget can apply the already-composed behaviors from MenuWithTooltip
 @Directive({
-  standalone: true,
   hostDirectives: [MenuWithTooltip],
 })
 export class SpecializedMenuWithTooltip { }
@@ -132,12 +129,11 @@ The following example shows minimal use of a host directive:
 
 ```typescript
 @Component({
-  standalone: true,
   selector: 'admin-menu',
   template: 'admin-menu.html',
   hostDirectives: [MenuBehavior],
 })
-export class AdminMenu { }
+export class AdminMenu {}
 ```
 
 The order of execution here is:
@@ -160,13 +156,11 @@ example.
 export class Tooltip { }
 
 @Directive({
-  standalone: true,
   hostDirectives: [Tooltip],
 })
 export class CustomTooltip { }
 
 @Directive({
-  standalone: true,
   hostDirectives: [CustomTooltip],
 })
 export class EvenMoreCustomTooltip { }

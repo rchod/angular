@@ -14,9 +14,9 @@ import {
   NgZone,
   RendererFactory2,
   ɵperformanceMarkFeature as performanceMarkFeature,
-  InjectionToken,
+  inject,
 } from '@angular/core';
-import {ɵDomRendererFactory2 as DomRendererFactory2} from '@angular/platform-browser';
+import {ɵDomRendererFactory2 as DomRendererFactory2} from '../../../index';
 
 import {AsyncAnimationRendererFactory} from './async_animation_renderer';
 
@@ -35,7 +35,7 @@ import {AsyncAnimationRendererFactory} from './async_animation_renderer';
  * is no need to import the `BrowserAnimationsModule` NgModule at all, just add
  * providers returned by this function to the `providers` list as show below.
  *
- * ```typescript
+ * ```ts
  * bootstrapApplication(RootComponent, {
  *   providers: [
  *     provideAnimationsAsync()
@@ -46,18 +46,30 @@ import {AsyncAnimationRendererFactory} from './async_animation_renderer';
  * @param type pass `'noop'` as argument to disable animations.
  *
  * @publicApi
+ *
+ * @deprecated 20.2 Use `animate.enter` or `animate.leave` instead. Intent to remove in v23
  */
 export function provideAnimationsAsync(
   type: 'animations' | 'noop' = 'animations',
 ): EnvironmentProviders {
   performanceMarkFeature('NgAsyncAnimations');
+
+  // Animations don't work on the server so we switch them over to no-op automatically.
+  if (typeof ngServerMode !== 'undefined' && ngServerMode) {
+    type = 'noop';
+  }
+
   return makeEnvironmentProviders([
     {
       provide: RendererFactory2,
-      useFactory: (doc: Document, renderer: DomRendererFactory2, zone: NgZone) => {
-        return new AsyncAnimationRendererFactory(doc, renderer, zone, type);
+      useFactory: () => {
+        return new AsyncAnimationRendererFactory(
+          inject(DOCUMENT),
+          inject(DomRendererFactory2),
+          inject(NgZone),
+          type,
+        );
       },
-      deps: [DOCUMENT, DomRendererFactory2, NgZone],
     },
     {
       provide: ANIMATION_MODULE_TYPE,

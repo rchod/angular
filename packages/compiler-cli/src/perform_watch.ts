@@ -14,7 +14,6 @@ import {
   exitCodeFromResult,
   ParsedConfiguration,
   performCompilation,
-  PerformCompilationResult,
   readConfiguration,
 } from './perform_compile';
 import * as api from './transformers/api';
@@ -88,7 +87,8 @@ export function createPerformWatchHost<CbEmitRes extends ts.EmitResult = ts.Emit
       const watcher = chokidar.watch(options.basePath, {
         // ignore .dotfiles, .js and .map files.
         // can't ignore other files as we e.g. want to recompile if an `.html` file changes as well.
-        ignored: /((^[\/\\])\..)|(\.js$)|(\.map$)|(\.metadata\.json|node_modules)/,
+        ignored: (path) =>
+          /((^[\/\\])\..)|(\.js$)|(\.map$)|(\.metadata\.json|node_modules)/.test(path),
         ignoreInitial: true,
         persistent: true,
       });

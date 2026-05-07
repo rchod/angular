@@ -123,23 +123,19 @@ class TypeTranslatorVisitor implements o.ExpressionVisitor, o.TypeVisitor {
     return ts.factory.createTypeQueryNode(ts.factory.createIdentifier(ast.name));
   }
 
-  visitWriteVarExpr(expr: o.WriteVarExpr, context: Context): never {
-    throw new Error('Method not implemented.');
-  }
-
-  visitWriteKeyExpr(expr: o.WriteKeyExpr, context: Context): never {
-    throw new Error('Method not implemented.');
-  }
-
-  visitWritePropExpr(expr: o.WritePropExpr, context: Context): never {
-    throw new Error('Method not implemented.');
-  }
-
   visitInvokeFunctionExpr(ast: o.InvokeFunctionExpr, context: Context): never {
     throw new Error('Method not implemented.');
   }
 
-  visitTaggedTemplateExpr(ast: o.TaggedTemplateExpr, context: Context): never {
+  visitTaggedTemplateLiteralExpr(ast: o.TaggedTemplateLiteralExpr, context: Context): never {
+    throw new Error('Method not implemented.');
+  }
+
+  visitTemplateLiteralExpr(ast: o.TemplateLiteralExpr, context: any) {
+    throw new Error('Method not implemented.');
+  }
+
+  visitTemplateLiteralElementExpr(ast: o.TemplateLiteralElementExpr, context: any) {
     throw new Error('Method not implemented.');
   }
 
@@ -189,7 +185,11 @@ class TypeTranslatorVisitor implements o.ExpressionVisitor, o.TypeVisitor {
     throw new Error('Method not implemented.');
   }
 
-  visitDynamicImportExpr(ast: o.outputAst.DynamicImportExpr, context: any) {
+  visitDynamicImportExpr(ast: o.DynamicImportExpr, context: any) {
+    throw new Error('Method not implemented.');
+  }
+
+  visitRegularExpressionLiteral(ast: o.RegularExpressionLiteralExpr, context: any) {
     throw new Error('Method not implemented.');
   }
 
@@ -228,6 +228,10 @@ class TypeTranslatorVisitor implements o.ExpressionVisitor, o.TypeVisitor {
 
   visitLiteralMapExpr(ast: o.LiteralMapExpr, context: Context): ts.TypeLiteralNode {
     const entries = ast.entries.map((entry) => {
+      if (entry instanceof o.LiteralMapSpreadAssignment) {
+        throw new Error('Spread is not supported in this context');
+      }
+
       const {key, quoted} = entry;
       const type = this.translateExpression(entry.value, context);
       return ts.factory.createPropertySignature(
@@ -247,14 +251,16 @@ class TypeTranslatorVisitor implements o.ExpressionVisitor, o.TypeVisitor {
   visitWrappedNodeExpr(ast: o.WrappedNodeExpr<any>, context: Context): ts.TypeNode {
     const node: ts.Node = ast.node;
     if (ts.isEntityName(node)) {
-      return ts.factory.createTypeReferenceNode(node, /* typeArguments */ undefined);
+      return ts.factory.createTypeReferenceNode(node);
     } else if (ts.isTypeNode(node)) {
       return node;
     } else if (ts.isLiteralExpression(node)) {
       return ts.factory.createLiteralTypeNode(node);
+    } else if (ts.isTypeParameterDeclaration(node)) {
+      return ts.factory.createTypeReferenceNode(node.name);
     } else {
       throw new Error(
-        `Unsupported WrappedNodeExpr in TypeTranslatorVisitor: ${ts.SyntaxKind[node.kind]}`,
+        `Unsupported WrappedNodeExpr in TypeTranslatorVisitor: ${ts.SyntaxKind[node.kind]} in ${node.getSourceFile()?.fileName}`,
       );
     }
   }
@@ -266,6 +272,19 @@ class TypeTranslatorVisitor implements o.ExpressionVisitor, o.TypeVisitor {
           ${ts.SyntaxKind[typeNode.kind]}`);
     }
     return ts.factory.createTypeQueryNode(typeNode.typeName);
+  }
+
+  visitVoidExpr(ast: o.VoidExpr, context: Context) {
+    throw new Error('Method not implemented.');
+  }
+
+  visitParenthesizedExpr(ast: o.ParenthesizedExpr, context: any) {
+    throw new Error('Method not implemented.');
+  }
+
+  visitSpreadElementExpr(ast: o.outputAst.SpreadElementExpr, context: any) {
+    const typeNode = this.translateExpression(ast.expression, context);
+    return ts.factory.createRestTypeNode(typeNode);
   }
 
   private translateType(type: o.Type, context: Context): ts.TypeNode {

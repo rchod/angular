@@ -8,7 +8,7 @@
 import * as o from '../output/output_ast';
 
 import {Identifiers as R3} from './r3_identifiers';
-import {devOnlyGuardedExpression} from './util';
+import {devOnlyGuardedExpression, tsIgnoreComment} from './util';
 import {R3DeferPerComponentDependency} from './view/api';
 
 export type CompileClassMetadataFn = (metadata: R3ClassMetadata) => o.Expression;
@@ -64,7 +64,7 @@ function internalCompileClassMetadata(metadata: R3ClassMetadata): o.InvokeFuncti
  * loads dependencies from `@defer` blocks.
  *
  * Generates a call like this:
- * ```
+ * ```ts
  * setClassMetadataAsync(type, () => [
  *   import('./cmp-a').then(m => m.CmpA);
  *   import('./cmp-b').then(m => m.CmpB);
@@ -150,7 +150,13 @@ export function compileComponentMetadataAsyncResolver(
       );
 
     // e.g. `import('./cmp-a').then(...)`
-    return new o.DynamicImportExpr(importPath).prop('then').callFn([innerFn]);
+    return new o.DynamicImportExpr(importPath)
+      .prop('then')
+      .callFn([innerFn], undefined, undefined, [
+        // Necessary, because we might not generate extensions for the path
+        // and TS may try to enforce it based on the compiler options.
+        tsIgnoreComment(),
+      ]);
   });
 
   // e.g. `() => [ ... ];`

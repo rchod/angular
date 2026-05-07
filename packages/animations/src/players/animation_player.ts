@@ -18,6 +18,8 @@
  * @see {@link animate}
  *
  * @publicApi
+ *
+ * @deprecated 20.2 Use `animate.enter` or `animate.leave` instead. Intent to remove in v23
  */
 export interface AnimationPlayer {
   /**
@@ -75,12 +77,12 @@ export interface AnimationPlayer {
   reset(): void;
   /**
    * Sets the position of the animation.
-   * @param position A 0-based offset into the duration, in milliseconds.
+   * @param position A fractional value, representing the progress through the animation.
    */
   setPosition(position: number): void;
   /**
    * Reports the current position of the animation.
-   * @returns A 0-based offset into the duration, in milliseconds.
+   * @returns A fractional value, representing the progress through the animation.
    */
   getPosition(): number;
   /**
@@ -116,6 +118,8 @@ export interface AnimationPlayer {
  * @see {@link AnimationPlayer}
  *
  * @publicApi
+ *
+ * @deprecated 20.2 Use `animate.enter` or `animate.leave` instead. Intent to remove in v23
  */
 export class NoopAnimationPlayer implements AnimationPlayer {
   private _onDoneFns: Function[] = [];

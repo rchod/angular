@@ -18,6 +18,7 @@ import {
   forwardRef,
   InjectionToken,
   Input,
+  provideZoneChangeDetection,
   QueryList,
   TemplateRef,
   Type,
@@ -25,11 +26,30 @@ import {
   ViewChildren,
   ViewContainerRef,
   ViewRef,
-} from '@angular/core';
-import {TestBed} from '@angular/core/testing';
+  ChangeDetectionStrategy,
+} from '../../src/core';
+import {TestBed} from '../../testing';
 import {By} from '@angular/platform-browser';
+import {
+  createContainerRef,
+  enableLocateOrCreateContainerRefImpl,
+} from '../../src/linker/view_container_ref';
+import {getLContext} from '../../src/render3/context_discovery';
+import {DehydratedView} from '../../src/hydration/interfaces';
+import {
+  TElementContainerNode,
+  TElementNode,
+  TContainerNode,
+  TNodeType,
+} from '../../src/render3/interfaces/node';
+import {HYDRATION, TVIEW} from '../../src/render3/interfaces/view';
 
 describe('query logic', () => {
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [provideZoneChangeDetection()],
+    });
+  });
   beforeEach(() => {
     TestBed.configureTestingModule({
       declarations: [
@@ -222,7 +242,13 @@ describe('query logic', () => {
         @ViewChild('foo') foo: any;
       }
 
-      @Component({selector: 'sub-comp', template: '<div #foo></div>'})
+      @Component({
+        selector: 'sub-comp',
+        template: '<div #foo></div>',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class SubComp extends MyComp {}
 
       TestBed.configureTestingModule({declarations: [SubComp]});
@@ -239,7 +265,13 @@ describe('query logic', () => {
 
       class MyComp extends MySuperComp {}
 
-      @Component({selector: 'sub-comp', template: '<div #foo></div>'})
+      @Component({
+        selector: 'sub-comp',
+        template: '<div #foo></div>',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class SubComp extends MyComp {}
 
       TestBed.configureTestingModule({declarations: [SubComp]});
@@ -250,7 +282,10 @@ describe('query logic', () => {
     });
 
     it('should support ViewChildren query inherited from undecorated superclasses', () => {
-      @Directive({selector: '[some-dir]'})
+      @Directive({
+        selector: '[some-dir]',
+        standalone: false,
+      })
       class SomeDir {}
 
       class MyComp {
@@ -263,6 +298,9 @@ describe('query logic', () => {
           <div some-dir></div>
           <div some-dir></div>
         `,
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class SubComp extends MyComp {}
 
@@ -275,7 +313,10 @@ describe('query logic', () => {
     });
 
     it('should support ViewChildren query inherited from undecorated grand superclasses', () => {
-      @Directive({selector: '[some-dir]'})
+      @Directive({
+        selector: '[some-dir]',
+        standalone: false,
+      })
       class SomeDir {}
 
       class MySuperComp {
@@ -290,6 +331,9 @@ describe('query logic', () => {
           <div some-dir></div>
           <div some-dir></div>
         `,
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class SubComp extends MyComp {}
 
@@ -302,12 +346,21 @@ describe('query logic', () => {
     });
 
     it('should support ViewChild query where template is inserted in child component', () => {
-      @Component({selector: 'required', template: ''})
+      @Component({
+        selector: 'required',
+        template: '',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class Required {}
 
       @Component({
         selector: 'insertion',
         template: `<ng-container [ngTemplateOutlet]="content"></ng-container>`,
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class Insertion {
         @Input() content!: TemplateRef<{}>;
@@ -319,7 +372,10 @@ describe('query logic', () => {
             <required></required>
           </ng-template>
           <insertion [content]="template"></insertion>
-          `,
+        `,
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class App {
         @ViewChild(Required) requiredEl!: Required;
@@ -343,6 +399,9 @@ describe('query logic', () => {
       @Component({
         selector: 'comp-with-view-query',
         template: '<div #foo>Content</div>',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class ComponentWithViewQuery {
         @ViewChildren('foo')
@@ -361,6 +420,9 @@ describe('query logic', () => {
             <comp-with-view-query></comp-with-view-query>
           </ng-container>
         `,
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class Root {
         condition = true;
@@ -619,10 +681,21 @@ describe('query logic', () => {
         @ContentChild('foo') foo: any;
       }
 
-      @Component({selector: 'sub-comp', template: '<ng-content></ng-content>'})
+      @Component({
+        selector: 'sub-comp',
+        template: '<ng-content></ng-content>',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class SubComp extends MyComp {}
 
-      @Component({template: '<sub-comp><div #foo></div></sub-comp>'})
+      @Component({
+        template: '<sub-comp><div #foo></div></sub-comp>',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {
         @ViewChild(SubComp) subComp!: SubComp;
       }
@@ -641,10 +714,21 @@ describe('query logic', () => {
 
       class MyComp extends MySuperComp {}
 
-      @Component({selector: 'sub-comp', template: '<ng-content></ng-content>'})
+      @Component({
+        selector: 'sub-comp',
+        template: '<ng-content></ng-content>',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class SubComp extends MyComp {}
 
-      @Component({template: '<sub-comp><div #foo></div></sub-comp>'})
+      @Component({
+        template: '<sub-comp><div #foo></div></sub-comp>',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {
         @ViewChild(SubComp) subComp!: SubComp;
       }
@@ -657,23 +741,35 @@ describe('query logic', () => {
     });
 
     it('should support ContentChildren query inherited from undecorated superclasses', () => {
-      @Directive({selector: '[some-dir]'})
+      @Directive({
+        selector: '[some-dir]',
+        standalone: false,
+      })
       class SomeDir {}
 
       class MyComp {
         @ContentChildren(SomeDir) foo!: QueryList<SomeDir>;
       }
 
-      @Component({selector: 'sub-comp', template: '<ng-content></ng-content>'})
+      @Component({
+        selector: 'sub-comp',
+        template: '<ng-content></ng-content>',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class SubComp extends MyComp {}
 
       @Component({
         template: `
-        <sub-comp>
-          <div some-dir></div>
-          <div some-dir></div>
-        </sub-comp>
-      `,
+          <sub-comp>
+            <div some-dir></div>
+            <div some-dir></div>
+          </sub-comp>
+        `,
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class App {
         @ViewChild(SubComp) subComp!: SubComp;
@@ -688,7 +784,10 @@ describe('query logic', () => {
     });
 
     it('should support ContentChildren query inherited from undecorated grand superclasses', () => {
-      @Directive({selector: '[some-dir]'})
+      @Directive({
+        selector: '[some-dir]',
+        standalone: false,
+      })
       class SomeDir {}
 
       class MySuperComp {
@@ -697,16 +796,25 @@ describe('query logic', () => {
 
       class MyComp extends MySuperComp {}
 
-      @Component({selector: 'sub-comp', template: '<ng-content></ng-content>'})
+      @Component({
+        selector: 'sub-comp',
+        template: '<ng-content></ng-content>',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class SubComp extends MyComp {}
 
       @Component({
         template: `
-        <sub-comp>
-          <div some-dir></div>
-          <div some-dir></div>
-        </sub-comp>
-      `,
+          <sub-comp>
+            <div some-dir></div>
+            <div some-dir></div>
+          </sub-comp>
+        `,
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class App {
         @ViewChild(SubComp) subComp!: SubComp;
@@ -728,6 +836,9 @@ describe('query logic', () => {
             <div *ngIf="showing" #foo></div>
           </shallow-comp>
         `,
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class TestComponent {
         showing = false;
@@ -736,6 +847,9 @@ describe('query logic', () => {
       @Component({
         selector: 'shallow-comp',
         template: '',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class ShallowComp {
         @ContentChildren('foo', {descendants: false}) foos!: QueryList<ElementRef>;
@@ -766,6 +880,7 @@ describe('query logic', () => {
 
       @Directive({
         selector: '[with-content]',
+        standalone: false,
       })
       class DirWithContentQuery {
         constructor() {
@@ -795,6 +910,9 @@ describe('query logic', () => {
             </div>
           </ng-container>
         `,
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class Root {
         items = [1, 2, 3];
@@ -828,16 +946,16 @@ describe('query logic', () => {
     it('should not match directive host with content queries', () => {
       @Directive({
         selector: '[content-query]',
-        standalone: true,
       })
       class ContentQueryDirective {
         @ContentChildren('foo', {descendants: true}) foos!: QueryList<ElementRef>;
       }
 
       @Component({
-        standalone: true,
         imports: [ContentQueryDirective],
         template: `<div content-query #foo></div>`,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class TestCmp {
         @ViewChild(ContentQueryDirective, {static: true})
@@ -852,13 +970,12 @@ describe('query logic', () => {
     });
 
     it('should report results to appropriate queries where deep content queries are nested', () => {
-      @Directive({selector: '[content-query]', standalone: true, exportAs: 'query'})
+      @Directive({selector: '[content-query]', exportAs: 'query'})
       class ContentQueryDirective {
         @ContentChildren('foo, bar, baz', {descendants: true}) qlist!: QueryList<ElementRef>;
       }
 
       @Component({
-        standalone: true,
         imports: [ContentQueryDirective],
         template: `
           <div content-query #out="query">
@@ -869,6 +986,8 @@ describe('query logic', () => {
             <span #baz></span>
           </div>
         `,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class TestCmp {
         @ViewChild('in', {static: true}) in!: ContentQueryDirective;
@@ -886,13 +1005,12 @@ describe('query logic', () => {
     });
 
     it('should support nested shallow content queries', () => {
-      @Directive({selector: '[content-query]', standalone: true, exportAs: 'query'})
+      @Directive({selector: '[content-query]', exportAs: 'query'})
       class ContentQueryDirective {
         @ContentChildren('foo') qlist!: QueryList<ElementRef>;
       }
 
       @Component({
-        standalone: true,
         imports: [ContentQueryDirective],
         template: `
           <div content-query #out="query">
@@ -901,6 +1019,8 @@ describe('query logic', () => {
             </div>
           </div>
         `,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class TestCmp {
         @ViewChild('in', {static: true}) in!: ContentQueryDirective;
@@ -918,18 +1038,17 @@ describe('query logic', () => {
     });
 
     it('should respect shallow flag on content queries when mixing deep and shallow queries', () => {
-      @Directive({selector: '[shallow-content-query]', standalone: true, exportAs: 'shallow-query'})
+      @Directive({selector: '[shallow-content-query]', exportAs: 'shallow-query'})
       class ShallowContentQueryDirective {
         @ContentChildren('foo') qlist!: QueryList<ElementRef>;
       }
 
-      @Directive({selector: '[deep-content-query]', standalone: true, exportAs: 'deep-query'})
+      @Directive({selector: '[deep-content-query]', exportAs: 'deep-query'})
       class DeepContentQueryDirective {
         @ContentChildren('foo', {descendants: true}) qlist!: QueryList<ElementRef>;
       }
 
       @Component({
-        standalone: true,
         imports: [ShallowContentQueryDirective, DeepContentQueryDirective],
         template: `
           <div shallow-content-query #shallow="shallow-query" deep-content-query #deep="deep-query">
@@ -939,6 +1058,8 @@ describe('query logic', () => {
             </div>
           </div>
         `,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class TestCmp {
         @ViewChild('shallow', {static: true}) shallow!: ShallowContentQueryDirective;
@@ -956,7 +1077,7 @@ describe('query logic', () => {
     });
 
     it('should support shallow ContentChild queries', () => {
-      @Directive({selector: '[query-dir]', standalone: true})
+      @Directive({selector: '[query-dir]'})
       class ContentQueryDirective {
         @ContentChild('foo', {descendants: false}) shallow: ElementRef | undefined;
         // ContentChild queries have {descendants: true} option by default
@@ -964,7 +1085,6 @@ describe('query logic', () => {
       }
 
       @Component({
-        standalone: true,
         imports: [ContentQueryDirective],
         template: `
           <div query-dir>
@@ -973,6 +1093,8 @@ describe('query logic', () => {
             </div>
           </div>
         `,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class TestCmp {
         @ViewChild(ContentQueryDirective, {static: true}) queryDir!: ContentQueryDirective;
@@ -988,14 +1110,12 @@ describe('query logic', () => {
     it('should support view and content queries matching the same element', () => {
       @Directive({
         selector: '[content-query]',
-        standalone: true,
       })
       class ContentQueryDirective {
         @ContentChildren('foo') foos!: QueryList<ElementRef>;
       }
 
       @Component({
-        standalone: true,
         imports: [ContentQueryDirective],
         template: `
           <div content-query>
@@ -1003,6 +1123,8 @@ describe('query logic', () => {
           </div>
           <div id="contentOnly" #bar></div>
         `,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class TestCmp {
         @ViewChild(ContentQueryDirective, {static: true}) contentQueryDir!: ContentQueryDirective;
@@ -1024,23 +1146,23 @@ describe('query logic', () => {
   });
 
   describe('query order', () => {
-    @Directive({selector: '[text]', standalone: true})
+    @Directive({selector: '[text]'})
     class TextDirective {
       @Input() text: string | undefined;
     }
 
     it('should register view query matches from top to bottom', () => {
       @Component({
-        standalone: true,
         imports: [TextDirective],
-        template: `
-          <span text="A"></span>
+        template: ` <span text="A"></span>
           <div text="B">
             <span text="C">
               <span text="D"></span>
             </span>
           </div>
           <span text="E"></span>`,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class TestCmp {
         @ViewChildren(TextDirective) texts!: QueryList<TextDirective>;
@@ -1061,25 +1183,24 @@ describe('query logic', () => {
     it('should register content query matches from top to bottom', () => {
       @Directive({
         selector: '[content-query]',
-        standalone: true,
       })
       class ContentQueryDirective {
         @ContentChildren(TextDirective, {descendants: true}) texts!: QueryList<TextDirective>;
       }
 
       @Component({
-        standalone: true,
         imports: [TextDirective, ContentQueryDirective],
-        template: `
-          <div content-query>
-            <span text="A"></span>
-            <div text="B">
-              <span text="C">
-                <span text="D"></span>
-              </span>
-            </div>
-            <span text="E"></span>
-          </div>`,
+        template: ` <div content-query>
+          <span text="A"></span>
+          <div text="B">
+            <span text="C">
+              <span text="D"></span>
+            </span>
+          </div>
+          <span text="E"></span>
+        </div>`,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class TestCmp {
         @ViewChild(ContentQueryDirective, {static: true})
@@ -1117,14 +1238,29 @@ describe('query logic', () => {
     }
 
     it('should match directives on elements that used to be wrapped by a required parent in HTML parser', () => {
-      @Directive({selector: '[myDef]'})
+      @Directive({
+        selector: '[myDef]',
+        standalone: false,
+      })
       class MyDef {}
 
-      @Component({selector: 'my-container', template: ``})
+      @Component({
+        selector: 'my-container',
+        template: ``,
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class MyContainer {
         @ContentChildren(MyDef) myDefs!: QueryList<MyDef>;
       }
-      @Component({selector: 'test-cmpt', template: `<my-container><tr myDef></tr></my-container>`})
+      @Component({
+        selector: 'test-cmpt',
+        template: `<my-container><tr myDef></tr></my-container>`,
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class TestCmpt {}
 
       TestBed.configureTestingModule({declarations: [TestCmpt, MyContainer, MyDef]});
@@ -1136,7 +1272,13 @@ describe('query logic', () => {
     });
 
     it('should match elements with local refs inside <ng-container>', () => {
-      @Component({selector: 'needs-target', template: ``})
+      @Component({
+        selector: 'needs-target',
+        template: ``,
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class NeedsTarget {
         @ContentChildren('target') targets!: QueryList<ElementRef>;
       }
@@ -1149,6 +1291,9 @@ describe('query logic', () => {
             </ng-container>
           </needs-target>
         `,
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class TestCmpt {}
 
@@ -1162,7 +1307,13 @@ describe('query logic', () => {
     });
 
     it('should match elements with local refs inside nested <ng-container>', () => {
-      @Component({selector: 'needs-target', template: ``})
+      @Component({
+        selector: 'needs-target',
+        template: ``,
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class NeedsTarget {
         @ContentChildren('target') targets!: QueryList<ElementRef>;
       }
@@ -1180,6 +1331,9 @@ describe('query logic', () => {
             </ng-container>
           </needs-target>
         `,
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class TestCmpt {}
 
@@ -1193,10 +1347,19 @@ describe('query logic', () => {
     });
 
     it('should match directives inside <ng-container>', () => {
-      @Directive({selector: '[targetDir]'})
+      @Directive({
+        selector: '[targetDir]',
+        standalone: false,
+      })
       class TargetDir {}
 
-      @Component({selector: 'needs-target', template: ``})
+      @Component({
+        selector: 'needs-target',
+        template: ``,
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class NeedsTarget {
         @ContentChildren(TargetDir) targets!: QueryList<HTMLElement>;
       }
@@ -1210,6 +1373,9 @@ describe('query logic', () => {
             </ng-container>
           </needs-target>
         `,
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class TestCmpt {}
 
@@ -1223,10 +1389,19 @@ describe('query logic', () => {
     });
 
     it('should match directives inside nested <ng-container>', () => {
-      @Directive({selector: '[targetDir]'})
+      @Directive({
+        selector: '[targetDir]',
+        standalone: false,
+      })
       class TargetDir {}
 
-      @Component({selector: 'needs-target', template: ``})
+      @Component({
+        selector: 'needs-target',
+        template: ``,
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class NeedsTarget {
         @ContentChildren(TargetDir) targets!: QueryList<HTMLElement>;
       }
@@ -1244,6 +1419,9 @@ describe('query logic', () => {
             </ng-container>
           </needs-target>
         `,
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class TestCmpt {}
 
@@ -1257,10 +1435,16 @@ describe('query logic', () => {
     });
 
     it('should cross child ng-container when query is declared on ng-container', () => {
-      @Directive({selector: '[targetDir]'})
+      @Directive({
+        selector: '[targetDir]',
+        standalone: false,
+      })
       class TargetDir {}
 
-      @Directive({selector: '[needs-target]'})
+      @Directive({
+        selector: '[needs-target]',
+        standalone: false,
+      })
       class NeedsTarget {
         @ContentChildren(TargetDir) targets!: QueryList<HTMLElement>;
       }
@@ -1276,6 +1460,9 @@ describe('query logic', () => {
             </ng-container>
           </ng-container>
         `,
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class TestCmpt {}
 
@@ -1289,10 +1476,19 @@ describe('query logic', () => {
     });
 
     it('should match nodes when using structural directives (*syntax) on <ng-container>', () => {
-      @Directive({selector: '[targetDir]'})
+      @Directive({
+        selector: '[targetDir]',
+        standalone: false,
+      })
       class TargetDir {}
 
-      @Component({selector: 'needs-target', template: ``})
+      @Component({
+        selector: 'needs-target',
+        template: ``,
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class NeedsTarget {
         @ContentChildren(TargetDir) dirTargets!: QueryList<TargetDir>;
         @ContentChildren('target') localRefsTargets!: QueryList<ElementRef>;
@@ -1308,6 +1504,9 @@ describe('query logic', () => {
             </ng-container>
           </needs-target>
         `,
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class TestCmpt {}
 
@@ -1323,10 +1522,19 @@ describe('query logic', () => {
     });
 
     it('should match directives on <ng-container> when crossing nested <ng-container>', () => {
-      @Directive({selector: '[targetDir]'})
+      @Directive({
+        selector: '[targetDir]',
+        standalone: false,
+      })
       class TargetDir {}
 
-      @Component({selector: 'needs-target', template: ``})
+      @Component({
+        selector: 'needs-target',
+        template: ``,
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class NeedsTarget {
         @ContentChildren(TargetDir) targets!: QueryList<HTMLElement>;
       }
@@ -1344,6 +1552,9 @@ describe('query logic', () => {
             </ng-container>
           </needs-target>
         `,
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class TestCmpt {}
 
@@ -1357,17 +1568,18 @@ describe('query logic', () => {
   });
 
   describe('read option', () => {
-    @Directive({selector: '[child]', standalone: true})
+    @Directive({selector: '[child]'})
     class Child {}
 
-    @Directive({selector: '[otherChild]', standalone: true})
+    @Directive({selector: '[otherChild]'})
     class OtherChild {}
 
     it('should query using type predicate and read ElementRef', () => {
       @Component({
-        standalone: true,
         imports: [Child],
         template: `<div child></div>`,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class TestCmp {
         @ViewChildren(Child, {read: ElementRef}) query?: QueryList<ElementRef>;
@@ -1385,9 +1597,10 @@ describe('query logic', () => {
 
     it('should query using type predicate and read another directive type', () => {
       @Component({
-        standalone: true,
         imports: [Child, OtherChild],
         template: `<div child otherChild></div>`,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class TestCmp {
         @ViewChildren(Child, {read: OtherChild}) query?: QueryList<OtherChild>;
@@ -1403,9 +1616,10 @@ describe('query logic', () => {
 
     it('should not add results to query if a requested token cant be read', () => {
       @Component({
-        standalone: true,
         imports: [Child],
         template: `<div child></div>`,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class TestCmp {
         @ViewChildren(Child, {read: OtherChild}) query?: QueryList<OtherChild>;
@@ -1420,11 +1634,12 @@ describe('query logic', () => {
 
     it('should query using local ref and read ElementRef by default', () => {
       @Component({
-        standalone: true,
         template: `
           <div #foo></div>
           <div></div>
         `,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class TestCmp {
         @ViewChildren('foo') query?: QueryList<ElementRef>;
@@ -1442,12 +1657,13 @@ describe('query logic', () => {
 
     it('should query for multiple elements and read ElementRef by default', () => {
       @Component({
-        standalone: true,
         template: `
           <div #foo></div>
           <div></div>
           <div #bar></div>
         `,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class TestCmp {
         @ViewChildren('foo,bar') query?: QueryList<ElementRef>;
@@ -1466,11 +1682,12 @@ describe('query logic', () => {
 
     it('should read ElementRef from an element when explicitly asked for', () => {
       @Component({
-        standalone: true,
         template: `
           <div #foo></div>
           <div></div>
         `,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class TestCmp {
         @ViewChildren('foo', {read: ElementRef}) query?: QueryList<ElementRef>;
@@ -1488,8 +1705,9 @@ describe('query logic', () => {
 
     it('should query for <ng-container> and read ElementRef with a native element pointing to comment node', () => {
       @Component({
-        standalone: true,
         template: `<ng-container #foo></ng-container>`,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class TestCmp {
         @ViewChildren('foo', {read: ElementRef}) query?: QueryList<ElementRef>;
@@ -1505,8 +1723,9 @@ describe('query logic', () => {
 
     it('should query for <ng-container> and read ElementRef without explicit read option', () => {
       @Component({
-        standalone: true,
         template: `<ng-container #foo></ng-container>`,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class TestCmp {
         @ViewChildren('foo') query?: QueryList<ElementRef>;
@@ -1522,8 +1741,9 @@ describe('query logic', () => {
 
     it('should read ViewContainerRef from element nodes when explicitly asked for', () => {
       @Component({
-        standalone: true,
         template: `<div #foo></div>`,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class TestCmp {
         @ViewChildren('foo', {read: ViewContainerRef}) query?: QueryList<ViewContainerRef>;
@@ -1539,8 +1759,9 @@ describe('query logic', () => {
 
     it('should read ViewContainerRef from ng-template nodes when explicitly asked for', () => {
       @Component({
-        standalone: true,
         template: `<ng-template #foo></ng-template>`,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class TestCmp {
         @ViewChildren('foo', {read: ViewContainerRef}) query?: QueryList<ViewContainerRef>;
@@ -1554,10 +1775,53 @@ describe('query logic', () => {
       expect(qList.first).toBeInstanceOf(ViewContainerRef);
     });
 
+    it('should not throw when hydration metadata has no serialized container data', () => {
+      @Component({
+        template: `<div #foo></div>`,
+        changeDetection: ChangeDetectionStrategy.OnPush,
+      })
+      class TestCmp {}
+
+      const fixture = TestBed.createComponent(TestCmp);
+      fixture.detectChanges();
+
+      const element = fixture.nativeElement.querySelector('div')!;
+      const context = getLContext(element)!;
+      const hostLView = context.lView!;
+      const candidateTNode = hostLView[TVIEW].data[context.nodeIndex] as unknown;
+
+      expect(candidateTNode).toBeDefined();
+      expect(!!candidateTNode && typeof candidateTNode === 'object' && 'type' in candidateTNode)
+        .withContext('Expected a TNode with a type field.')
+        .toBeTrue();
+
+      const hostTNode = candidateTNode as TElementNode | TContainerNode | TElementContainerNode;
+      expect(!!(hostTNode.type & (TNodeType.AnyContainer | TNodeType.AnyRNode)))
+        .withContext('Expected a host TNode that can create a ViewContainerRef.')
+        .toBeTrue();
+
+      hostLView[HYDRATION] = {data: {}, firstChild: null} as DehydratedView;
+      enableLocateOrCreateContainerRefImpl();
+
+      const warnSpy = spyOn(console, 'warn');
+
+      expect(() => createContainerRef(hostTNode, hostLView)).not.toThrow();
+
+      const warningMessages = warnSpy.calls
+        .allArgs()
+        .map(([message]) => String(message))
+        .join('\n');
+
+      expect(warningMessages).toContain(
+        'Unexpected state: no hydration info available for a given TNode, which represents a view container.',
+      );
+    });
+
     it('should read ElementRef with a native element pointing to comment DOM node from ng-template', () => {
       @Component({
-        standalone: true,
         template: `<ng-template #foo></ng-template>`,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class TestCmp {
         @ViewChildren('foo', {read: ElementRef}) query?: QueryList<ElementRef>;
@@ -1573,8 +1837,9 @@ describe('query logic', () => {
 
     it('should read TemplateRef from ng-template by default', () => {
       @Component({
-        standalone: true,
         template: `<ng-template #foo></ng-template>`,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class TestCmp {
         @ViewChildren('foo') query?: QueryList<TemplateRef<unknown>>;
@@ -1590,8 +1855,9 @@ describe('query logic', () => {
 
     it('should read TemplateRef from ng-template when explicitly asked for', () => {
       @Component({
-        standalone: true,
         template: `<ng-template #foo></ng-template>`,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class TestCmp {
         @ViewChildren('foo', {read: TemplateRef}) query?: QueryList<TemplateRef<unknown>>;
@@ -1606,13 +1872,18 @@ describe('query logic', () => {
     });
 
     it('should read component instance if element queried for is a component host', () => {
-      @Component({selector: 'child-cmp', standalone: true, template: ''})
+      @Component({
+        selector: 'child-cmp',
+        template: '',
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class ChildCmp {}
 
       @Component({
-        standalone: true,
         imports: [ChildCmp],
         template: `<child-cmp #foo></child-cmp>`,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class TestCmp {
         @ViewChildren('foo') query?: QueryList<ChildCmp>;
@@ -1630,15 +1901,17 @@ describe('query logic', () => {
       @Component({
         selector: 'child-cmp',
         exportAs: 'child',
-        standalone: true,
         template: '',
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class ChildCmp {}
 
       @Component({
-        standalone: true,
         imports: [ChildCmp],
         template: `<child-cmp #foo="child"></child-cmp>`,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class TestCmp {
         @ViewChildren('foo') query?: QueryList<ChildCmp>;
@@ -1653,13 +1926,14 @@ describe('query logic', () => {
     });
 
     it('should read directive instance if element queried for has an exported directive with a matching name', () => {
-      @Directive({selector: '[child]', exportAs: 'child', standalone: true})
+      @Directive({selector: '[child]', exportAs: 'child'})
       class ChildDirective {}
 
       @Component({
-        standalone: true,
         imports: [ChildDirective],
         template: `<div #foo="child" child></div>`,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class TestCmp {
         @ViewChildren('foo') query?: QueryList<ChildDirective>;
@@ -1674,16 +1948,17 @@ describe('query logic', () => {
     });
 
     it('should read all matching directive instances from a given element', () => {
-      @Directive({selector: '[child1]', exportAs: 'child1', standalone: true})
+      @Directive({selector: '[child1]', exportAs: 'child1'})
       class Child1Dir {}
 
-      @Directive({selector: '[child2]', exportAs: 'child2', standalone: true})
+      @Directive({selector: '[child2]', exportAs: 'child2'})
       class Child2Dir {}
 
       @Component({
-        standalone: true,
         imports: [Child1Dir, Child2Dir],
         template: `<div #foo="child1" child1 #bar="child2" child2></div>`,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class TestCmp {
         @ViewChildren('foo, bar') query?: QueryList<unknown>;
@@ -1699,13 +1974,14 @@ describe('query logic', () => {
     });
 
     it('should read multiple locals exporting the same directive from a given element', () => {
-      @Directive({selector: '[child]', exportAs: 'child', standalone: true})
+      @Directive({selector: '[child]', exportAs: 'child'})
       class ChildDir {}
 
       @Component({
-        standalone: true,
         imports: [ChildDir],
         template: `<div child #foo="child" #bar="child"></div>`,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class TestCmp {
         @ViewChildren('foo, bar') query?: QueryList<ChildDir>;
@@ -1727,6 +2003,9 @@ describe('query logic', () => {
           <div #foo #bar id="target"></div>
           <div></div>
         `,
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class MultipleLocalRefsComp {
         @ViewChildren('foo') fooQuery!: QueryList<any>;
@@ -1750,13 +2029,14 @@ describe('query logic', () => {
     });
 
     it('should match on exported directive name and read a requested token', () => {
-      @Directive({selector: '[child]', exportAs: 'child', standalone: true})
+      @Directive({selector: '[child]', exportAs: 'child'})
       class ChildDir {}
 
       @Component({
-        standalone: true,
         imports: [ChildDir],
         template: `<div child #foo="child"></div>`,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class TestCmp {
         @ViewChildren('foo', {read: ElementRef}) query?: QueryList<ElementRef>;
@@ -1771,13 +2051,14 @@ describe('query logic', () => {
     });
 
     it('should support reading a mix of ElementRef and directive instances', () => {
-      @Directive({selector: '[child]', exportAs: 'child', standalone: true})
+      @Directive({selector: '[child]', exportAs: 'child'})
       class ChildDir {}
 
       @Component({
-        standalone: true,
         imports: [ChildDir],
         template: `<div #foo #bar="child" child></div>`,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class TestCmp {
         @ViewChildren('foo, bar') query?: QueryList<unknown>;
@@ -1793,13 +2074,14 @@ describe('query logic', () => {
     });
 
     it('should not add results to selector-based query if a requested token cant be read', () => {
-      @Directive({selector: '[child]', standalone: true})
+      @Directive({selector: '[child]'})
       class ChildDir {}
 
       @Component({
-        standalone: true,
         imports: [],
         template: `<div #foo></div>`,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class TestCmp {
         @ViewChildren('foo', {read: ChildDir}) query?: QueryList<ChildDir>;
@@ -1813,16 +2095,17 @@ describe('query logic', () => {
     });
 
     it('should not add results to directive-based query if only read token matches', () => {
-      @Directive({selector: '[child]', standalone: true})
+      @Directive({selector: '[child]'})
       class ChildDir {}
 
-      @Directive({selector: '[otherChild]', standalone: true})
+      @Directive({selector: '[otherChild]'})
       class OtherChildDir {}
 
       @Component({
-        standalone: true,
         imports: [Child],
         template: `<div child></div>`,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class TestCmp {
         @ViewChildren(OtherChild, {read: Child}) query?: QueryList<ChildDir>;
@@ -1837,8 +2120,9 @@ describe('query logic', () => {
 
     it('should not add results to TemplateRef-based query if only read token matches', () => {
       @Component({
-        standalone: true,
         template: `<div></div>`,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class TestCmp {
         @ViewChildren(TemplateRef, {read: ElementRef}) query?: QueryList<ElementRef>;
@@ -1853,8 +2137,9 @@ describe('query logic', () => {
 
     it('should not add results to the query in case no match found (via TemplateRef)', () => {
       @Component({
-        standalone: true,
         template: `<div></div>`,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class TestCmp {
         @ViewChildren(TemplateRef) query?: QueryList<TemplateRef<unknown>>;
@@ -1869,12 +2154,13 @@ describe('query logic', () => {
 
     it('should query templates if the type is TemplateRef (and respect "read" option)', () => {
       @Component({
-        standalone: true,
         template: `
           <ng-template #foo><div>Test</div></ng-template>
           <ng-template #bar><div>Test</div></ng-template>
           <ng-template #baz><div>Test</div></ng-template>
         `,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class TestCmp {
         @ViewChildren(TemplateRef) tplQuery?: QueryList<TemplateRef<unknown>>;
@@ -1896,9 +2182,10 @@ describe('query logic', () => {
 
     it('should match using string selector and directive as a read argument', () => {
       @Component({
-        standalone: true,
         imports: [Child],
         template: `<div child #foo></div>`,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class TestCmp {
         @ViewChildren('foo', {read: Child}) query?: QueryList<Child>;
@@ -1977,7 +2264,11 @@ describe('query logic', () => {
 
   describe('view boundaries', () => {
     describe('ViewContainerRef', () => {
-      @Directive({selector: '[vc]', exportAs: 'vc'})
+      @Directive({
+        selector: '[vc]',
+        exportAs: 'vc',
+        standalone: false,
+      })
       class ViewContainerManipulatorDirective {
         constructor(private _vcRef: ViewContainerRef) {}
 
@@ -2002,6 +2293,9 @@ describe('query logic', () => {
               <div #foo></div>
             </ng-template>
           `,
+          standalone: false,
+
+          changeDetection: ChangeDetectionStrategy.Eager,
         })
         class TestComponent {
           value: boolean = false;
@@ -2033,6 +2327,9 @@ describe('query logic', () => {
               <div #foo [id]="item"></div>
             </ng-template>
           `,
+          standalone: false,
+
+          changeDetection: ChangeDetectionStrategy.Eager,
         })
         class TestComponent {
           value: string[] | undefined;
@@ -2072,9 +2369,12 @@ describe('query logic', () => {
         @Component({
           selector: 'test-comp',
           template: `
-              <ng-template #tpl><div #foo>match</div></ng-template>
-              <ng-template vc></ng-template>
-            `,
+            <ng-template #tpl><div #foo>match</div></ng-template>
+            <ng-template vc></ng-template>
+          `,
+          standalone: false,
+
+          changeDetection: ChangeDetectionStrategy.Eager,
         })
         class TestComponent implements AfterViewInit {
           queryListNotificationCounter = 0;
@@ -2109,13 +2409,19 @@ describe('query logic', () => {
       });
 
       it('should support a mix of content queries from the declaration and embedded view', () => {
-        @Directive({selector: '[query-for-lots-of-content]'})
+        @Directive({
+          selector: '[query-for-lots-of-content]',
+          standalone: false,
+        })
         class QueryForLotsOfContent {
           @ContentChildren('foo', {descendants: true}) foos1!: QueryList<ElementRef>;
           @ContentChildren('foo', {descendants: true}) foos2!: QueryList<ElementRef>;
         }
 
-        @Directive({selector: '[query-for-content]'})
+        @Directive({
+          selector: '[query-for-content]',
+          standalone: false,
+        })
         class QueryForContent {
           @ContentChildren('foo') foos!: QueryList<ElementRef>;
         }
@@ -2131,6 +2437,9 @@ describe('query logic', () => {
               </ng-template>
             </div>
           `,
+          standalone: false,
+
+          changeDetection: ChangeDetectionStrategy.Eager,
         })
         class TestComponent {
           items = [1, 2];
@@ -2164,18 +2473,21 @@ describe('query logic', () => {
         @Component({
           selector: 'test-comp',
           template: `
-               <ng-template #tpl1 let-idx="idx">
-                 <div #foo [id]="'foo1_' + idx"></div>
-               </ng-template>
+            <ng-template #tpl1 let-idx="idx">
+              <div #foo [id]="'foo1_' + idx"></div>
+            </ng-template>
 
-               <div #foo id="middle"></div>
+            <div #foo id="middle"></div>
 
-               <ng-template #tpl2 let-idx="idx">
-                 <div #foo [id]="'foo2_' + idx"></div>
-               </ng-template>
+            <ng-template #tpl2 let-idx="idx">
+              <div #foo [id]="'foo2_' + idx"></div>
+            </ng-template>
 
-               <ng-template vc></ng-template>
-             `,
+            <ng-template vc></ng-template>
+          `,
+          standalone: false,
+
+          changeDetection: ChangeDetectionStrategy.Eager,
         })
         class TestComponent {
           @ViewChild(ViewContainerManipulatorDirective) vc!: ViewContainerManipulatorDirective;
@@ -2240,13 +2552,16 @@ describe('query logic', () => {
         @Component({
           selector: 'test-comp',
           template: `
-               <ng-template #tpl let-idx="idx" let-container_idx="container_idx">
-                 <div #foo [id]="'foo_' + container_idx + '_' + idx"></div>
-               </ng-template>
+            <ng-template #tpl let-idx="idx" let-container_idx="container_idx">
+              <div #foo [id]="'foo_' + container_idx + '_' + idx"></div>
+            </ng-template>
 
-               <ng-template vc #vi0="vc"></ng-template>
-               <ng-template vc #vi1="vc"></ng-template>
-             `,
+            <ng-template vc #vi0="vc"></ng-template>
+            <ng-template vc #vi1="vc"></ng-template>
+          `,
+          standalone: false,
+
+          changeDetection: ChangeDetectionStrategy.Eager,
         })
         class TestComponent {
           @ViewChild('tpl') tpl!: TemplateRef<any>;
@@ -2298,6 +2613,9 @@ describe('query logic', () => {
 
             <ng-template [ngTemplateOutlet]="show ? tpl : null"></ng-template>
           `,
+          standalone: false,
+
+          changeDetection: ChangeDetectionStrategy.Eager,
         })
         class MyApp {
           show = false;
@@ -2325,15 +2643,27 @@ describe('query logic', () => {
 
   describe('non-regression', () => {
     it('should query by provider super-type in an embedded view', () => {
-      @Directive({selector: '[child]'})
+      @Directive({
+        selector: '[child]',
+        standalone: false,
+      })
       class Child {}
 
-      @Directive({selector: '[parent]', providers: [{provide: Child, useExisting: Parent}]})
+      @Directive({
+        selector: '[parent]',
+        providers: [{provide: Child, useExisting: Parent}],
+        standalone: false,
+      })
       class Parent extends Child {}
 
       @Component({
         selector: 'test-cmpt',
-        template: `<ng-template [ngIf]="true"><ng-template [ngIf]="true"><div parent></div></ng-template></ng-template>`,
+        template: `<ng-template [ngIf]="true"
+          ><ng-template [ngIf]="true"><div parent></div></ng-template
+        ></ng-template>`,
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class TestCmpt {
         @ViewChildren(Child) instances!: QueryList<Child>;
@@ -2355,10 +2685,19 @@ describe('query logic', () => {
         providers: [
           {provide: MyClass, useExisting: forwardRef(() => WithMultiProvider), multi: true},
         ],
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class WithMultiProvider {}
 
-      @Component({selector: 'test-cmpt', template: `<with-multi-provider></with-multi-provider>`})
+      @Component({
+        selector: 'test-cmpt',
+        template: `<with-multi-provider></with-multi-provider>`,
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class TestCmpt {
         @ViewChildren(MyClass) queryResults!: QueryList<WithMultiProvider>;
       }
@@ -2380,6 +2719,9 @@ describe('query logic', () => {
         providers: [
           {provide: MyClass, useExisting: forwardRef(() => WithMultiProvider), multi: true},
         ],
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class WithMultiProvider {}
 
@@ -2389,6 +2731,9 @@ describe('query logic', () => {
           <ng-template [ngIf]="true"><with-multi-provider></with-multi-provider></ng-template>
           <with-multi-provider></with-multi-provider>
         `,
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class TestCmpt {
         @ViewChildren(MyClass) queryResults!: QueryList<WithMultiProvider>;
@@ -2404,12 +2749,16 @@ describe('query logic', () => {
     });
 
     it('should allow undefined provider value in a [View/Content]Child queries', () => {
-      @Directive({selector: '[group]'})
+      @Directive({
+        selector: '[group]',
+        standalone: false,
+      })
       class GroupDir {}
 
       @Directive({
         selector: '[undefinedGroup]',
         providers: [{provide: GroupDir, useValue: undefined}],
+        standalone: false,
       })
       class UndefinedGroup {}
 
@@ -2420,6 +2769,9 @@ describe('query logic', () => {
             <div undefinedGroup></div>
           </ng-template>
         `,
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class App {
         @ViewChild(GroupDir) group!: GroupDir;
@@ -2436,15 +2788,23 @@ describe('query logic', () => {
     });
 
     it('should allow null / undefined provider value in a [View/Content]Children queries', () => {
-      @Directive({selector: '[group]'})
+      @Directive({
+        selector: '[group]',
+        standalone: false,
+      })
       class GroupDir {}
 
-      @Directive({selector: '[nullGroup]', providers: [{provide: GroupDir, useValue: null}]})
+      @Directive({
+        selector: '[nullGroup]',
+        providers: [{provide: GroupDir, useValue: null}],
+        standalone: false,
+      })
       class NullGroup {}
 
       @Directive({
         selector: '[undefinedGroup]',
         providers: [{provide: GroupDir, useValue: undefined}],
+        standalone: false,
       })
       class UndefinedGroup {}
 
@@ -2458,6 +2818,9 @@ describe('query logic', () => {
             <div undefinedGroup></div>
           </ng-template>
         `,
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class App {
         @ViewChildren(GroupDir) groups!: QueryList<GroupDir>;
@@ -2484,11 +2847,17 @@ describe('query logic', () => {
     @Directive({
       selector: '[text-token]',
       providers: [{provide: 'Token', useExisting: TextTokenDirective}],
+      standalone: false,
     })
     class TextTokenDirective {}
 
     it('should match string injection token in a ViewChild query', () => {
-      @Component({template: '<div text-token></div>'})
+      @Component({
+        template: '<div text-token></div>',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {
         @ViewChild('Token') token: any;
       }
@@ -2500,7 +2869,12 @@ describe('query logic', () => {
     });
 
     it('should give precedence to local reference if both a reference and a string injection token provider match a ViewChild query', () => {
-      @Component({template: '<div text-token #Token></div>'})
+      @Component({
+        template: '<div text-token #Token></div>',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {
         @ViewChild('Token') token: any;
       }
@@ -2512,7 +2886,12 @@ describe('query logic', () => {
     });
 
     it('should match string injection token in a ViewChildren query', () => {
-      @Component({template: '<div text-token></div>'})
+      @Component({
+        template: '<div text-token></div>',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {
         @ViewChildren('Token') tokens!: QueryList<any>;
       }
@@ -2527,7 +2906,12 @@ describe('query logic', () => {
     });
 
     it('should match both string injection token and local reference inside a ViewChildren query', () => {
-      @Component({template: '<div text-token #Token></div>'})
+      @Component({
+        template: '<div text-token #Token></div>',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {
         @ViewChildren('Token') tokens!: QueryList<any>;
       }
@@ -2543,12 +2927,23 @@ describe('query logic', () => {
     });
 
     it('should match string injection token in a ContentChild query', () => {
-      @Component({selector: 'has-query', template: '<ng-content></ng-content>'})
+      @Component({
+        selector: 'has-query',
+        template: '<ng-content></ng-content>',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class HasQuery {
         @ContentChild('Token') token: any;
       }
 
-      @Component({template: '<has-query><div text-token></div></has-query>'})
+      @Component({
+        template: '<has-query><div text-token></div></has-query>',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {
         @ViewChild(HasQuery) queryComp!: HasQuery;
       }
@@ -2561,12 +2956,23 @@ describe('query logic', () => {
     });
 
     it('should give precedence to local reference if both a reference and a string injection token provider match a ContentChild query', () => {
-      @Component({selector: 'has-query', template: '<ng-content></ng-content>'})
+      @Component({
+        selector: 'has-query',
+        template: '<ng-content></ng-content>',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class HasQuery {
         @ContentChild('Token') token: any;
       }
 
-      @Component({template: '<has-query><div text-token #Token></div></has-query>'})
+      @Component({
+        template: '<has-query><div text-token #Token></div></has-query>',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {
         @ViewChild(HasQuery) queryComp!: HasQuery;
       }
@@ -2579,12 +2985,23 @@ describe('query logic', () => {
     });
 
     it('should match string injection token in a ContentChildren query', () => {
-      @Component({selector: 'has-query', template: '<ng-content></ng-content>'})
+      @Component({
+        selector: 'has-query',
+        template: '<ng-content></ng-content>',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class HasQuery {
         @ContentChildren('Token') tokens!: QueryList<any>;
       }
 
-      @Component({template: '<has-query><div text-token></div></has-query>'})
+      @Component({
+        template: '<has-query><div text-token></div></has-query>',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {
         @ViewChild(HasQuery) queryComp!: HasQuery;
       }
@@ -2599,12 +3016,23 @@ describe('query logic', () => {
     });
 
     it('should match both string injection token and local reference inside a ContentChildren query', () => {
-      @Component({selector: 'has-query', template: '<ng-content></ng-content>'})
+      @Component({
+        selector: 'has-query',
+        template: '<ng-content></ng-content>',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class HasQuery {
         @ContentChildren('Token') tokens!: QueryList<any>;
       }
 
-      @Component({template: '<has-query><div text-token #Token></div></has-query>'})
+      @Component({
+        template: '<has-query><div text-token #Token></div></has-query>',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {
         @ViewChild(HasQuery) queryComp!: HasQuery;
       }
@@ -2620,7 +3048,12 @@ describe('query logic', () => {
     });
 
     it('should match string token specified through the `read` option of a view query', () => {
-      @Component({template: '<div text-token #Token></div>'})
+      @Component({
+        template: '<div text-token #Token></div>',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {
         @ViewChild('Token', {read: 'Token'}) token: any;
       }
@@ -2632,12 +3065,23 @@ describe('query logic', () => {
     });
 
     it('should match string token specified through the `read` option of a content query', () => {
-      @Component({selector: 'has-query', template: '<ng-content></ng-content>'})
+      @Component({
+        selector: 'has-query',
+        template: '<ng-content></ng-content>',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class HasQuery {
         @ContentChild('Token', {read: 'Token'}) token: any;
       }
 
-      @Component({template: '<has-query><div text-token #Token></div></has-query>'})
+      @Component({
+        template: '<has-query><div text-token #Token></div></has-query>',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {
         @ViewChild(HasQuery) queryComp!: HasQuery;
       }
@@ -2658,7 +3102,13 @@ function initWithTemplate(compType: Type<any>, template: string) {
   return fixture;
 }
 
-@Component({selector: 'local-ref-query-component', template: '<ng-content></ng-content>'})
+@Component({
+  selector: 'local-ref-query-component',
+  template: '<ng-content></ng-content>',
+  standalone: false,
+
+  changeDetection: ChangeDetectionStrategy.Eager,
+})
 class QueryComp {
   @ViewChild('viewQuery') viewChild!: any;
   @ContentChild('contentQuery') contentChild!: any;
@@ -2667,16 +3117,37 @@ class QueryComp {
   @ContentChildren('contentQuery') contentChildren!: QueryList<any>;
 }
 
-@Component({selector: 'app-comp', template: ``})
+@Component({
+  selector: 'app-comp',
+  template: ``,
+  standalone: false,
+
+  changeDetection: ChangeDetectionStrategy.Eager,
+})
 class AppComp {}
 
-@Component({selector: 'simple-comp-a', template: ''})
+@Component({
+  selector: 'simple-comp-a',
+  template: '',
+  standalone: false,
+
+  changeDetection: ChangeDetectionStrategy.Eager,
+})
 class SimpleCompA {}
 
-@Component({selector: 'simple-comp-b', template: ''})
+@Component({
+  selector: 'simple-comp-b',
+  template: '',
+  standalone: false,
+
+  changeDetection: ChangeDetectionStrategy.Eager,
+})
 class SimpleCompB {}
 
-@Directive({selector: '[text]'})
+@Directive({
+  selector: '[text]',
+  standalone: false,
+})
 class TextDirective {
   @Input() text = '';
 }
@@ -2687,6 +3158,9 @@ class TextDirective {
     <div [text]="text"></div>
     <span #foo></span>
   `,
+  standalone: false,
+
+  changeDetection: ChangeDetectionStrategy.Eager,
 })
 class StaticViewQueryComp {
   private _textDir!: TextDirective;
@@ -2725,6 +3199,9 @@ class StaticViewQueryComp {
     <div #bar></div>
     <span #baz></span>
   `,
+  standalone: false,
+
+  changeDetection: ChangeDetectionStrategy.Eager,
 })
 class SubclassStaticViewQueryComp extends StaticViewQueryComp {
   @ViewChild('bar', {static: true}) bar!: ElementRef;
@@ -2732,7 +3209,13 @@ class SubclassStaticViewQueryComp extends StaticViewQueryComp {
   @ViewChild('baz') baz!: ElementRef;
 }
 
-@Component({selector: 'static-content-query-comp', template: `<ng-content></ng-content>`})
+@Component({
+  selector: 'static-content-query-comp',
+  template: `<ng-content></ng-content>`,
+  standalone: false,
+
+  changeDetection: ChangeDetectionStrategy.Eager,
+})
 class StaticContentQueryComp {
   private _textDir!: TextDirective;
   private _foo!: ElementRef;
@@ -2759,7 +3242,10 @@ class StaticContentQueryComp {
   }
 }
 
-@Directive({selector: '[staticContentQueryDir]'})
+@Directive({
+  selector: '[staticContentQueryDir]',
+  standalone: false,
+})
 class StaticContentQueryDir {
   private _textDir!: TextDirective;
   private _foo!: ElementRef;
@@ -2786,7 +3272,13 @@ class StaticContentQueryDir {
   }
 }
 
-@Component({selector: 'subclass-static-content-query-comp', template: `<ng-content></ng-content>`})
+@Component({
+  selector: 'subclass-static-content-query-comp',
+  template: `<ng-content></ng-content>`,
+  standalone: false,
+
+  changeDetection: ChangeDetectionStrategy.Eager,
+})
 class SubclassStaticContentQueryComp extends StaticContentQueryComp {
   @ContentChild('bar', {static: true}) bar!: ElementRef;
 
@@ -2795,9 +3287,10 @@ class SubclassStaticContentQueryComp extends StaticContentQueryComp {
 
 @Component({
   selector: 'query-with-changes',
-  template: `
-    <div *ngIf="showing" #foo></div>
-  `,
+  template: ` <div *ngIf="showing" #foo></div> `,
+  standalone: false,
+
+  changeDetection: ChangeDetectionStrategy.Eager,
 })
 export class QueryCompWithChanges {
   @ViewChildren('foo') foos!: QueryList<any>;
@@ -2816,6 +3309,9 @@ export class QueryCompWithChanges {
       </div>
     </query-component>
   `,
+  standalone: false,
+
+  changeDetection: ChangeDetectionStrategy.Eager,
 })
 export class QueryCompWithNoChanges {
   showing: boolean = true;
@@ -2823,7 +3319,13 @@ export class QueryCompWithNoChanges {
   queryComp!: QueryCompWithStrictChangeEmitParent;
 }
 
-@Component({selector: 'query-component', template: `<ng-content></ng-content>`})
+@Component({
+  selector: 'query-component',
+  template: `<ng-content></ng-content>`,
+  standalone: false,
+
+  changeDetection: ChangeDetectionStrategy.Eager,
+})
 export class QueryCompWithStrictChangeEmitParent {
   @ContentChildren('foo', {
     descendants: true,
@@ -2836,10 +3338,19 @@ export class QueryCompWithStrictChangeEmitParent {
   }
 }
 
-@Component({selector: 'query-target', template: '<ng-content></ng-content>'})
+@Component({
+  selector: 'query-target',
+  template: '<ng-content></ng-content>',
+  standalone: false,
+
+  changeDetection: ChangeDetectionStrategy.Eager,
+})
 class SuperDirectiveQueryTarget {}
 
-@Directive({selector: '[super-directive]'})
+@Directive({
+  selector: '[super-directive]',
+  standalone: false,
+})
 class SuperDirective {
   @ViewChildren(SuperDirectiveQueryTarget) headers!: QueryList<SuperDirectiveQueryTarget>;
 }
@@ -2849,6 +3360,9 @@ class SuperDirective {
     <query-target>One</query-target>
     <query-target>Two</query-target>
   `,
+  standalone: false,
+
+  changeDetection: ChangeDetectionStrategy.Eager,
 })
 class SubComponent extends SuperDirective {}
 
@@ -2858,6 +3372,9 @@ const MY_OPTION_TOKEN = new InjectionToken<TestComponentWithToken>('ComponentWit
   selector: 'my-option',
   template: 'Option',
   providers: [{provide: MY_OPTION_TOKEN, useExisting: TestComponentWithToken}],
+  standalone: false,
+
+  changeDetection: ChangeDetectionStrategy.Eager,
 })
 class TestComponentWithToken {}
 
@@ -2868,6 +3385,9 @@ class TestComponentWithToken {}
     <my-option></my-option>
     <ng-content></ng-content>
   `,
+  standalone: false,
+
+  changeDetection: ChangeDetectionStrategy.Eager,
 })
 class TestInjectionTokenQueries {
   @ViewChild(MY_OPTION_TOKEN) viewFirstOption!: TestComponentWithToken;
@@ -2883,5 +3403,8 @@ class TestInjectionTokenQueries {
       <my-option></my-option>
     </test-injection-token>
   `,
+  standalone: false,
+
+  changeDetection: ChangeDetectionStrategy.Eager,
 })
 class TestInjectionTokenContentQueries {}

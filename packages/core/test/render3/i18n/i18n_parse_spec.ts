@@ -6,12 +6,12 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
-import {ɵɵi18nApply, ɵɵi18nExp} from '@angular/core';
-import {applyCreateOpCodes} from '@angular/core/src/render3/i18n/i18n_apply';
-import {i18nStartFirstCreatePass} from '@angular/core/src/render3/i18n/i18n_parse';
-import {getTIcu} from '@angular/core/src/render3/i18n/i18n_util';
-import {I18nUpdateOpCodes, IcuType, TI18n} from '@angular/core/src/render3/interfaces/i18n';
-import {HEADER_OFFSET, HOST} from '@angular/core/src/render3/interfaces/view';
+import {ɵɵi18nApply, ɵɵi18nExp} from '../../../src/core';
+import {applyCreateOpCodes} from '../../../src/render3/i18n/i18n_apply';
+import {i18nStartFirstCreatePass} from '../../../src/render3/i18n/i18n_parse';
+import {getTIcu} from '../../../src/render3/i18n/i18n_util';
+import {I18nUpdateOpCodes, IcuType, TI18n} from '../../../src/render3/interfaces/i18n';
+import {HEADER_OFFSET, HOST} from '../../../src/render3/interfaces/view';
 
 import {matchTI18n, matchTIcu} from '../matchers';
 import {matchDebug} from '../utils';
@@ -295,6 +295,50 @@ describe('i18n_parse', () => {
         expect(fixture.host.innerHTML).toEqual(
           `parentA value2<!--nested ICU 0-->!<!--ICU ${HEADER_OFFSET + 0}:0-->`,
         );
+      });
+    });
+
+    it('should properly sanitize malicious URLs like `<a href="evil.test">` injected into translations', () => {
+      const tI18n = toT18n(`{
+        �0�, select,
+          A {<a href="javascript:console.log('hacked!');">malicious JS</a>}
+          other {<a href="https://evil.test">malicious link</a>}
+      }`);
+
+      fixture.apply(() => {
+        applyCreateOpCodes(fixture.lView, tI18n.create, fixture.host, null);
+        expect(fixture.host.innerHTML).toEqual(`<!--ICU ${HEADER_OFFSET + 0}:0-->`);
+      });
+
+      fixture.apply(() => {
+        ɵɵi18nExp('A');
+        ɵɵi18nApply(0);
+        expect(fixture.host.innerHTML).toEqual(
+          `<a href="unsafe:blocked">malicious JS</a><!--ICU ${HEADER_OFFSET + 0}:0-->`,
+        );
+      });
+
+      fixture.apply(() => {
+        ɵɵi18nExp('other');
+        ɵɵi18nApply(0);
+        expect(fixture.host.innerHTML).toEqual(
+          `<a href="unsafe:blocked">malicious link</a><!--ICU ${HEADER_OFFSET + 0}:0-->`,
+        );
+      });
+    });
+
+    it('should ignore unknown attributes', () => {
+      const tI18n = toT18n(`{�0�, select, A {<div unknown="unknown"></div>} }`);
+
+      fixture.apply(() => {
+        applyCreateOpCodes(fixture.lView, tI18n.create, fixture.host, null);
+        expect(fixture.host.innerHTML).toEqual(`<!--ICU ${HEADER_OFFSET + 0}:0-->`);
+      });
+
+      fixture.apply(() => {
+        ɵɵi18nExp('A');
+        ɵɵi18nApply(0);
+        expect(fixture.host.innerHTML).toEqual(`<div></div><!--ICU ${HEADER_OFFSET + 0}:0-->`);
       });
     });
   });

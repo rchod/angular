@@ -13,7 +13,7 @@ export {CompoundMetadataRegistry, LocalMetadataRegistry} from './src/registry';
 export {
   ResourceRegistry,
   Resource,
-  ComponentResources,
+  DirectiveResources,
   isExternalResource,
   ExternalResource,
 } from './src/resource_registry';
@@ -23,11 +23,5 @@ export {
   CompoundMetadataReader,
   isHostDirectiveMetaForGlobalMode,
 } from './src/util';
-export {
-  BindingPropertyName,
-  ClassPropertyMapping,
-  ClassPropertyName,
-  InputOrOutput,
-} from './src/property_mapping';
 export {ExportedProviderStatusResolver} from './src/providers';
 export {HostDirectivesResolver} from './src/host_directives_resolver';

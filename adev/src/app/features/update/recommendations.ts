@@ -1,3 +1,11 @@
+/**
+ * @license
+ * Copyright Google LLC All Rights Reserved.
+ *
+ * Use of this source code is governed by an MIT-style license that can be
+ * found in the LICENSE file at https://angular.dev/license
+ */
+
 export enum ApplicationComplexity {
   Basic = 1,
   Medium = 2,
@@ -6,6 +14,12 @@ export enum ApplicationComplexity {
 
 export interface Step {
   step: string;
+  /**
+   * Action text rendered as Markdown. Use Markdown link syntax `[text](url)`
+   * for any links — raw `<a>` HTML tags bypass the custom link renderer in
+   * `update.component.ts` and will not pick up `target="_blank"` or the
+   * external-link icon.
+   */
   action: string;
   possibleIn: number;
   necessaryAsOf: number;
@@ -147,7 +161,7 @@ export const RECOMMENDATIONS: Step[] = [
     level: ApplicationComplexity.Advanced,
     step: 'gendir',
     action:
-      'Do not rely on `gendir`, instead look at using `skipTemplateCodeGen`. <a href=https://github.com/angular/angular/issues/19339#issuecomment-332607471" target="_blank">Read More</a>',
+      'Do not rely on `gendir`, instead look at using `skipTemplateCodeGen`. [Read More](https://github.com/angular/angular/issues/19339#issuecomment-332607471)',
   },
   {
     possibleIn: 220,
@@ -200,7 +214,7 @@ export const RECOMMENDATIONS: Step[] = [
     level: ApplicationComplexity.Basic,
     step: 'Http',
     action:
-      "If you use the legacy `HttpModule` and the `Http` service, switch to `HttpClientModule` and the `HttpClient` service. HttpClient simplifies the default ergonomics (you don't need to map to JSON anymore) and now supports typed return values and interceptors. Read more on [angular.dev](https://angular.io/guide/http).",
+      "If you use the legacy `HttpModule` and the `Http` service, switch to `HttpClientModule` and the `HttpClient` service. HttpClient simplifies the default ergonomics (you don't need to map to JSON anymore) and now supports typed return values and interceptors. Read more on [angular.dev](https://angular.dev/guide/http).",
   },
   {
     possibleIn: 430,
@@ -231,7 +245,7 @@ export const RECOMMENDATIONS: Step[] = [
     level: ApplicationComplexity.Basic,
     step: 'node 8',
     action:
-      'Make sure you are using <a href="http://www.hostingadvice.com/how-to/update-node-js-latest-version/" target="_blank">Node 8 or later</a>',
+      'Make sure you are using [Node 8 or later](http://www.hostingadvice.com/how-to/update-node-js-latest-version/)',
   },
   {
     possibleIn: 600,
@@ -240,7 +254,7 @@ export const RECOMMENDATIONS: Step[] = [
     windows: false,
     step: 'Update to CLI v6',
     action:
-      'Update your Angular CLI, and migrate the configuration to the <a href="https://github.com/angular/angular-cli/wiki/angular-workspace" target="_blank">new angular.json format</a> by running the following:<br/><br/>`NG_DISABLE_VERSION_CHECK=1 npx @angular/cli@6 update @angular/cli@6`<br/>',
+      'Update your Angular CLI, and migrate the configuration to the [new angular.json format](https://github.com/angular/angular-cli/wiki/angular-workspace) by running the following:<br/><br/>`NG_DISABLE_VERSION_CHECK=1 npx @angular/cli@6 update @angular/cli@6`<br/>',
   },
   {
     possibleIn: 600,
@@ -249,7 +263,7 @@ export const RECOMMENDATIONS: Step[] = [
     windows: true,
     step: 'Update to CLI v6',
     action:
-      'Update your Angular CLI, and migrate the configuration to the <a href="https://github.com/angular/angular-cli/wiki/angular-workspace" target="_blank">new angular.json format</a> by running the following:<br/><br/>`cmd /C "set "NG_DISABLE_VERSION_CHECK=1" && npx @angular/cli@6 update @angular/cli@6 @angular/core@6"`<br/>',
+      'Update your Angular CLI, and migrate the configuration to the [new angular.json format](https://github.com/angular/angular-cli/wiki/angular-workspace) by running the following:<br/><br/>`cmd /C "set "NG_DISABLE_VERSION_CHECK=1" && npx @angular/cli@6 update @angular/cli@6 @angular/core@6"`<br/>',
   },
   {
     possibleIn: 600,
@@ -335,7 +349,7 @@ export const RECOMMENDATIONS: Step[] = [
     level: ApplicationComplexity.Medium,
     step: 'strictPropertyInitializer',
     action:
-      'If you have TypeScript configured to be strict (if you have set `strict` to `true` in your `tsconfig.json` file), update your `tsconfig.json` to disable `strictPropertyInitialization` or move property initialization from `ngOnInit` to your constructor. You can learn more about this flag on the <a href="https://www.typescriptlang.org/docs/handbook/release-notes/typescript-2-7.html#strict-class-initialization">TypeScript 2.7 release notes</a>.',
+      'If you have TypeScript configured to be strict (if you have set `strict` to `true` in your `tsconfig.json` file), update your `tsconfig.json` to disable `strictPropertyInitialization` or move property initialization from `ngOnInit` to your constructor. You can learn more about this flag on the [TypeScript 2.7 release notes](https://www.typescriptlang.org/docs/handbook/release-notes/typescript-2-7.html#strict-class-initialization).',
   },
   {
     possibleIn: 600,
@@ -343,7 +357,7 @@ export const RECOMMENDATIONS: Step[] = [
     level: ApplicationComplexity.Basic,
     step: 'update to RxJS 6',
     action:
-      'Remove deprecated RxJS 5 features using <a href="https://github.com/ReactiveX/rxjs-tslint" target="_blank">rxjs-tslint auto update rules</a><br/><br/>For most applications this will mean running the following two commands:<br/><br/>`npx rxjs-tslint`<br/>`rxjs-5-to-6-migrate -p src/tsconfig.app.json`',
+      'Remove deprecated RxJS 5 features using [rxjs-tslint auto update rules](https://github.com/ReactiveX/rxjs-tslint)<br/><br/>For most applications this will mean running the following two commands:<br/><br/>`npx rxjs-tslint`<br/>`rxjs-5-to-6-migrate -p src/tsconfig.app.json`',
   },
   {
     possibleIn: 600,
@@ -366,7 +380,7 @@ export const RECOMMENDATIONS: Step[] = [
     level: ApplicationComplexity.Basic,
     step: 'TypeScript 3.1',
     action:
-      'Angular now uses TypeScript 3.1, read more about any potential breaking changes: https://www.typescriptlang.org/docs/handbook/release-notes/typescript-3-1.html',
+      'Angular now uses TypeScript 3.1, read more about [any potential breaking changes](https://www.typescriptlang.org/docs/handbook/release-notes/typescript-3-1.html).',
   },
   {
     possibleIn: 700,
@@ -374,7 +388,7 @@ export const RECOMMENDATIONS: Step[] = [
     level: ApplicationComplexity.Basic,
     step: 'Node 10',
     action:
-      'Angular has now added support for Node 10: https://nodejs.org/en/blog/release/v10.0.0/',
+      'Angular has now added support for [Node 10](https://nodejs.org/en/blog/release/v10.0.0/).',
   },
   {
     possibleIn: 700,
@@ -456,7 +470,7 @@ export const RECOMMENDATIONS: Step[] = [
     level: ApplicationComplexity.Basic,
     step: 'use ::ng-deep instead of /deep/',
     action:
-      'Replace `/deep/` with `::ng-deep` in your styles, [read more about angular component styles and ::ng-deep](https://angular.io/guide/component-styles#deprecated-deep--and-ng-deep). `/deep/` and `::ng-deep` both are deprecated but using `::ng-deep` is preferred until the shadow-piercing descendant combinator is [removed from browsers and tools](https://www.chromestatus.com/features/6750456638341120) completely.',
+      'Replace `/deep/` with `::ng-deep` in your styles, [read more about angular component styles and ::ng-deep](https://angular.io/guide/component-styles#deprecated-deep--and-ng-deep). `/deep/` and `::ng-deep` both are deprecated but using `::ng-deep` is preferred until the shadow-piercing descendant combinator is [removed from browsers and tools](https://chromestatus.com/feature/5045542597951488) completely.',
   },
   {
     possibleIn: 800,
@@ -472,7 +486,7 @@ export const RECOMMENDATIONS: Step[] = [
     level: ApplicationComplexity.Basic,
     step: 'node 10',
     action:
-      'Make sure you are using <a href="http://www.hostingadvice.com/how-to/update-node-js-latest-version/" target="_blank">Node 10 or later</a>.',
+      'Make sure you are using [Node 10 or later](http://www.hostingadvice.com/how-to/update-node-js-latest-version/).',
   },
   {
     possibleIn: 800,
@@ -565,7 +579,7 @@ export const RECOMMENDATIONS: Step[] = [
     level: ApplicationComplexity.Basic,
     step: 'node 10.13',
     action:
-      'Make sure you are using <a href="http://www.hostingadvice.com/how-to/update-node-js-latest-version/" target="_blank">Node 10.13 or later</a>.',
+      'Make sure you are using [Node 10.13 or later](http://www.hostingadvice.com/how-to/update-node-js-latest-version/).',
   },
   {
     possibleIn: 900,
@@ -774,8 +788,7 @@ export const RECOMMENDATIONS: Step[] = [
     necessaryAsOf: 1000,
     level: ApplicationComplexity.Basic,
     step: 'v10 NodeJS 12',
-    action:
-      'Make sure you are using <a href="https://nodejs.org/dist/latest-v12.x/" target="_blank">Node 12 or later</a>.',
+    action: 'Make sure you are using [Node 12 or later](https://nodejs.org/dist/latest-v12.x/).',
   },
   {
     possibleIn: 1000,
@@ -863,7 +876,7 @@ export const RECOMMENDATIONS: Step[] = [
     level: ApplicationComplexity.Medium,
     step: 'esm5-bundles',
     action:
-      "The [Angular Package Format](https://g.co/ng/apf) has been updated to remove `esm5` and `fesm5` formats. These are no longer distributed in our npm packages. If you don't use the CLI, you may need to downlevel Angular code to ES5 yourself.",
+      "The [Angular Package Format](https://angular.dev/tools/libraries/angular-package-format) has been updated to remove `esm5` and `fesm5` formats. These are no longer distributed in our npm packages. If you don't use the CLI, you may need to downlevel Angular code to ES5 yourself.",
   },
   {
     possibleIn: 1000,
@@ -1327,7 +1340,7 @@ export const RECOMMENDATIONS: Step[] = [
     level: ApplicationComplexity.Basic,
     step: 'TypeScript 4.4',
     action:
-      'Angular now uses TypeScript 4.4, read more about any potential breaking changes: https://www.typescriptlang.org/docs/handbook/release-notes/typescript-4-4.html',
+      'Angular now uses TypeScript 4.4, read more about [any potential breaking changes](https://www.typescriptlang.org/docs/handbook/release-notes/typescript-4-4.html).',
   },
   {
     possibleIn: 1300,
@@ -1335,7 +1348,7 @@ export const RECOMMENDATIONS: Step[] = [
     level: ApplicationComplexity.Basic,
     step: 'v13 node',
     action:
-      'Make sure you are using <a href="http://www.hostingadvice.com/how-to/update-node-js-latest-version/" target="_blank">Node 12.20.0 or later</a>',
+      'Make sure you are using [Node 12.20.0 or later](http://www.hostingadvice.com/how-to/update-node-js-latest-version/)',
   },
   {
     possibleIn: 1300,
@@ -1449,7 +1462,7 @@ export const RECOMMENDATIONS: Step[] = [
     level: ApplicationComplexity.Basic,
     step: 'TypeScript 4.6',
     action:
-      'Angular now uses TypeScript 4.6, read more about any potential breaking changes: https://devblogs.microsoft.com/typescript/announcing-typescript-4-6/',
+      'Angular now uses TypeScript 4.6, read more about [any potential breaking changes](https://devblogs.microsoft.com/typescript/announcing-typescript-4-6/).',
   },
 
   {
@@ -1458,7 +1471,7 @@ export const RECOMMENDATIONS: Step[] = [
     level: ApplicationComplexity.Basic,
     step: 'v14 node',
     action:
-      'Make sure you are using <a href="http://www.hostingadvice.com/how-to/update-node-js-latest-version/" target="_blank">Node 14.15.0 or later</a>',
+      'Make sure you are using [Node 14.15.0 or later](http://www.hostingadvice.com/how-to/update-node-js-latest-version/)',
   },
   {
     possibleIn: 1400,
@@ -1661,7 +1674,7 @@ export const RECOMMENDATIONS: Step[] = [
     level: ApplicationComplexity.Basic,
     step: 'v15 node support',
     action:
-      'Make sure that you are using a supported version of node.js before you upgrade your application. Angular v15 supports node.js versions: 14.20.x, 16.13.x and 18.10.x. <a href="https://v15.angular.io/guide/update-to-version-15#v15-bc-01" alt="Link to more information about this change">Read further</a>',
+      'Make sure that you are using a supported version of node.js before you upgrade your application. Angular v15 supports node.js versions: 14.20.x, 16.13.x and 18.10.x. [Read further](https://v15.angular.io/guide/update-to-version-15#v15-bc-01)',
   },
   {
     possibleIn: 1500,
@@ -1669,7 +1682,7 @@ export const RECOMMENDATIONS: Step[] = [
     level: ApplicationComplexity.Basic,
     step: 'v15 ts support',
     action:
-      'Make sure that you are using a supported version of TypeScript before you upgrade your application. Angular v15 supports TypeScript version 4.8 or later.  <a href="https://v15.angular.io/guide/update-to-version-15#v15-bc-02" alt="Link to more information about this change">Read further</a>',
+      'Make sure that you are using a supported version of TypeScript before you upgrade your application. Angular v15 supports TypeScript version 4.8 or later.  [Read further](https://v15.angular.io/guide/update-to-version-15#v15-bc-02)',
   },
   {
     possibleIn: 1500,
@@ -1693,7 +1706,7 @@ export const RECOMMENDATIONS: Step[] = [
     level: ApplicationComplexity.Medium,
     step: 'v15 keyframe',
     action:
-      'In v15, the Angular compiler prefixes `@keyframes` in CSS with the component\'s scope. This means that any TypeScript code that relies on `keyframes` names no longer works in v15. Update any such instances to: define keyframes programmatically, use global stylesheets, or change the component\'s view encapsulation. <a href="https://v15.angular.io/guide/update-to-version-15#v15-bc-03" alt="Link to more information about this change">Read further</a>',
+      "In v15, the Angular compiler prefixes `@keyframes` in CSS with the component's scope. This means that any TypeScript code that relies on `keyframes` names no longer works in v15. Update any such instances to: define keyframes programmatically, use global stylesheets, or change the component's view encapsulation. [Read further](https://v15.angular.io/guide/update-to-version-15#v15-bc-03)",
   },
   {
     possibleIn: 1500,
@@ -1709,7 +1722,7 @@ export const RECOMMENDATIONS: Step[] = [
     level: ApplicationComplexity.Medium,
     step: 'v15 base-decorators',
     action:
-      'Make sure to use decorators in base classes with child classes that inherit constructors and use dependency injection. Such base classes should be decorated with either `@Injectable` or `@Directive` or the compiler returns an error. <a href="https://v15.angular.io/guide/update-to-version-15#v15-bc-05" alt="Link to more information about this change">Read further</a>',
+      'Make sure to use decorators in base classes with child classes that inherit constructors and use dependency injection. Such base classes should be decorated with either `@Injectable` or `@Directive` or the compiler returns an error. [Read further](https://v15.angular.io/guide/update-to-version-15#v15-bc-05)',
   },
   {
     possibleIn: 1500,
@@ -1717,7 +1730,7 @@ export const RECOMMENDATIONS: Step[] = [
     level: ApplicationComplexity.Medium,
     step: 'v15 setDisabledState',
     action:
-      'In v15, `setDisabledState` is always called when a `ControlValueAccessor` is attached. To opt-out of this behavior, use `FormsModule.withConfig` or `ReactiveFormsModule.withConfig`. <a href="https://v15.angular.io/guide/update-to-version-15#v15-bc-06" alt="Link to more information about this change">Read further</a>',
+      'In v15, `setDisabledState` is always called when a `ControlValueAccessor` is attached. To opt-out of this behavior, use `FormsModule.withConfig` or `ReactiveFormsModule.withConfig`. [Read further](https://v15.angular.io/guide/update-to-version-15#v15-bc-06)',
   },
   {
     possibleIn: 1500,
@@ -1725,7 +1738,7 @@ export const RECOMMENDATIONS: Step[] = [
     level: ApplicationComplexity.Advanced,
     step: 'v15 canParse',
     action:
-      'Applications that use `canParse` should use `analyze` from `@angular/localize/tools` instead. In v15, the `canParse` method was removed from all translation parsers in `@angular/localize/tools`.  <a href="https://v15.angular.io/guide/update-to-version-15#v15-bc-07" alt="Link to more information about this change">Read further</a>',
+      'Applications that use `canParse` should use `analyze` from `@angular/localize/tools` instead. In v15, the `canParse` method was removed from all translation parsers in `@angular/localize/tools`.  [Read further](https://v15.angular.io/guide/update-to-version-15#v15-bc-07)',
   },
   {
     possibleIn: 1500,
@@ -1733,7 +1746,7 @@ export const RECOMMENDATIONS: Step[] = [
     level: ApplicationComplexity.Basic,
     step: 'v15 ActivatedRoutSnapshot',
     action:
-      'Make sure that all `ActivatedRouteSnapshot` objects have a `title` property. In v15, the `title` property is a required property of `ActivatedRouteSnapshot`. <a href="https://v15.angular.io/guide/update-to-version-15#v15-bc-08" alt="Link to more information about this change">Read further</a>',
+      'Make sure that all `ActivatedRouteSnapshot` objects have a `title` property. In v15, the `title` property is a required property of `ActivatedRouteSnapshot`. [Read further](https://v15.angular.io/guide/update-to-version-15#v15-bc-08)',
   },
   {
     possibleIn: 1500,
@@ -1741,7 +1754,7 @@ export const RECOMMENDATIONS: Step[] = [
     level: ApplicationComplexity.Advanced,
     step: 'v15 RouterOutlet',
     action:
-      'If your tests with `RouterOutlet` break, make sure they don\'t depend on the instantiation order of the corresponding component relative to change detection. In v15, `RouterOutlet` instantiates the component after change detection. <a href="https://v15.angular.io/guide/update-to-version-15#v15-bc-09" alt="Link to more information about this change">Read further</a>',
+      "If your tests with `RouterOutlet` break, make sure they don't depend on the instantiation order of the corresponding component relative to change detection. In v15, `RouterOutlet` instantiates the component after change detection. [Read further](https://v15.angular.io/guide/update-to-version-15#v15-bc-09)",
   },
   {
     possibleIn: 1500,
@@ -1749,7 +1762,7 @@ export const RECOMMENDATIONS: Step[] = [
     level: ApplicationComplexity.Basic,
     step: 'v15 relativeLinkResolution',
     action:
-      'In v15, `relativeLinkResolution` is not configurable in the Router. It was used to opt out of an earlier bug fix that is now standard.  <a href="https://v15.angular.io/guide/update-to-version-15#v15-bc-10" alt="Link to more information about this change">Read further</a>',
+      'In v15, `relativeLinkResolution` is not configurable in the Router. It was used to opt out of an earlier bug fix that is now standard.  [Read further](https://v15.angular.io/guide/update-to-version-15#v15-bc-10)',
   },
   {
     possibleIn: 1500,
@@ -1757,7 +1770,7 @@ export const RECOMMENDATIONS: Step[] = [
     level: ApplicationComplexity.Medium,
     step: 'v15 DATE_PIPE_DEFAULT_OPTIONS',
     action:
-      'Change instances of the `DATE_PIPE_DEFAULT_TIMEZONE` token to use `DATE_PIPE_DEFAULT_OPTIONS` to configure time zones.  In v15, the `DATE_PIPE_DEFAULT_TIMEZONE` token is deprecated. <a href="https://v15.angular.io/guide/update-to-version-15#v15-dp-01" alt="Link to more information about this change">Read further</a>',
+      'Change instances of the `DATE_PIPE_DEFAULT_TIMEZONE` token to use `DATE_PIPE_DEFAULT_OPTIONS` to configure time zones.  In v15, the `DATE_PIPE_DEFAULT_TIMEZONE` token is deprecated. [Read further](https://v15.angular.io/guide/update-to-version-15#v15-dp-01)',
   },
   {
     possibleIn: 1500,
@@ -1773,7 +1786,7 @@ export const RECOMMENDATIONS: Step[] = [
     level: ApplicationComplexity.Medium,
     step: 'v15 Injector.get',
     action:
-      'Update instances of `Injector.get()` that use an `InjectFlags` parameter to use an `InjectOptions` parameter. The `InjectFlags` parameter of `Injector.get()` is deprecated in v15. <a href="https://v15.angular.io/guide/update-to-version-15#v15-dp-02" alt="Link to more information about this change">Read further</a>',
+      'Update instances of `Injector.get()` that use an `InjectFlags` parameter to use an `InjectOptions` parameter. The `InjectFlags` parameter of `Injector.get()` is deprecated in v15. [Read further](https://v15.angular.io/guide/update-to-version-15#v15-dp-02)',
   },
   {
     possibleIn: 1500,
@@ -1781,7 +1794,7 @@ export const RECOMMENDATIONS: Step[] = [
     level: ApplicationComplexity.Basic,
     step: 'v15 TestBed.inject',
     action:
-      'Update instances of `TestBed.inject()` that use an `InjectFlags` parameter to use an `InjectOptions` parameter. The `InjectFlags` parameter of `TestBed.inject()` is deprecated in v15. <a href="https://v15.angular.io/guide/update-to-version-15#v15-dp-01" alt="Link to more information about this change">Read further</a>',
+      'Update instances of `TestBed.inject()` that use an `InjectFlags` parameter to use an `InjectOptions` parameter. The `InjectFlags` parameter of `TestBed.inject()` is deprecated in v15. [Read further](https://v15.angular.io/guide/update-to-version-15#v15-dp-01)',
   },
   {
     possibleIn: 1500,
@@ -1789,7 +1802,7 @@ export const RECOMMENDATIONS: Step[] = [
     level: ApplicationComplexity.Medium,
     step: 'v15 ngModule in providedIn',
     action:
-      'Using `providedIn: ngModule` for an `@Injectable` and `InjectionToken` is deprecated in v15. <a href="https://v15.angular.io/guide/update-to-version-15#v15-dp-04" alt="Link to more information about this change">Read further</a>',
+      'Using `providedIn: ngModule` for an `@Injectable` and `InjectionToken` is deprecated in v15. [Read further](https://v15.angular.io/guide/update-to-version-15#v15-dp-04)',
   },
   {
     possibleIn: 1500,
@@ -1797,7 +1810,7 @@ export const RECOMMENDATIONS: Step[] = [
     level: ApplicationComplexity.Basic,
     step: 'v15 providedIn any',
     action:
-      'Using `providedIn: \'any\'` for an `@Injectable` or `InjectionToken` is deprecated in v15. <a href="https://v15.angular.io/guide/update-to-version-15#v15-dp-05" alt="Link to more information about this change">Read further</a>',
+      "Using `providedIn: 'any'` for an `@Injectable` or `InjectionToken` is deprecated in v15. [Read further](https://v15.angular.io/guide/update-to-version-15#v15-dp-05)",
   },
   {
     possibleIn: 1500,
@@ -1805,7 +1818,7 @@ export const RECOMMENDATIONS: Step[] = [
     level: ApplicationComplexity.Medium,
     step: 'v15 RouterLinkWithHref',
     action:
-      'Update instances of the `RouterLinkWithHref`directive to use the `RouterLink` directive. The `RouterLinkWithHref` directive is deprecated in v15. <a href="https://v15.angular.io/guide/update-to-version-15#v15-dp-06" alt="Link to more information about this change">Read further</a>',
+      'Update instances of the `RouterLinkWithHref`directive to use the `RouterLink` directive. The `RouterLinkWithHref` directive is deprecated in v15. [Read further](https://v15.angular.io/guide/update-to-version-15#v15-dp-06)',
   },
   {
     possibleIn: 1500,
@@ -1814,7 +1827,7 @@ export const RECOMMENDATIONS: Step[] = [
     material: true,
     step: 'v15 mat refactor',
     action:
-      'In Angular Material v15, many of the components have been refactored to be based on the official Material Design Components for Web (MDC). This change affected the DOM and CSS classes of many components. <a href="https://rc.material.angular.io/guide/mdc-migration" alt="Link to more information about this change">Read further</a>',
+      'In Angular Material v15, many of the components have been refactored to be based on the official Material Design Components for Web (MDC). This change affected the DOM and CSS classes of many components. [Read further](https://rc.material.angular.dev/guide/mdc-migration)',
   },
   {
     possibleIn: 1500,
@@ -1911,7 +1924,7 @@ export const RECOMMENDATIONS: Step[] = [
     level: ApplicationComplexity.Medium,
     step: 'v16 createUrlTree',
     action:
-      'After bug fixes in `Router.createUrlTree` you may have to readjust tests which mock `ActiveRoute`. [Read further](https://github.com/angular/angular/blob/main/CHANGELOG.md#1600-next1-2023-03-01)',
+      'After bug fixes in `Router.createUrlTree` you may have to readjust tests which mock `ActivatedRoute`. [Read further](https://github.com/angular/angular/blob/main/CHANGELOG.md#1600-2023-05-03)',
   },
   {
     possibleIn: 1600,
@@ -2396,5 +2409,528 @@ export const RECOMMENDATIONS: Step[] = [
     step: '18.0.0. `ComponentFixture.autoDetect` behavior more closely matches Application behavior',
     action:
       'You may experience tests failures if you have tests that rely on change detection execution order when using `ComponentFixture.autoDetect` because it now executes change detection for fixtures within `ApplicationRef.tick`. For example, this will cause test fixture to refresh before any dialogs that it creates whereas this may have been the other way around in the past.',
+  },
+  {
+    action:
+      "In the application's project directory, run `ng update @angular/core@19 @angular/cli@19` to update your application to Angular v19.",
+    level: ApplicationComplexity.Basic,
+    necessaryAsOf: 1900,
+    possibleIn: 1900,
+    step: '19.0.0_ng_update',
+  },
+  {
+    possibleIn: 1900,
+    necessaryAsOf: 1900,
+    level: ApplicationComplexity.Basic,
+    material: true,
+    step: 'update @angular/material',
+    action: 'Run `ng update @angular/material@19`.',
+  },
+  {
+    action:
+      'Angular directives, components and pipes are now standalone by default. Specify "standalone: false" for declarations that are currently declared in an NgModule. The Angular CLI will automatically update your code to reflect that.',
+    level: ApplicationComplexity.Basic,
+    necessaryAsOf: 1900,
+    possibleIn: 1900,
+    step: '19.0.0-standalone-declarations',
+  },
+  {
+    action:
+      'Remove `this.` prefix when accessing template reference variables. For example, refactor `<div #foo></div>{{ this.foo }}` to `<div #foo></div>{{ foo }}`',
+    level: ApplicationComplexity.Medium,
+    necessaryAsOf: 1900,
+    possibleIn: 1900,
+    step: '19.0.0-remove-this',
+  },
+  {
+    action:
+      'Replace usages of `BrowserModule.withServerTransition()` with injection of the `APP_ID` token to set the application `id` instead.',
+    level: ApplicationComplexity.Basic,
+    necessaryAsOf: 1900,
+    possibleIn: 1900,
+    step: '19.0.0-remove-browser-module-with-server-transition',
+  },
+  {
+    action: 'The `factories` property in `KeyValueDiffers` has been removed.',
+    level: ApplicationComplexity.Advanced,
+    necessaryAsOf: 1900,
+    possibleIn: 1900,
+    step: '19.0.0-remove-key-value-differs-factories',
+  },
+  {
+    action:
+      'In angular.json, replace the "name" option with "project" for the `@angular/localize` builder.',
+    level: ApplicationComplexity.Medium,
+    necessaryAsOf: 1900,
+    possibleIn: 1900,
+    step: '19.0.0_localize_builder_project_option',
+  },
+  {
+    action: 'Rename `ExperimentalPendingTasks` to `PendingTasks`.',
+    level: ApplicationComplexity.Advanced,
+    necessaryAsOf: 1900,
+    possibleIn: 1900,
+    step: '19.0.0_rename_experimental_pending_tasks',
+  },
+  {
+    action:
+      "Update tests that relied on the `Promise` timing of effects to use `await whenStable()` or call `.detectChanges()` to trigger effects. For effects triggered during change detection, ensure they don't depend on the application being fully rendered or consider using `afterRenderEffect()`. Tests using faked clocks may need to fast-forward/flush the clock.",
+    level: ApplicationComplexity.Medium,
+    necessaryAsOf: 1900,
+    possibleIn: 1900,
+    step: '19.0.0.1',
+  },
+  {
+    action: 'Upgrade to TypeScript version 5.5 or later.',
+    level: ApplicationComplexity.Basic,
+    necessaryAsOf: 1900,
+    possibleIn: 1900,
+    step: '19.0.0.2',
+  },
+  {
+    action:
+      'Update tests using `fakeAsync` that rely on specific timing of zone coalescing and scheduling when a change happens outside the Angular zone (hybrid mode scheduling) as these timers are now affected by `tick` and `flush`.',
+    level: ApplicationComplexity.Advanced,
+    necessaryAsOf: 1900,
+    possibleIn: 1900,
+    step: '19.0.0-timers-in-zone',
+  },
+  {
+    action:
+      "When using `createComponent` API and not passing content for the first `ng-content`, provide `document.createTextNode('')` as a `projectableNode` to prevent rendering the default fallback content.",
+    level: ApplicationComplexity.Medium,
+    necessaryAsOf: 1900,
+    possibleIn: 1900,
+    step: '19.0.0-render-default-fallback',
+  },
+  {
+    action:
+      'Update tests that rely on specific timing or ordering of change detection around custom elements, as the timing may have changed due to the switch to the hybrid scheduler.',
+    level: ApplicationComplexity.Advanced,
+    necessaryAsOf: 1900,
+    possibleIn: 1900,
+    step: '19.0.0-hybrid-scheduler-timing',
+  },
+  {
+    action:
+      'Migrate from using `Router.errorHandler` to `withNavigationErrorHandler` from `provideRouter` or `errorHandler` from `RouterModule.forRoot`.',
+    level: ApplicationComplexity.Basic,
+    necessaryAsOf: 1900,
+    possibleIn: 1900,
+    step: '19.0.0-router-error-handler',
+  },
+  {
+    action:
+      'Update tests to handle errors thrown during `ApplicationRef.tick` by either triggering change detection synchronously or rejecting outstanding `ComponentFixture.whenStable` promises.',
+    level: ApplicationComplexity.Advanced,
+    necessaryAsOf: 1900,
+    possibleIn: 1900,
+    step: '19.0.0-testbed-error-handling',
+  },
+  {
+    action: 'Update usages of `Resolve` interface to include `RedirectCommand` in its return type.',
+    level: ApplicationComplexity.Medium,
+    necessaryAsOf: 1900,
+    possibleIn: 1900,
+    step: '19.0.0-update-resolve-interface-return-type',
+  },
+  {
+    action:
+      '`fakeAsync` will flush pending timers by default. For tests that require the previous behavior, explicitly pass `{flush: false}` in the options parameter.',
+    level: ApplicationComplexity.Advanced,
+    necessaryAsOf: 1900,
+    possibleIn: 1900,
+    step: '19.0.0-update-fakeasync-to-flush-pending-timers',
+  },
+  {
+    action:
+      "In the application's project directory, run `ng update @angular/core@20 @angular/cli@20` to update your application to Angular v20.",
+    level: ApplicationComplexity.Basic,
+    necessaryAsOf: 2000,
+    possibleIn: 2000,
+    step: '20.0.0_ng_update',
+  },
+  {
+    possibleIn: 2000,
+    necessaryAsOf: 2000,
+    level: ApplicationComplexity.Basic,
+    material: true,
+    step: 'update @angular/material',
+    action: 'Run `ng update @angular/material@20`.',
+  },
+  {
+    possibleIn: 2000,
+    necessaryAsOf: 2000,
+    level: ApplicationComplexity.Basic,
+    step: '20.0.0_rename_afterRender_to_afterEveryRender',
+    action: 'Rename the `afterRender` lifecycle hook to `afterEveryRender`',
+  },
+  {
+    possibleIn: 2000,
+    necessaryAsOf: 2000,
+    level: ApplicationComplexity.Medium,
+    step: '20.0.0_replace_TestBed_flushEffects_with_tick',
+    action:
+      'Replace uses of `TestBed.flushEffects()` with `TestBed.tick()`, the closest equivalent to synchronously flush effects.',
+  },
+  {
+    possibleIn: 2000,
+    necessaryAsOf: 2000,
+    level: ApplicationComplexity.Advanced,
+    step: '20.0.0_update_provideCheckNoChangesConfig',
+    action:
+      'Rename `provideExperimentalCheckNoChangesForDebug` to `provideCheckNoChangesConfig`. Note its behavior now applies to all `checkNoChanges` runs. The `useNgZoneOnStable` option is no longer available.',
+  },
+  {
+    possibleIn: 2000,
+    necessaryAsOf: 2000,
+    level: ApplicationComplexity.Advanced,
+    step: '20.0.0_refactor_ng_reflect_attributes_usage',
+    action:
+      'Refactor application and test code to avoid relying on `ng-reflect-*` attributes. If needed temporarily for migration, use `provideNgReflectAttributes()` from `@angular/core` in bootstrap providers to re-enable them in dev mode only.',
+  },
+  {
+    possibleIn: 2000,
+    necessaryAsOf: 2000,
+    level: ApplicationComplexity.Advanced,
+    step: '20.0.0_adjust_RedirectFn_return_type_handling',
+    action:
+      'Adjust code that directly calls functions returning `RedirectFn`. These functions can now also return an `Observable` or `Promise`; ensure your logic correctly handles these asynchronous return types.',
+  },
+  {
+    possibleIn: 2000,
+    necessaryAsOf: 2000,
+    level: ApplicationComplexity.Basic,
+    step: '20.0.0_rename_resource_request_to_param',
+    action: 'Rename the `request` property passed in resources to `params`.',
+  },
+  {
+    possibleIn: 2000,
+    necessaryAsOf: 2000,
+    level: ApplicationComplexity.Medium,
+    step: '20.0.0_rename_rxResource_loader_to_stream',
+    action:
+      'Rename the `request` and `loader` properties passed in RxResource to `params` and `stream`.',
+  },
+  {
+    possibleIn: 2000,
+    necessaryAsOf: 2000,
+    level: ApplicationComplexity.Basic,
+    step: '20.0.0_replace_ResourceStatus_by_corresponding_strings',
+    action:
+      '`ResourceStatus` is no longer an enum. Use the corresponding constant string values instead.',
+  },
+  {
+    possibleIn: 2000,
+    necessaryAsOf: 2000,
+    level: ApplicationComplexity.Advanced,
+    step: '20.0.0_rename_provideExperimentalZonelessChangeDetection',
+    action:
+      'Rename `provideExperimentalZonelessChangeDetection` to `provideZonelessChangeDetection`.',
+  },
+  {
+    possibleIn: 2000,
+    necessaryAsOf: 2000,
+    level: ApplicationComplexity.Advanced,
+    step: '20.0.0_update_template_expressions_using_in_property',
+    action:
+      "If your templates use `{{ in }}` or `in` in expressions to refer to a component property named 'in', change it to `{{ this.in }}` or `this.in` as 'in' now refers to the JavaScript 'in' operator. If you're using `in` as a template reference, you'd have to rename the reference.",
+  },
+  {
+    possibleIn: 2000,
+    necessaryAsOf: 2000,
+    level: ApplicationComplexity.Advanced,
+    step: '20.0.0_update_router_method_array_parameters_to_readonly',
+    action:
+      'The type for the commands arrays passed to Router methods (`createUrlTree`, `navigate`, `createUrlTreeFromSnapshot`) have been updated to use `readonly T[]` since the array is not mutated. Code which extracts these types (e.g. with `typeof`) may need to be adjusted if it expects mutable arrays.',
+  },
+  {
+    possibleIn: 2000,
+    necessaryAsOf: 2000,
+    level: ApplicationComplexity.Advanced,
+    step: '20.0.0_update_animation_tests_for_guaranteed_flushing',
+    action:
+      'Review and update tests asserting on DOM elements involved in animations. Animations are now guaranteed to be flushed with change detection or `ApplicationRef.tick`, potentially altering previous test outcomes.',
+  },
+  {
+    possibleIn: 2000,
+    necessaryAsOf: 2000,
+    level: ApplicationComplexity.Medium,
+    step: '20.0.0_handle_uncaught_listener_errors_in_tests',
+    action:
+      'In tests, uncaught errors in event listeners are now rethrown by default. Previously, these were only logged to the console by default. Catch them if intentional for the test case, or use `rethrowApplicationErrors: false` in `configureTestingModule` as a last resort.',
+  },
+  {
+    possibleIn: 2000,
+    necessaryAsOf: 2000,
+    level: ApplicationComplexity.Advanced,
+    step: '20.0.0_update_route_guards_array_types',
+    action:
+      'The `any` type is removed from the Route guard arrays (canActivate, canDeactivate, etc); ensure guards are functions, `ProviderToken<T>`, or (deprecated) strings. Refactor string guards to `ProviderToken<T>` or functions.',
+  },
+  {
+    possibleIn: 2000,
+    necessaryAsOf: 2000,
+    level: ApplicationComplexity.Basic,
+    step: '20.0.0_update_nodejs_version',
+    action:
+      'Ensure your Node.js version is at least 20.11.1 and not v18 or v22.0-v22.10 before upgrading to Angular v20. Check the [full list of supported Node.js versions](https://angular.dev/reference/versions).',
+  },
+  {
+    possibleIn: 2000,
+    necessaryAsOf: 2000,
+    level: ApplicationComplexity.Basic,
+    step: '20.0.0_replace_TestBed_get_with_TestBed_inject',
+    action:
+      'Replace all occurrences of the deprecated `TestBed.get()` method with `TestBed.inject()` in your Angular tests for dependency injection.',
+  },
+  {
+    possibleIn: 2000,
+    necessaryAsOf: 2000,
+    level: ApplicationComplexity.Medium,
+    step: '20.0.0_remove_InjectFlags_usage',
+    action:
+      'Remove `InjectFlags` enum and its usage from `inject`, `Injector.get`, `EnvironmentInjector.get`, and `TestBed.inject` calls. Use options like `{optional: true}` for `inject` or handle null for `*.get` methods.',
+  },
+  {
+    possibleIn: 2000,
+    necessaryAsOf: 2000,
+    level: ApplicationComplexity.Advanced,
+    step: '20.0.0_update_injector_get_calls_to_use_ProviderToken',
+    action:
+      'Update `injector.get()` calls to use a specific `ProviderToken<T>` instead of relying on the removed `any` overload. If using string tokens (deprecated since v4), migrate them to `ProviderToken<T>`.',
+  },
+  {
+    possibleIn: 2000,
+    necessaryAsOf: 2000,
+    level: ApplicationComplexity.Basic,
+    step: '20.0.0_update_typescript_version',
+    action:
+      "Upgrade your project's TypeScript version to at least 5.8 before upgrading to Angular v20 to ensure compatibility.",
+  },
+  {
+    possibleIn: 2000,
+    necessaryAsOf: 2000,
+    level: ApplicationComplexity.Medium,
+    step: '20.0.0_set_moduleResolution_to_bundler',
+    action:
+      "Set `moduleResolution` to `'bundler'` in your `tsconfig.json`. Angular CLI's `ng update` migration applies this change automatically; if you upgrade manually or override the option in a base tsconfig, set it explicitly so imports of secondary entry-points such as `@angular/core/rxjs-interop` continue to resolve correctly.",
+  },
+  {
+    possibleIn: 2000,
+    necessaryAsOf: 2000,
+    level: ApplicationComplexity.Advanced,
+    step: '20.0.0_review_AsyncPipe_error_handling_in_tests',
+    action:
+      '`Unhandled errors in subscriptions/promises of AsyncPipe` are now directly reported to `ErrorHandler`. This may alter test outcomes; ensure tests correctly handle these reported errors.',
+  },
+  {
+    possibleIn: 2000,
+    necessaryAsOf: 2000,
+    level: ApplicationComplexity.Advanced,
+    step: '20.0.0_refactor_PendingTasks_run_usage',
+    action:
+      'If relying on the return value of `PendingTasks.run`, refactor to use `PendingTasks.add`. Handle promise results/rejections manually, especially for SSR to prevent node process shutdown on unhandled rejections.',
+  },
+  {
+    possibleIn: 2000,
+    necessaryAsOf: 2000,
+    level: ApplicationComplexity.Advanced,
+    step: '20.0.0_update_template_expressions_using_void_property',
+    action:
+      "If your templates use `{{ void }}` or `void` in expressions to refer to a component property named 'void', change it to `{{ this.void }}` or `this.void` as 'void' now refers to the JavaScript `void` operator.",
+  },
+  {
+    possibleIn: 2000,
+    necessaryAsOf: 2000,
+    level: ApplicationComplexity.Advanced,
+    step: '20.0.0_review_date_pipe_formatter_Y_usage',
+    action:
+      'Review `DatePipe` usages. Using the `Y` (week-numbering year) formatter without also including `w` (week number) is now detected as suspicious. Use `y` (year) if that was the intent, or include `w` alongside `Y`.',
+  },
+  {
+    possibleIn: 2000,
+    necessaryAsOf: 2000,
+    level: ApplicationComplexity.Medium,
+    step: '20.0.0_handle_uncaught_listener_errors_in_tests',
+    action:
+      'In templates parentheses are now always respected. This can lead to runtime breakages when nullish coalescing were nested in parathesis. eg `(foo?.bar).baz` will throw if `foo` is nullish as it would in native JavaScript.',
+  },
+  {
+    possibleIn: 2000,
+    necessaryAsOf: 2000,
+    level: ApplicationComplexity.Advanced,
+    step: '20.0.0_router_generate_error_redirectTo_and_canMatch_incompatible_together',
+    action:
+      'Route configurations are now validated more rigorously. Routes that combine `redirectTo` and `canMatch` protections will generate an error, as these properties are incompatible together by default.',
+  },
+  {
+    action:
+      "In the application's project directory, run `ng update @angular/core@21 @angular/cli@21` to update your application to Angular v21.",
+    level: ApplicationComplexity.Basic,
+    necessaryAsOf: 2100,
+    possibleIn: 2100,
+    step: '21.0.0_ng_update',
+  },
+
+  {
+    possibleIn: 2100,
+    necessaryAsOf: 2100,
+    level: ApplicationComplexity.Basic,
+    material: true,
+    step: 'update @angular/material',
+    action: 'Run `ng update @angular/material@21`.',
+  },
+  {
+    possibleIn: 2100,
+    necessaryAsOf: 2100,
+    level: ApplicationComplexity.Advanced,
+    step: '21.0.0-update-signal-input-access-in-custom-elements',
+    action:
+      'When using signal inputs with Angular custom elements, update property access to be direct (`elementRef.newInput`) instead of a function call (`elementRef.newInput()`) to align with the behavior of decorator-based inputs.',
+  },
+  {
+    possibleIn: 2100,
+    necessaryAsOf: 2100,
+    level: ApplicationComplexity.Advanced,
+    step: '21.0.0-zone-scheduler-behavior-change',
+    action:
+      "If using `provideZoneChangeDetection` without the ZoneJS polyfill, note that the internal scheduler is now always enabled. Review your app's timing as this may alter behavior that previously relied on the disabled scheduler.",
+  },
+  {
+    possibleIn: 2100,
+    necessaryAsOf: 2100,
+    level: ApplicationComplexity.Basic,
+    step: '21.0.0-provide-zone-change-detection-required',
+    action:
+      "Zone-based applications should add `provideZoneChangeDetection()` to your application's root providers. For standalone apps, add it to the `bootstrapApplication` call. For NgModule-based apps, add it to your root `AppModule`'s `providers` array. An automated migration should handle this.",
+  },
+  {
+    possibleIn: 2100,
+    necessaryAsOf: 2100,
+    level: ApplicationComplexity.Advanced,
+    step: '21.0.0-remove-interpolation-option',
+    action:
+      "Remove the 'interpolation' property from your @Component decorators. Angular now only supports the default '{{' and '}}' interpolation markers.",
+  },
+  {
+    possibleIn: 2100,
+    necessaryAsOf: 2100,
+    level: ApplicationComplexity.Medium,
+    step: '21.0.0-remove-moduleid-property',
+    action:
+      "Remove the 'moduleId' property from your @Component decorators. This property was used for resolving relative URLs for templates and styles, a functionality now handled by modern build tools.",
+  },
+  {
+    possibleIn: 2100,
+    necessaryAsOf: 2100,
+    level: ApplicationComplexity.Medium,
+    step: '21.0.0-ng-component-outlet-content-type-change',
+    action:
+      'The `ngComponentOutletContent` input has been strictly typed from `any[][]` to `Node[][]`. Update the value you pass to this input to match the new `Node[][] | undefined` type.',
+  },
+  {
+    possibleIn: 2100,
+    necessaryAsOf: 2100,
+    level: ApplicationComplexity.Basic,
+    step: '21.0.0-stricter-host-binding-type-checking',
+    action:
+      "Host binding type checking is now enabled by default and may surface new build errors. Resolve any new type errors or set `typeCheckHostBindings: false` in your `tsconfig.json`'s `angularCompilerOptions`.",
+  },
+  {
+    possibleIn: 2100,
+    necessaryAsOf: 2100,
+    level: ApplicationComplexity.Basic,
+    step: '21.0.0-typescript-5.9-required',
+    action:
+      "Update your project's TypeScript version to 5.9 or later. The `ng update` command will typically handle this automatically.",
+  },
+  {
+    possibleIn: 2100,
+    necessaryAsOf: 2100,
+    level: ApplicationComplexity.Medium,
+    step: '21.0.0-remove-application-config-from-platform-browser',
+    action:
+      'The `ApplicationConfig` export from `@angular/platform-browser` has been removed. Update your imports to use `ApplicationConfig` from `@angular/core` instead.',
+  },
+  {
+    possibleIn: 2100,
+    necessaryAsOf: 2100,
+    level: ApplicationComplexity.Advanced,
+    step: '21.0.0-remove-ignore-changes-outside-zone-option',
+    action:
+      'The `ignoreChangesOutsideZone` option for configuring ZoneJS is no longer available. Remove this option from your ZoneJS configuration in your polyfills file.',
+  },
+  {
+    possibleIn: 2100,
+    necessaryAsOf: 2100,
+    level: ApplicationComplexity.Medium,
+    step: '21.0.0-testbed-rethrows-errors-with-provideZoneChangeDetection',
+    action:
+      'Update tests using `provideZoneChangeDetection` as TestBed now rethrows errors. Fix the underlying issues in your tests or, as a last resort, configure TestBed with `rethrowApplicationErrors: false` to disable this behavior.',
+  },
+  {
+    possibleIn: 2100,
+    necessaryAsOf: 2100,
+    level: ApplicationComplexity.Medium,
+    step: '21.0.0-router-navigation-timing-changed',
+    action:
+      'Update tests that rely on router navigation timing. Navigations may now take additional microtasks to complete. Ensure navigations are fully completed before making assertions, for example by using `fakeAsync` with `flush` or waiting for promises/observables to resolve.',
+  },
+  {
+    possibleIn: 2100,
+    necessaryAsOf: 2100,
+    level: ApplicationComplexity.Medium,
+    step: '21.0.0-test-bed-provides-fake-platform-location',
+    action:
+      'Tests using `TestBed` might be affected by the new fake `PlatformLocation`. If your tests fail, provide the old `MockPlatformLocation` from `@angular/common/testing` via `{provide: PlatformLocation, useClass: MockPlatformLocation}` in your `TestBed` configuration.',
+  },
+  {
+    possibleIn: 2100,
+    necessaryAsOf: 2100,
+    level: ApplicationComplexity.Advanced,
+    step: '21.0.0-remove-upgrade-adapter',
+    action:
+      'The `UpgradeAdapter` has been removed. Update your hybrid Angular/AngularJS application to use the static APIs from the `@angular/upgrade/static` package instead.',
+  },
+  {
+    possibleIn: 2100,
+    necessaryAsOf: 2100,
+    level: ApplicationComplexity.Medium,
+    step: '21.0.0-form-array-directive-conflict',
+    action:
+      'The new standalone `formArray` directive might conflict with existing custom directives or inputs. Rename any custom directives named `FormArray` or inputs named `formArray` on elements that also use reactive forms to resolve the conflict.',
+  },
+  {
+    possibleIn: 2100,
+    necessaryAsOf: 2100,
+    level: ApplicationComplexity.Advanced,
+    step: '21.0.0-ngmodulefactory-removed',
+    action:
+      'The deprecated `NgModuleFactory` has been removed. Update any code that uses `NgModuleFactory` to use `NgModule` directly, which is common in dynamic component loading scenarios.',
+  },
+  {
+    possibleIn: 2100,
+    necessaryAsOf: 2100,
+    level: ApplicationComplexity.Advanced,
+    step: '21.0.0-emit-declaration-only-not-supported',
+    action:
+      'The `emitDeclarationOnly` TypeScript compiler option is not supported. Please disable it in your `tsconfig.json` file to allow the Angular compiler to function correctly.',
+  },
+  {
+    possibleIn: 2100,
+    necessaryAsOf: 2100,
+    level: ApplicationComplexity.Medium,
+    step: '21.0.0-lastsuccessfulnavigation-is-a-signal',
+    action:
+      'The `lastSuccessfulNavigation` property on the Router has been converted to a signal. To get its value, you now need to invoke it as a function: `router.lastSuccessfulNavigation()`.',
+  },
+  {
+    possibleIn: 2100,
+    necessaryAsOf: 2100,
+    level: ApplicationComplexity.Medium,
+    step: '21.0.0-configure-commonengine-allowed-hosts',
+    action:
+      "Starting `@angular/ssr` 21.1.5, if your application uses SSR with `CommonEngine`, set the `allowedHosts` option in your `server.ts` (for example, `new CommonEngine({allowedHosts: ['localhost', '*.yourdomain.com']})`). Without it, SSR silently falls back to client-side rendering. This requirement comes from security advisory [GHSA-x288-3778-4hhx](https://github.com/angular/angular-cli/security/advisories/GHSA-x288-3778-4hhx) (also backported to 20.3.17 and 19.2.21).",
   },
 ];

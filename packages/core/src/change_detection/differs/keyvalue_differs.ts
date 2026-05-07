@@ -6,7 +6,7 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
-import {Optional, SkipSelf, StaticProvider, ɵɵdefineInjectable} from '../../di';
+import {inject, StaticProvider, ɵɵdefineInjectable} from '../../di';
 import {RuntimeError, RuntimeErrorCode} from '../../errors';
 
 import {DefaultKeyValueDifferFactory} from './default_keyvalue_differ';
@@ -34,8 +34,6 @@ export interface KeyValueDiffer<K, V> {
    * `diff()` invocation.
    */
   diff(object: {[key: string]: V}): KeyValueChanges<string, V> | null;
-  // TODO(TS2.1): diff<KP extends string>(this: KeyValueDiffer<KP, V>, object: Record<KP, V>):
-  // KeyValueDiffer<KP, V>;
 }
 
 /**
@@ -123,22 +121,19 @@ export function defaultKeyValueDiffersFactory() {
  */
 export class KeyValueDiffers {
   /** @nocollapse */
-  static ɵprov = /** @pureOrBreakMyCode */ ɵɵdefineInjectable({
+  static ɵprov = /** @pureOrBreakMyCode */ /* @__PURE__ */ ɵɵdefineInjectable({
     token: KeyValueDiffers,
     providedIn: 'root',
     factory: defaultKeyValueDiffersFactory,
   });
 
-  /**
-   * @deprecated v4.0.0 - Should be private.
-   */
-  factories: KeyValueDifferFactory[];
+  private readonly factories: KeyValueDifferFactory[];
 
   constructor(factories: KeyValueDifferFactory[]) {
     this.factories = factories;
   }
 
-  static create<S>(factories: KeyValueDifferFactory[], parent?: KeyValueDiffers): KeyValueDiffers {
+  static create(factories: KeyValueDifferFactory[], parent?: KeyValueDiffers): KeyValueDiffers {
     if (parent) {
       const copied = parent.factories.slice();
       factories = factories.concat(copied);
@@ -158,7 +153,7 @@ export class KeyValueDiffers {
    * which will only be applied to the injector for this component and its children.
    * This step is all that's required to make a new {@link KeyValueDiffer} available.
    *
-   * ```
+   * ```ts
    * @Component({
    *   viewProviders: [
    *     KeyValueDiffers.extend([new ImmutableMapDiffer()])
@@ -166,17 +161,16 @@ export class KeyValueDiffers {
    * })
    * ```
    */
-  static extend<S>(factories: KeyValueDifferFactory[]): StaticProvider {
+  static extend(factories: KeyValueDifferFactory[]): StaticProvider {
     return {
       provide: KeyValueDiffers,
-      useFactory: (parent: KeyValueDiffers) => {
+      useFactory: () => {
+        const parent = inject(KeyValueDiffers, {optional: true, skipSelf: true});
         // if parent is null, it means that we are in the root injector and we have just overridden
         // the default injection mechanism for KeyValueDiffers, in such a case just assume
         // `defaultKeyValueDiffersFactory`.
         return KeyValueDiffers.create(factories, parent || defaultKeyValueDiffersFactory());
       },
-      // Dependency technically isn't optional, but we can provide a better error message this way.
-      deps: [[KeyValueDiffers, new SkipSelf(), new Optional()]],
     };
   }
 

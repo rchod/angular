@@ -9,8 +9,8 @@
 import {Route} from '@angular/router';
 import API_MANIFEST_JSON from '../../../../../src/assets/api/manifest.json';
 import {ApiManifest, ApiManifestEntry, ApiManifestPackage} from '../interfaces/api-manifest';
-import {PagePrefix} from '../../../core/enums/pages';
 import {NavigationItem, contentResolver} from '@angular/docs';
+import {PAGE_PREFIX} from '../../../core/constants/pages';
 
 const manifest = API_MANIFEST_JSON as ApiManifest;
 
@@ -43,12 +43,11 @@ export function getApiNavigationItems(): NavigationItem[] {
   for (const packageEntry of manifest) {
     const packageNavigationItem: NavigationItem = {
       label: packageEntry.moduleLabel,
-      children: packageEntry.entries
-        .map((api) => ({
-          path: getApiUrl(packageEntry, api.name),
-          label: api.name,
-        }))
-        .sort((a, b) => a.label.localeCompare(b.label)),
+      children: packageEntry.entries.map((api) => ({
+        path: getApiUrl(packageEntry, api.name),
+        label: api.name,
+        category: api.category,
+      })),
     };
 
     apiNavigationItems.push(packageNavigationItem);
@@ -63,7 +62,7 @@ export function getApiUrl(packageEntry: ApiManifestPackage, apiName: string): st
     // packages like `angular_animation_browser` should be `animation/browser`
     .replace('angular_', '')
     .replaceAll('_', '/');
-  return `${PagePrefix.API}/${packageName}/${apiName}`;
+  return `${PAGE_PREFIX.API}/${packageName}/${apiName}`;
 }
 
 function getNormalizedFilename(

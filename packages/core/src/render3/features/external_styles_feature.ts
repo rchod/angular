@@ -3,7 +3,7 @@
  * Copyright Google LLC All Rights Reserved.
  *
  * Use of this source code is governed by an MIT-style license that can be
- * found in the LICENSE file at https://angular.io/license
+ * found in the LICENSE file at https://angular.dev/license
  */
 
 import {ComponentDef, ComponentDefFeature} from '../interfaces/definition';
@@ -25,10 +25,15 @@ export function ɵɵExternalStylesFeature(styleUrls: string[]): ComponentDefFeat
     }
 
     definition.getExternalStyles = (encapsulationId) => {
-      // Add encapsulation ID search parameter `component` to support external style encapsulation
+      // Add encapsulation ID search parameter `ngcomp` to support external style encapsulation as well as the encapsulation mode
+      // for usage tracking.
       const urls = styleUrls.map(
         (value) =>
-          value + '?ngcomp' + (encapsulationId ? '=' + encodeURIComponent(encapsulationId) : ''),
+          value +
+          '?ngcomp' +
+          (encapsulationId ? '=' + encodeURIComponent(encapsulationId) : '') +
+          '&e=' +
+          definition.encapsulation,
       );
 
       return urls;

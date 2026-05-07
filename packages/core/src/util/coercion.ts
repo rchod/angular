@@ -11,10 +11,12 @@
  * Intended to be used as a transform function of an input.
  *
  *  @usageNotes
- *  ```typescript
- *  @Input({ transform: booleanAttribute }) status!: boolean;
+ *  ```ts
+ *  status = input({ transform: booleanAttribute });
  *  ```
  * @param value Value to be transformed.
+ *
+ * @see [Built-in transformations](guide/components/inputs#built-in-transformations)
  *
  * @publicApi
  */
@@ -29,11 +31,12 @@ export function booleanAttribute(value: unknown): boolean {
  * @param fallbackValue Value to use if the provided value can't be parsed as a number.
  *
  *  @usageNotes
- *  ```typescript
- *  @Input({ transform: numberAttribute }) id!: number;
+ *  ```ts
+ *  status = input({ transform: numberAttribute });
  *  ```
  *
  * @publicApi
+ * @see [Built-in transformations](guide/components/inputs#built-in-transformations)
  */
 export function numberAttribute(value: unknown, fallbackValue = NaN): number {
   // parseFloat(value) handles most of the cases we're interested in (it treats null, empty string,

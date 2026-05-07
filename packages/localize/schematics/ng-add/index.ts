@@ -36,10 +36,12 @@ function addPolyfillToConfig(projectName: string): Rule {
     for (const target of project.targets.values()) {
       switch (target.builder) {
         case AngularBuilder.Karma:
+        case AngularBuilder.BuildKarma:
         case AngularBuilder.Server:
         case AngularBuilder.Browser:
         case AngularBuilder.BrowserEsbuild:
         case AngularBuilder.Application:
+        case AngularBuilder.BuildApplication:
           target.options ??= {};
           const value = target.options['polyfills'];
           if (typeof value === 'string') {
@@ -77,12 +79,26 @@ function addTypeScriptConfigTypes(projectName: string): Rule {
         case AngularBuilder.BrowserEsbuild:
         case AngularBuilder.Browser:
         case AngularBuilder.Application:
+        case AngularBuilder.BuildKarma:
+        case AngularBuilder.BuildApplication: {
           const value = target.options?.['tsConfig'];
           if (typeof value === 'string') {
             tsConfigFiles.add(value);
           }
 
           break;
+        }
+        case AngularBuilder.BuildUnitTest: {
+          const value = target.options?.['tsConfig'];
+          if (typeof value === 'string') {
+            tsConfigFiles.add(value);
+          } else {
+            // Defaults to tsconfig in project root
+            tsConfigFiles.add((project.root || '.') + '/tsconfig.spec.json');
+          }
+
+          break;
+        }
       }
 
       if (
@@ -93,7 +109,10 @@ function addTypeScriptConfigTypes(projectName: string): Rule {
         if (typeof value === 'string') {
           addTripleSlashType(host, value);
         }
-      } else if (target.builder === AngularBuilder.Application) {
+      } else if (
+        target.builder === AngularBuilder.Application ||
+        target.builder === AngularBuilder.BuildApplication
+      ) {
         const value = target.options?.['browser'];
         if (typeof value === 'string') {
           addTripleSlashType(host, value);
@@ -147,9 +166,7 @@ function moveToDependencies(host: Tree): Rule | void {
 }
 
 export default function (options: Schema): Rule {
-  // We favor the name option because the project option has a
-  // smart default which can be populated even when unspecified by the user.
-  const projectName = options.name ?? options.project;
+  const projectName = options.project;
 
   if (!projectName) {
     throw new SchematicsException('Option "project" is required.');

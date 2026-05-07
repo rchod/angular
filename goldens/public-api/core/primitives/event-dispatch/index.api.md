@@ -28,21 +28,21 @@ export interface EarlyJsactionDataContainer {
 // @public
 export class EventContract implements UnrenamedEventContract {
     constructor(containerManager: EventContractContainerManager);
-    addEvent(eventType: string, prefixedEventType?: string): void;
+    addEvent(eventType: string, prefixedEventType?: string, passive?: boolean): void;
     cleanUp(): void;
     ecrd(dispatcher: Dispatcher, restriction: Restriction): void;
     handler(eventType: string): EventHandler | undefined;
     // (undocumented)
     static MOUSE_SPECIAL_SUPPORT: boolean;
     registerDispatcher(dispatcher: Dispatcher, restriction: Restriction): void;
-    replayEarlyEventInfos(earlyEventInfos: eventInfoLib.EventInfo[]): void;
+    replayEarlyEventInfos(earlyEventInfos: EventInfo[]): void;
     replayEarlyEvents(earlyJsactionData?: EarlyJsactionData | undefined): void;
 }
 
 // @public
 export class EventContractContainer implements EventContractContainerManager {
     constructor(element: Element);
-    addEventListener(eventType: string, getHandler: (element: Element) => (event: Event) => void): void;
+    addEventListener(eventType: string, getHandler: (element: Element) => (event: Event) => void, passive?: boolean): void;
     cleanUp(): void;
     // (undocumented)
     readonly element: Element;
@@ -118,7 +118,7 @@ export const isCaptureEventType: (eventType: string) => boolean;
 export const isEarlyEventType: (eventType: string) => boolean;
 
 // @public
-export function registerAppScopedDispatcher(restriction: Restriction, appId: string, dispatcher: (eventInfo: EventInfo) => void, dataContainer?: EarlyJsactionDataContainer): void;
+export function registerAppScopedDispatcher(appId: string, dispatcher: (eventInfo: EventInfo) => void, dataContainer?: EarlyJsactionDataContainer): void;
 
 // @public
 export function registerDispatcher(eventContract: UnrenamedEventContract, dispatcher: EventDispatcher): void;

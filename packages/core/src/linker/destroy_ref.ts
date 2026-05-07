@@ -7,6 +7,7 @@
  */
 
 import {EnvironmentInjector} from '../di';
+import {isDestroyed} from '../render3/interfaces/type_checks';
 import {LView} from '../render3/interfaces/view';
 import {getLView} from '../render3/state';
 import {removeLViewOnDestroy, storeLViewOnDestroy} from '../render3/util/view_utils';
@@ -16,6 +17,8 @@ import {removeLViewOnDestroy, storeLViewOnDestroy} from '../render3/util/view_ut
  * The scope of this destruction depends on where `DestroyRef` is injected. If `DestroyRef`
  * is injected in a component or directive, the callbacks run when that component or
  * directive is destroyed. Otherwise the callbacks run when a corresponding injector is destroyed.
+ *
+ * @see [Lifecycle DestroyRef](guide/components/lifecycle#destroyref)
  *
  * @publicApi
  */
@@ -31,7 +34,7 @@ export abstract class DestroyRef {
    *
    * @usageNotes
    * ### Example
-   * ```typescript
+   * ```ts
    * const destroyRef = inject(DestroyRef);
    *
    * // register a destroy callback
@@ -40,8 +43,19 @@ export abstract class DestroyRef {
    * // stop the destroy callback from executing if needed
    * unregisterFn();
    * ```
+   *
+   * @see [Lifecycle DestroyRef](guide/components/lifecycle#destroyref)
+   *
    */
   abstract onDestroy(callback: () => void): () => void;
+
+  /**
+   * Indicates whether the instance has already been destroyed.
+   *
+   * @see [Detecting instance destruction](guide/components/lifecycle#detecting-instance-destruction)
+   *
+   */
+  abstract get destroyed(): boolean;
 
   /**
    * @internal
@@ -61,9 +75,15 @@ export class NodeInjectorDestroyRef extends DestroyRef {
     super();
   }
 
+  override get destroyed() {
+    return isDestroyed(this._lView);
+  }
+
   override onDestroy(callback: () => void): () => void {
-    storeLViewOnDestroy(this._lView, callback);
-    return () => removeLViewOnDestroy(this._lView, callback);
+    const lView = this._lView;
+
+    storeLViewOnDestroy(lView, callback);
+    return () => removeLViewOnDestroy(lView, callback);
   }
 }
 

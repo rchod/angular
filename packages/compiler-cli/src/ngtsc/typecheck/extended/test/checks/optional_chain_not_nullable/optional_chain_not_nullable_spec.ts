@@ -6,8 +6,8 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
-import {DiagnosticCategoryLabel} from '@angular/compiler-cli/src/ngtsc/core/api';
 import ts from 'typescript';
+import {DiagnosticCategoryLabel} from '../../../../../core/api';
 
 import {ErrorCode, ExtendedTemplateDiagnosticName, ngErrorCode} from '../../../../../diagnostics';
 import {absoluteFrom, getSourceFileOrError} from '../../../../../file_system';
@@ -98,7 +98,7 @@ runInEachFileSystem(() => {
       expect(diags[0].category).toBe(ts.DiagnosticCategory.Warning);
       expect(diags[0].code).toBe(ngErrorCode(ErrorCode.OPTIONAL_CHAIN_NOT_NULLABLE));
       expect(diags[0].messageText).toContain(`the '?.' operator can be safely removed`);
-      expect(getSourceCodeForDiagnostic(diags[0])).toBe(`var1?.['bar']`);
+      expect(getSourceCodeForDiagnostic(diags[0])).toBe(`'bar'`);
     });
 
     it('should produce optional chain warning for method call', () => {
@@ -214,6 +214,66 @@ runInEachFileSystem(() => {
           source: 'export class TestCmp { var1: unknown; }',
         },
       ]);
+      const sf = getSourceFileOrError(program, fileName);
+      const component = getClass(sf, 'TestCmp');
+      const extendedTemplateChecker = new ExtendedTemplateCheckerImpl(
+        templateTypeChecker,
+        program.getTypeChecker(),
+        [optionalChainNotNullableFactory],
+        {strictNullChecks: true} /* options */,
+      );
+      const diags = extendedTemplateChecker.getDiagnosticsForComponent(component);
+      expect(diags.length).toBe(0);
+    });
+
+    it('should not produce optional chain warning for an indexed access if noUncheckedIndexedAccess is false', () => {
+      const fileName = absoluteFrom('/main.ts');
+      const {program, templateTypeChecker} = setup(
+        [
+          {
+            fileName,
+            templates: {
+              'TestCmp': `{{ arr[0]?.bar }}`,
+            },
+            source: `
+               export class TestCmp {
+                  arr: Array<{ bar: string }> = [];
+               }
+             `,
+          },
+        ],
+        {options: {noUncheckedIndexedAccess: false}},
+      );
+      const sf = getSourceFileOrError(program, fileName);
+      const component = getClass(sf, 'TestCmp');
+      const extendedTemplateChecker = new ExtendedTemplateCheckerImpl(
+        templateTypeChecker,
+        program.getTypeChecker(),
+        [optionalChainNotNullableFactory],
+        {strictNullChecks: true} /* options */,
+      );
+      const diags = extendedTemplateChecker.getDiagnosticsForComponent(component);
+      expect(diags.length).toBe(0);
+    });
+
+    it('should produce optional chain warning for an indexed access if noUncheckedIndexedAccess is true', () => {
+      const fileName = absoluteFrom('/main.ts');
+      const {program, templateTypeChecker} = setup(
+        [
+          {
+            fileName,
+            templates: {
+              'TestCmp': `{{ arr[0]?.bar }}`,
+            },
+            source: `
+               export class TestCmp {
+                  arr: Array<{ bar: string }> = [];
+               }
+             `,
+          },
+        ],
+        {options: {noUncheckedIndexedAccess: true}},
+      );
       const sf = getSourceFileOrError(program, fileName);
       const component = getClass(sf, 'TestCmp');
       const extendedTemplateChecker = new ExtendedTemplateCheckerImpl(

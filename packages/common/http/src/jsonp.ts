@@ -6,13 +6,15 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
-import {DOCUMENT} from '@angular/common';
+import {DOCUMENT} from '../../index';
 import {
+  CSP_NONCE,
   EnvironmentInjector,
   Inject,
   inject,
   Injectable,
   runInInjectionContext,
+  ɵRuntimeError as RuntimeError,
 } from '@angular/core';
 import {Observable, Observer} from 'rxjs';
 
@@ -26,6 +28,7 @@ import {
   HttpEventType,
   HttpResponse,
 } from './response';
+import {RuntimeErrorCode} from './errors';
 
 // Every request made through JSONP needs a callback name that's unique across the
 // whole page. Each request is assigned an id and the callback name is constructed
@@ -92,6 +95,7 @@ export class JsonpClientBackend implements HttpBackend {
    * A resolved promise that can be used to schedule microtasks in the event handlers.
    */
   private readonly resolvedPromise = Promise.resolve();
+  private readonly nonce = inject(CSP_NONCE, {optional: true});
 
   constructor(
     private callbackMap: JsonpCallbackContext,
@@ -115,15 +119,24 @@ export class JsonpClientBackend implements HttpBackend {
     // Firstly, check both the method and response type. If either doesn't match
     // then the request was improperly routed here and cannot be handled.
     if (req.method !== 'JSONP') {
-      throw new Error(JSONP_ERR_WRONG_METHOD);
+      throw new RuntimeError(
+        RuntimeErrorCode.JSONP_WRONG_METHOD,
+        ngDevMode && JSONP_ERR_WRONG_METHOD,
+      );
     } else if (req.responseType !== 'json') {
-      throw new Error(JSONP_ERR_WRONG_RESPONSE_TYPE);
+      throw new RuntimeError(
+        RuntimeErrorCode.JSONP_WRONG_RESPONSE_TYPE,
+        ngDevMode && JSONP_ERR_WRONG_RESPONSE_TYPE,
+      );
     }
 
     // Check the request headers. JSONP doesn't support headers and
     // cannot set any that were supplied.
     if (req.headers.keys().length > 0) {
-      throw new Error(JSONP_ERR_HEADERS_NOT_SUPPORTED);
+      throw new RuntimeError(
+        RuntimeErrorCode.JSONP_HEADERS_NOT_SUPPORTED,
+        ngDevMode && JSONP_ERR_HEADERS_NOT_SUPPORTED,
+      );
     }
 
     // Everything else happens inside the Observable boundary.
@@ -137,6 +150,12 @@ export class JsonpClientBackend implements HttpBackend {
       // Construct the <script> tag and point it at the URL.
       const node = this.document.createElement('script');
       node.src = url;
+
+      // Set the nonce for Content Security Policy compatibility. Without this,
+      // JSONP requests will be blocked by strict-dynamic CSP policies.
+      if (this.nonce) {
+        node.setAttribute('nonce', this.nonce);
+      }
 
       // A JSONP request requires waiting for multiple callbacks. These variables
       // are closed over and track state across those callbacks.
@@ -178,7 +197,7 @@ export class JsonpClientBackend implements HttpBackend {
       // if the JSONP script loads successfully. The event itself is unimportant.
       // If something went wrong, onLoad() may run without the response callback
       // having been invoked.
-      const onLoad = (event: Event) => {
+      const onLoad = () => {
         // We wrap it in an extra Promise, to ensure the microtask
         // is scheduled after the loaded endpoint has executed any potential microtask itself,
         // which is not guaranteed in Internet Explorer and EdgeHTML. See issue #39496
@@ -220,7 +239,7 @@ export class JsonpClientBackend implements HttpBackend {
       // onError() is the error callback, which runs if the script returned generates
       // a Javascript error. It emits the error via the Observable error channel as
       // a HttpErrorResponse.
-      const onError: any = (error: Error) => {
+      const onError = (error: Error) => {
         cleanup();
 
         // Wrap the error in a HttpErrorResponse.

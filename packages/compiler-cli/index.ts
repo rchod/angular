@@ -22,6 +22,8 @@ export {CompilerOptions as AngularCompilerOptions} from './src/transformers/api'
 // TODO: Remove this when the CLI has switched to the private entry-point.
 export * from './private/tooling';
 
+export * from './private/hybrid_analysis';
+
 // Exposed as they are needed for relying on the `linker`.
 export * from './src/ngtsc/logging';
 export * from './src/ngtsc/file_system';
@@ -31,17 +33,65 @@ export {NgTscPlugin, PluginCompilerHost} from './src/ngtsc/tsc_plugin';
 export {NgtscProgram} from './src/ngtsc/program';
 export {OptimizeFor} from './src/ngtsc/typecheck/api';
 
+// Explicit exports for language service
+export {getAngularDecorators} from './src/ngtsc/annotations';
+export {
+  NgCompiler,
+  type NgCompilerOptions,
+  type CompilationTicket,
+  freshCompilationTicket,
+  incrementalFromCompilerTicket,
+  resourceChangeTicket,
+} from './src/ngtsc/core';
+export {type NgCompilerAdapter} from './src/ngtsc/core/api';
+export {Reference} from './src/ngtsc/imports';
+export {
+  type DirectiveMeta,
+  type InputMapping,
+  isExternalResource,
+  MetaKind,
+  type PipeMeta,
+  type Resource,
+} from './src/ngtsc/metadata';
+export {
+  type DeclarationNode,
+  isNamedClassDeclaration,
+  type ReflectionHost,
+  type ClassDeclaration,
+} from './src/ngtsc/reflection';
+export {isFatalDiagnosticError} from './src/ngtsc/diagnostics';
+export {PerfPhase} from './src/ngtsc/perf';
+export {type FileUpdate, InliningMode, type ProgramDriver} from './src/ngtsc/program_driver';
+export {TrackedIncrementalBuildStrategy} from './src/ngtsc/incremental';
+export {isShim} from './src/ngtsc/shims';
+export {getRootDirs} from './src/ngtsc/util/src/typescript';
+export * from './src/ngtsc/typecheck/api';
+
 // **Note**: Explicit named exports to make this file work with CJS/ESM interop without
 // needing to use a default import. NodeJS will expose named CJS exports as named ESM exports.
 // TODO(devversion): Remove these duplicate exports once devmode&prodmode is combined/ESM.
 export {ConsoleLogger, Logger, LogLevel} from './src/ngtsc/logging';
-export {NodeJSFileSystem, absoluteFrom} from './src/ngtsc/file_system';
+export {
+  NodeJSFileSystem,
+  absoluteFrom,
+  absoluteFromSourceFile,
+  resolve,
+  type FileStats,
+  type PathSegment,
+  type PathString,
+  getSourceFileOrError,
+  type FileSystem,
+  type AbsoluteFsPath,
+  NgtscCompilerHost,
+  getFileSystem,
+  setFileSystem,
+  isLocalRelativePath,
+} from './src/ngtsc/file_system';
 
 // Export documentation entities for Angular-internal API doc generation.
-export * from './src/ngtsc/docs/src/entities';
 export * from './src/ngtsc/docs';
 
 // Exposed for usage in 1P Angular plugin.
-export {isLocalCompilationDiagnostics} from './src/ngtsc/diagnostics';
+export {isLocalCompilationDiagnostics, ErrorCode, ngErrorCode} from './src/ngtsc/diagnostics';
 
 setFileSystem(new NodeJSFileSystem());

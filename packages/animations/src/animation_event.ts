@@ -10,7 +10,7 @@
  * An instance of this class is returned as an event parameter when an animation
  * callback is captured for an animation either during the start or done phase.
  *
- * ```typescript
+ * ```ts
  * @Component({
  *   host: {
  *     '[@myAnimationTrigger]': 'someExpression',
@@ -36,6 +36,8 @@
  * ```
  *
  * @publicApi
+ *
+ * @deprecated 20.2 Use `animate.enter` or `animate.leave` instead. Intent to remove in v23
  */
 export interface AnimationEvent {
   /**

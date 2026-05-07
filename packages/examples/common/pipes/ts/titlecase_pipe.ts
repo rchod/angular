@@ -6,11 +6,13 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
+import {TitleCasePipe} from '@angular/common';
 import {Component} from '@angular/core';
 
 // #docregion TitleCasePipe
 @Component({
   selector: 'titlecase-pipe',
+  imports: [TitleCasePipe],
   template: `<div>
     <p>{{ 'some string' | titlecase }}</p>
     <!-- output is expected to be "Some String" -->

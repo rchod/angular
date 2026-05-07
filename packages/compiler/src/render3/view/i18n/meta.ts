@@ -10,18 +10,13 @@ import {WhitespaceVisitor, visitAllWithSiblings} from '../../../ml_parser/html_w
 import {computeDecimalDigest, computeDigest, decimalDigest} from '../../../i18n/digest';
 import * as i18n from '../../../i18n/i18n_ast';
 import {createI18nMessageFactory, VisitNodeFn} from '../../../i18n/i18n_parser';
-import {I18nError} from '../../../i18n/parse_util';
 import * as html from '../../../ml_parser/ast';
-import {
-  DEFAULT_CONTAINER_BLOCKS,
-  DEFAULT_INTERPOLATION_CONFIG,
-  InterpolationConfig,
-} from '../../../ml_parser/defaults';
 import {ParseTreeResult} from '../../../ml_parser/parser';
 import * as o from '../../../output/output_ast';
 import {isTrustedTypesSink} from '../../../schema/trusted_types_sinks';
 
 import {hasI18nAttrs, I18N_ATTR, I18N_ATTR_PREFIX, icuFromI18nMessage} from './util';
+import {ParseError} from '../../../parse_util';
 
 export type I18nMeta = {
   id?: string;
@@ -62,13 +57,11 @@ const setI18nRefs = (originalNodeMap: Map<html.Node, html.Node>): VisitNodeFn =>
 export class I18nMetaVisitor implements html.Visitor {
   // whether visited nodes contain i18n information
   public hasI18nMeta: boolean = false;
-  private _errors: I18nError[] = [];
+  private _errors: ParseError[] = [];
 
   constructor(
-    private interpolationConfig: InterpolationConfig = DEFAULT_INTERPOLATION_CONFIG,
     private keepI18nAttrs = false,
     private enableI18nLegacyMessageIdFormat = false,
-    private containerBlocks: Set<string> = DEFAULT_CONTAINER_BLOCKS,
     private readonly preserveSignificantWhitespace: boolean = true,
 
     // When dropping significant whitespace we need to retain empty tokens or
@@ -87,9 +80,8 @@ export class I18nMetaVisitor implements html.Visitor {
   ): i18n.Message {
     const {meaning, description, customId} = this._parseMetadata(meta);
     const createI18nMessage = createI18nMessageFactory(
-      this.interpolationConfig,
-      this.containerBlocks,
       this.retainEmptyTokens,
+      /* preserveExpressionWhitespace */ this.preserveSignificantWhitespace,
     );
     const message = createI18nMessage(nodes, meaning, description, customId, visitNodeFn);
     this._setMessageId(message, meta);
@@ -103,79 +95,13 @@ export class I18nMetaVisitor implements html.Visitor {
   }
 
   visitElement(element: html.Element): any {
-    let message: i18n.Message | undefined = undefined;
-
-    if (hasI18nAttrs(element)) {
-      this.hasI18nMeta = true;
-      const attrs: html.Attribute[] = [];
-      const attrsMeta: {[key: string]: string} = {};
-
-      for (const attr of element.attrs) {
-        if (attr.name === I18N_ATTR) {
-          // root 'i18n' node attribute
-          const i18n = element.i18n || attr.value;
-
-          // Generate a new AST with whitespace trimmed, but also generate a map
-          // to correlate each new node to its original so we can apply i18n
-          // information to the original node based on the trimmed content.
-          //
-          // `WhitespaceVisitor` removes *insignificant* whitespace as well as
-          // significant whitespace. Enabling this visitor should be conditional
-          // on `preserveWhitespace` rather than `preserveSignificantWhitespace`,
-          // however this would be a breaking change for existing behavior where
-          // `preserveWhitespace` was not respected correctly when generating
-          // message IDs. This is really a bug but one we need to keep to maintain
-          // backwards compatibility.
-          const originalNodeMap = new Map<html.Node, html.Node>();
-          const trimmedNodes = this.preserveSignificantWhitespace
-            ? element.children
-            : visitAllWithSiblings(
-                new WhitespaceVisitor(false /* preserveSignificantWhitespace */, originalNodeMap),
-                element.children,
-              );
-          message = this._generateI18nMessage(trimmedNodes, i18n, setI18nRefs(originalNodeMap));
-          if (message.nodes.length === 0) {
-            // Ignore the message if it is empty.
-            message = undefined;
-          }
-          // Store the message on the element
-          element.i18n = message;
-        } else if (attr.name.startsWith(I18N_ATTR_PREFIX)) {
-          // 'i18n-*' attributes
-          const name = attr.name.slice(I18N_ATTR_PREFIX.length);
-          if (isTrustedTypesSink(element.name, name)) {
-            this._reportError(
-              attr,
-              `Translating attribute '${name}' is disallowed for security reasons.`,
-            );
-          } else {
-            attrsMeta[name] = attr.value;
-          }
-        } else {
-          // non-i18n attributes
-          attrs.push(attr);
-        }
-      }
-
-      // set i18n meta for attributes
-      if (Object.keys(attrsMeta).length) {
-        for (const attr of attrs) {
-          const meta = attrsMeta[attr.name];
-          // do not create translation for empty attributes
-          if (meta !== undefined && attr.value) {
-            attr.i18n = this._generateI18nMessage([attr], attr.i18n || meta);
-          }
-        }
-      }
-
-      if (!this.keepI18nAttrs) {
-        // update element's attributes,
-        // keeping only non-i18n related ones
-        element.attrs = attrs;
-      }
-    }
-    html.visitAll(this, element.children, message);
+    this._visitElementLike(element);
     return element;
+  }
+
+  visitComponent(component: html.Component, context: any) {
+    this._visitElementLike(component);
+    return component;
   }
 
   visitExpansion(expansion: html.Expansion, currentMessage: i18n.Message | null): any {
@@ -230,6 +156,92 @@ export class I18nMetaVisitor implements html.Visitor {
     return decl;
   }
 
+  visitDirective(directive: html.Directive, context: any) {
+    return directive;
+  }
+
+  private _visitElementLike(node: html.Element | html.Component): void {
+    let message: i18n.Message | undefined = undefined;
+
+    if (hasI18nAttrs(node)) {
+      this.hasI18nMeta = true;
+      const attrs: html.Attribute[] = [];
+      const attrsMeta: {[key: string]: string} = {};
+
+      for (const attr of node.attrs) {
+        if (attr.name === I18N_ATTR) {
+          // root 'i18n' node attribute
+          const i18n = node.i18n || attr.value;
+
+          // Generate a new AST with whitespace trimmed, but also generate a map
+          // to correlate each new node to its original so we can apply i18n
+          // information to the original node based on the trimmed content.
+          //
+          // `WhitespaceVisitor` removes *insignificant* whitespace as well as
+          // significant whitespace. Enabling this visitor should be conditional
+          // on `preserveWhitespace` rather than `preserveSignificantWhitespace`,
+          // however this would be a breaking change for existing behavior where
+          // `preserveWhitespace` was not respected correctly when generating
+          // message IDs. This is really a bug but one we need to keep to maintain
+          // backwards compatibility.
+          const originalNodeMap = new Map<html.Node, html.Node>();
+          const trimmedNodes = this.preserveSignificantWhitespace
+            ? node.children
+            : visitAllWithSiblings(
+                new WhitespaceVisitor(false /* preserveSignificantWhitespace */, originalNodeMap),
+                node.children,
+              );
+          message = this._generateI18nMessage(trimmedNodes, i18n, setI18nRefs(originalNodeMap));
+          if (message.nodes.length === 0) {
+            // Ignore the message if it is empty.
+            message = undefined;
+          }
+          // Store the message on the element
+          node.i18n = message;
+        } else if (attr.name.startsWith(I18N_ATTR_PREFIX)) {
+          // 'i18n-*' attributes
+          const name = attr.name.slice(I18N_ATTR_PREFIX.length);
+          let isTrustedType: boolean;
+          if (node instanceof html.Component) {
+            isTrustedType = node.tagName === null ? false : isTrustedTypesSink(node.tagName, name);
+          } else {
+            isTrustedType = isTrustedTypesSink(node.name, name);
+          }
+
+          if (isTrustedType) {
+            this._reportError(
+              attr,
+              `Translating attribute '${name}' is disallowed for security reasons.`,
+            );
+          } else {
+            attrsMeta[name] = attr.value;
+          }
+        } else {
+          // non-i18n attributes
+          attrs.push(attr);
+        }
+      }
+
+      // set i18n meta for attributes
+      if (Object.keys(attrsMeta).length) {
+        for (const attr of attrs) {
+          const meta = attrsMeta[attr.name];
+          // do not create translation for empty attributes
+          if (meta !== undefined && attr.value) {
+            attr.i18n = this._generateI18nMessage([attr], attr.i18n || meta);
+          }
+        }
+      }
+
+      if (!this.keepI18nAttrs) {
+        // update element's attributes,
+        // keeping only non-i18n related ones
+        node.attrs = attrs;
+      }
+    }
+    html.visitAll(this, node.children, message);
+  }
+
   /**
    * Parse the general form `meta` passed into extract the explicit metadata needed to create a
    * `Message`.
@@ -255,9 +267,7 @@ export class I18nMetaVisitor implements html.Visitor {
    */
   private _setMessageId(message: i18n.Message, meta: string | i18n.I18nMeta): void {
     if (!message.id) {
-      message.id =
-        (meta instanceof i18n.Message && meta.id) ||
-        decimalDigest(message, /* preservePlaceholders */ this.preserveSignificantWhitespace);
+      message.id = (meta instanceof i18n.Message && meta.id) || decimalDigest(message);
     }
   }
 
@@ -269,13 +279,7 @@ export class I18nMetaVisitor implements html.Visitor {
    */
   private _setLegacyIds(message: i18n.Message, meta: string | i18n.I18nMeta): void {
     if (this.enableI18nLegacyMessageIdFormat) {
-      message.legacyIds = [
-        computeDigest(message),
-        computeDecimalDigest(
-          message,
-          /* preservePlaceholders */ this.preserveSignificantWhitespace,
-        ),
-      ];
+      message.legacyIds = [computeDigest(message), computeDecimalDigest(message)];
     } else if (typeof meta !== 'string') {
       // This occurs if we are doing the 2nd pass after whitespace removal (see `parseTemplate()` in
       // `packages/compiler/src/render3/view/template.ts`).
@@ -292,7 +296,7 @@ export class I18nMetaVisitor implements html.Visitor {
   }
 
   private _reportError(node: html.Node, msg: string): void {
-    this._errors.push(new I18nError(node.sourceSpan, msg));
+    this._errors.push(new ParseError(node.sourceSpan, msg));
   }
 }
 

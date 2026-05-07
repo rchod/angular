@@ -9,6 +9,8 @@ import {animate, AnimationEvent, state, style, transition, trigger} from '@angul
 import {AnimationDriver} from '@angular/animations/browser';
 import {MockAnimationDriver, MockAnimationPlayer} from '@angular/animations/browser/testing';
 import {CommonModule} from '@angular/common';
+import {By} from '@angular/platform-browser';
+import {NoopAnimationsModule} from '@angular/platform-browser/animations';
 import {
   Component,
   ContentChild,
@@ -22,32 +24,43 @@ import {
   OnInit,
   Output,
   Pipe,
+  provideZoneChangeDetection,
   QueryList,
+  signal,
   TemplateRef,
   ViewChild,
   ViewChildren,
   ViewContainerRef,
-} from '@angular/core';
-import {Inject} from '@angular/core/src/di';
-import {readPatchedLView} from '@angular/core/src/render3/context_discovery';
-import {LContainer} from '@angular/core/src/render3/interfaces/container';
-import {getLViewById} from '@angular/core/src/render3/interfaces/lview_tracking';
-import {isLView} from '@angular/core/src/render3/interfaces/type_checks';
-import {ID, LView, PARENT, TVIEW} from '@angular/core/src/render3/interfaces/view';
-import {getLView} from '@angular/core/src/render3/state';
-import {ngDevModeResetPerfCounters} from '@angular/core/src/util/ng_dev_mode';
-import {fakeAsync, flushMicrotasks, TestBed} from '@angular/core/testing';
-import {By} from '@angular/platform-browser';
-import {expectPerfCounters} from '@angular/private/testing';
+  ChangeDetectionStrategy,
+} from '../../src/core';
+import {Inject} from '../../src/di';
+import {readPatchedLView} from '../../src/render3/context_discovery';
+import {LContainer} from '../../src/render3/interfaces/container';
+import {getLViewById} from '../../src/render3/interfaces/lview_tracking';
+import {isLView} from '../../src/render3/interfaces/type_checks';
+import {ID, LView, PARENT, TVIEW} from '../../src/render3/interfaces/view';
+import {getLView} from '../../src/render3/state';
+import {fakeAsync, flushMicrotasks, TestBed} from '../../testing';
 
 describe('acceptance integration tests', () => {
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [provideZoneChangeDetection()],
+    });
+  });
+
   function stripHtmlComments(str: string) {
     return str.replace(/<!--[\s\S]*?-->/g, '');
   }
 
   describe('render', () => {
     it('should render basic template', () => {
-      @Component({template: '<span title="Hello">Greetings</span>'})
+      @Component({
+        template: '<span title="Hello">Greetings</span>',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {}
 
       TestBed.configureTestingModule({declarations: [App]});
@@ -55,47 +68,15 @@ describe('acceptance integration tests', () => {
 
       expect(fixture.nativeElement.innerHTML).toEqual('<span title="Hello">Greetings</span>');
     });
-
-    it('should render and update basic "Hello, World" template', () => {
-      ngDevModeResetPerfCounters();
-      @Component({template: '<h1>Hello, {{name}}!</h1>'})
-      class App {
-        name = '';
-      }
-
-      expectPerfCounters({
-        tView: 0,
-        tNode: 0,
-      });
-
-      TestBed.configureTestingModule({declarations: [App]});
-      const fixture = TestBed.createComponent(App);
-
-      fixture.componentInstance.name = 'World';
-      fixture.detectChanges();
-
-      expect(fixture.nativeElement.innerHTML).toEqual('<h1>Hello, World!</h1>');
-      expectPerfCounters({
-        tView: 2, // Host view + App
-        tNode: 3, // Host Node + <h1> + #text
-      });
-
-      fixture.componentInstance.name = 'New World';
-      fixture.detectChanges();
-
-      expect(fixture.nativeElement.innerHTML).toEqual('<h1>Hello, New World!</h1>');
-      // Assert that the tView/tNode count does not increase (they are correctly cached)
-      expectPerfCounters({
-        tView: 2,
-        tNode: 3,
-      });
-    });
   });
 
   describe('ng-container', () => {
     it('should insert as a child of a regular element', () => {
       @Component({
         template: '<div>before|<ng-container>Greetings<span></span></ng-container>|after</div>',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class App {}
 
@@ -112,6 +93,9 @@ describe('acceptance integration tests', () => {
       @Component({
         template:
           '<ng-template [ngIf]="render"><div><ng-container>content</ng-container></div></ng-template>',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class App {
         render = false;
@@ -132,7 +116,12 @@ describe('acceptance integration tests', () => {
     });
 
     it('should add and remove DOM nodes when ng-container is a child of an embedded view', () => {
-      @Component({template: '<ng-container *ngIf="render">content</ng-container>'})
+      @Component({
+        template: '<ng-container *ngIf="render">content</ng-container>',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {
         render = false;
       }
@@ -153,7 +142,10 @@ describe('acceptance integration tests', () => {
 
     // https://stackblitz.com/edit/angular-tfhcz1?file=src%2Fapp%2Fapp.component.ts
     it('should add and remove DOM nodes when ng-container is a child of a delayed embedded view', () => {
-      @Directive({selector: '[testDirective]'})
+      @Directive({
+        selector: '[testDirective]',
+        standalone: false,
+      })
       class TestDirective {
         constructor(
           private _tplRef: TemplateRef<any>,
@@ -171,6 +163,9 @@ describe('acceptance integration tests', () => {
 
       @Component({
         template: '<ng-template testDirective><ng-container>content</ng-container></ng-template>',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class App {
         @ViewChild(TestDirective, {static: true}) testDirective!: TestDirective;
@@ -195,10 +190,18 @@ describe('acceptance integration tests', () => {
       @Component({
         selector: 'test-cmpt',
         template: '<ng-container>component template</ng-container>',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class TestCmpt {}
 
-      @Component({template: '<test-cmpt></test-cmpt>'})
+      @Component({
+        template: '<test-cmpt></test-cmpt>',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {}
 
       TestBed.configureTestingModule({declarations: [App, TestCmpt]});
@@ -214,10 +217,18 @@ describe('acceptance integration tests', () => {
         selector: 'test-cmpt',
         template:
           '<ng-container><ng-container><ng-container>content</ng-container></ng-container></ng-container>',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class TestCmpt {}
 
-      @Component({template: '<test-cmpt></test-cmpt>'})
+      @Component({
+        template: '<test-cmpt></test-cmpt>',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {}
 
       TestBed.configureTestingModule({declarations: [App, TestCmpt]});
@@ -229,7 +240,10 @@ describe('acceptance integration tests', () => {
     });
 
     it('should render inside another ng-container at the root of a delayed view', () => {
-      @Directive({selector: '[testDirective]'})
+      @Directive({
+        selector: '[testDirective]',
+        standalone: false,
+      })
       class TestDirective {
         constructor(
           private _tplRef: TemplateRef<any>,
@@ -248,6 +262,9 @@ describe('acceptance integration tests', () => {
       @Component({
         template:
           '<ng-template testDirective><ng-container><ng-container><ng-container>content</ng-container></ng-container></ng-container></ng-template>',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class App {
         @ViewChild(TestDirective, {static: true}) testDirective!: TestDirective;
@@ -273,12 +290,20 @@ describe('acceptance integration tests', () => {
     });
 
     it('should support directives and inject ElementRef', () => {
-      @Directive({selector: '[dir]'})
+      @Directive({
+        selector: '[dir]',
+        standalone: false,
+      })
       class TestDirective {
         constructor(public elRef: ElementRef) {}
       }
 
-      @Component({template: '<div><ng-container dir></ng-container></div>'})
+      @Component({
+        template: '<div><ng-container dir></ng-container></div>',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {
         @ViewChild(TestDirective) testDirective!: TestDirective;
       }
@@ -294,7 +319,10 @@ describe('acceptance integration tests', () => {
     });
 
     it('should support ViewContainerRef when ng-container is at the root of a view', () => {
-      @Directive({selector: '[dir]'})
+      @Directive({
+        selector: '[dir]',
+        standalone: false,
+      })
       class TestDirective {
         @Input() contentTpl: TemplateRef<{}> | null = null;
 
@@ -312,6 +340,9 @@ describe('acceptance integration tests', () => {
       @Component({
         template:
           '<ng-container dir [contentTpl]="content"><ng-template #content>Content</ng-template></ng-container>',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class App {
         @ViewChild(TestDirective) testDirective!: TestDirective;
@@ -333,7 +364,10 @@ describe('acceptance integration tests', () => {
     });
 
     it('should support ViewContainerRef on <ng-template> inside <ng-container>', () => {
-      @Directive({selector: '[dir]'})
+      @Directive({
+        selector: '[dir]',
+        standalone: false,
+      })
       class TestDirective {
         constructor(
           private _tplRef: TemplateRef<{}>,
@@ -349,7 +383,12 @@ describe('acceptance integration tests', () => {
         }
       }
 
-      @Component({template: '<ng-container><ng-template dir>Content</ng-template></ng-container>'})
+      @Component({
+        template: '<ng-container><ng-template dir>Content</ng-template></ng-container>',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {
         @ViewChild(TestDirective) testDirective!: TestDirective;
       }
@@ -370,7 +409,12 @@ describe('acceptance integration tests', () => {
     });
 
     it('should not set any attributes', () => {
-      @Component({template: '<div><ng-container id="foo"></ng-container></div>'})
+      @Component({
+        template: '<div><ng-container id="foo"></ng-container></div>',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {}
 
       TestBed.configureTestingModule({declarations: [App]});
@@ -383,7 +427,12 @@ describe('acceptance integration tests', () => {
 
   describe('text bindings', () => {
     it('should render "undefined" as ""', () => {
-      @Component({template: '{{name}}'})
+      @Component({
+        template: '{{name}}',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {
         name: string | undefined = 'benoit';
       }
@@ -401,7 +450,12 @@ describe('acceptance integration tests', () => {
     });
 
     it('should render "null" as ""', () => {
-      @Component({template: '{{name}}'})
+      @Component({
+        template: '{{name}}',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {
         name: string | null = 'benoit';
       }
@@ -419,7 +473,12 @@ describe('acceptance integration tests', () => {
     });
 
     it('should be able to render the result of a function called $any by using this', () => {
-      @Component({template: '{{this.$any(1, 2)}}'})
+      @Component({
+        template: '{{this.$any(1, 2)}}',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {
         $any(value: number, multiplier: number) {
           return value * multiplier;
@@ -446,6 +505,9 @@ describe('acceptance integration tests', () => {
           </b>
           {{ myRef.id }}
         `,
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class App {}
 
@@ -461,7 +523,10 @@ describe('acceptance integration tests', () => {
     it('should invoke directives for host element', () => {
       let directiveInvoked: boolean = false;
 
-      @Directive({selector: '[directive]'})
+      @Directive({
+        selector: '[directive]',
+        standalone: false,
+      })
       class TestDirective implements OnInit {
         ngOnInit() {
           directiveInvoked = true;
@@ -474,6 +539,9 @@ describe('acceptance integration tests', () => {
             <i>Hello {{ name }}!</i>
           </b>
         `,
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class App {
         name = 'World';
@@ -492,7 +560,10 @@ describe('acceptance integration tests', () => {
     it('should not invoke directives for nested elements', () => {
       let directiveInvoked: boolean = false;
 
-      @Directive({selector: '[directive]'})
+      @Directive({
+        selector: '[directive]',
+        standalone: false,
+      })
       class TestDirective implements OnInit {
         ngOnInit() {
           directiveInvoked = true;
@@ -505,6 +576,9 @@ describe('acceptance integration tests', () => {
             <i directive>Hello {{ name }}!</i>
           </b>
         `,
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class App {
         name = 'World';
@@ -523,7 +597,12 @@ describe('acceptance integration tests', () => {
 
   describe('Siblings update', () => {
     it('should handle a flat list of static/bound text nodes', () => {
-      @Component({template: 'Hello {{name}}!'})
+      @Component({
+        template: 'Hello {{name}}!',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {
         name = '';
       }
@@ -543,7 +622,12 @@ describe('acceptance integration tests', () => {
     });
 
     it('should handle a list of static/bound text nodes as element children', () => {
-      @Component({template: '<b>Hello {{name}}!</b>'})
+      @Component({
+        template: '<b>Hello {{name}}!</b>',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {
         name = '';
       }
@@ -563,7 +647,12 @@ describe('acceptance integration tests', () => {
     });
 
     it('should render/update text node as a child of a deep list of elements', () => {
-      @Component({template: '<b><b><b><b>Hello {{name}}!</b></b></b></b>'})
+      @Component({
+        template: '<b><b><b><b>Hello {{name}}!</b></b></b></b>',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {
         name = '';
       }
@@ -583,7 +672,12 @@ describe('acceptance integration tests', () => {
     });
 
     it('should update 2 sibling elements', () => {
-      @Component({template: '<b><span></span><span class="foo" [id]="id"></span></b>'})
+      @Component({
+        template: '<b><span></span><span class="foo" [id]="id"></span></b>',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {
         id = '';
       }
@@ -605,7 +699,12 @@ describe('acceptance integration tests', () => {
     });
 
     it('should handle sibling text node after element with child text node', () => {
-      @Component({template: '<p>hello</p>{{name}}'})
+      @Component({
+        template: '<p>hello</p>{{name}}',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {
         name = '';
       }
@@ -626,13 +725,24 @@ describe('acceptance integration tests', () => {
   });
 
   describe('basic components', () => {
-    @Component({selector: 'todo', template: '<p>Todo{{value}}</p>'})
+    @Component({
+      selector: 'todo',
+      template: '<p>Todo{{value}}</p>',
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
     class TodoComponent {
       value = ' one';
     }
 
     it('should support a basic component template', () => {
-      @Component({template: '<todo></todo>'})
+      @Component({
+        template: '<todo></todo>',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {}
 
       TestBed.configureTestingModule({declarations: [App, TodoComponent]});
@@ -643,7 +753,12 @@ describe('acceptance integration tests', () => {
     });
 
     it('should support a component template with sibling', () => {
-      @Component({template: '<todo></todo>two'})
+      @Component({
+        template: '<todo></todo>two',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {}
 
       TestBed.configureTestingModule({declarations: [App, TodoComponent]});
@@ -654,7 +769,12 @@ describe('acceptance integration tests', () => {
     });
 
     it('should support a component template with component sibling', () => {
-      @Component({template: '<todo></todo><todo></todo>'})
+      @Component({
+        template: '<todo></todo><todo></todo>',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {}
 
       TestBed.configureTestingModule({declarations: [App, TodoComponent]});
@@ -667,12 +787,23 @@ describe('acceptance integration tests', () => {
     });
 
     it('should support a component with binding on host element', () => {
-      @Component({selector: 'todo', template: '{{title}}'})
+      @Component({
+        selector: 'todo',
+        template: '{{title}}',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class TodoComponentHostBinding {
         @HostBinding() title = 'one';
       }
 
-      @Component({template: '<todo></todo>'})
+      @Component({
+        template: '<todo></todo>',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {
         @ViewChild(TodoComponentHostBinding) todoComponentHostBinding!: TodoComponentHostBinding;
       }
@@ -690,7 +821,14 @@ describe('acceptance integration tests', () => {
     });
 
     it('should support root component with host attribute', () => {
-      @Component({selector: 'host-attr-comp', template: '', host: {'role': 'button'}})
+      @Component({
+        selector: 'host-attr-comp',
+        template: '',
+        host: {'role': 'button'},
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class HostAttributeComp {}
 
       TestBed.configureTestingModule({declarations: [HostAttributeComp]});
@@ -701,12 +839,23 @@ describe('acceptance integration tests', () => {
     });
 
     it('should support component with bindings in template', () => {
-      @Component({selector: 'comp', template: '<p>{{ name }}</p>'})
+      @Component({
+        selector: 'comp',
+        template: '<p>{{ name }}</p>',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class MyComp {
         name = 'Bess';
       }
 
-      @Component({template: '<comp></comp>'})
+      @Component({
+        template: '<comp></comp>',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {}
 
       TestBed.configureTestingModule({declarations: [App, MyComp]});
@@ -717,12 +866,23 @@ describe('acceptance integration tests', () => {
     });
 
     it('should support a component with sub-views', () => {
-      @Component({selector: 'comp', template: '<div *ngIf="condition">text</div>'})
+      @Component({
+        selector: 'comp',
+        template: '<div *ngIf="condition">text</div>',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class MyComp {
         @Input() condition!: boolean;
       }
 
-      @Component({template: '<comp [condition]="condition"></comp>'})
+      @Component({
+        template: '<comp [condition]="condition"></comp>',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {
         condition = false;
       }
@@ -745,7 +905,12 @@ describe('acceptance integration tests', () => {
   describe('element bindings', () => {
     describe('elementAttribute', () => {
       it('should support attribute bindings', () => {
-        @Component({template: '<button [attr.title]="title"></button>'})
+        @Component({
+          template: '<button [attr.title]="title"></button>',
+          standalone: false,
+
+          changeDetection: ChangeDetectionStrategy.Eager,
+        })
         class App {
           title: string | null = '';
         }
@@ -769,7 +934,12 @@ describe('acceptance integration tests', () => {
       });
 
       it('should stringify values used attribute bindings', () => {
-        @Component({template: '<button [attr.title]="title"></button>'})
+        @Component({
+          template: '<button [attr.title]="title"></button>',
+          standalone: false,
+
+          changeDetection: ChangeDetectionStrategy.Eager,
+        })
         class App {
           title: any;
         }
@@ -801,6 +971,9 @@ describe('acceptance integration tests', () => {
             'a7:{{c[0]}}{{c[1]}}{{c[2]}}{{c[3]}}{{c[4]}}{{c[5]}}{{c[6]}}{{c[7]}}{{c[8]}}{{c[9]}}{{c[10]}}{{c[11]}}{{c[12]}}{{c[13]}}{{c[16]}}',
             'a8:{{c[0]}}{{c[1]}}{{c[2]}}{{c[3]}}{{c[4]}}{{c[5]}}{{c[6]}}{{c[7]}}{{c[8]}}{{c[9]}}{{c[10]}}{{c[11]}}{{c[12]}}{{c[13]}}{{c[14]}}{{c[15]}}{{c[16]}}',
           ].join('\n'),
+          standalone: false,
+
+          changeDetection: ChangeDetectionStrategy.Eager,
         })
         class App {
           c = ['(', 0, 'a', 1, 'b', 2, 'c', 3, 'd', 4, 'e', 5, 'f', 6, 'g', 7, ')'];
@@ -869,6 +1042,9 @@ describe('acceptance integration tests', () => {
               <b [attr.title]="title" *ngIf="shouldRender"></b>
             </span>
           `,
+          standalone: false,
+
+          changeDetection: ChangeDetectionStrategy.Eager,
         })
         class App {
           title: string | null = '';
@@ -904,12 +1080,20 @@ describe('acceptance integration tests', () => {
       });
 
       it('should support host attribute bindings', () => {
-        @Directive({selector: '[hostBindingDir]'})
+        @Directive({
+          selector: '[hostBindingDir]',
+          standalone: false,
+        })
         class HostBindingDir {
           @HostBinding('attr.aria-label') label = 'some label';
         }
 
-        @Component({template: '<div hostBindingDir></div>'})
+        @Component({
+          template: '<div hostBindingDir></div>',
+          standalone: false,
+
+          changeDetection: ChangeDetectionStrategy.Eager,
+        })
         class App {
           @ViewChild(HostBindingDir) hostBindingDir!: HostBindingDir;
         }
@@ -932,7 +1116,12 @@ describe('acceptance integration tests', () => {
 
     describe('elementStyle', () => {
       it('should support binding to styles', () => {
-        @Component({template: '<span [style.font-size]="size"></span>'})
+        @Component({
+          template: '<span [style.font-size]="size"></span>',
+          standalone: false,
+
+          changeDetection: ChangeDetectionStrategy.Eager,
+        })
         class App {
           size: string | null = '';
         }
@@ -955,7 +1144,12 @@ describe('acceptance integration tests', () => {
       });
 
       it('should support binding to styles with suffix', () => {
-        @Component({template: '<span [style.font-size.px]="size"></span>'})
+        @Component({
+          template: '<span [style.font-size.px]="size"></span>',
+          standalone: false,
+
+          changeDetection: ChangeDetectionStrategy.Eager,
+        })
         class App {
           size: string | number | null = '';
         }
@@ -984,7 +1178,12 @@ describe('acceptance integration tests', () => {
 
     describe('class-based styling', () => {
       it('should support CSS class toggle', () => {
-        @Component({template: '<span [class.active]="value"></span>'})
+        @Component({
+          template: '<span [class.active]="value"></span>',
+          standalone: false,
+
+          changeDetection: ChangeDetectionStrategy.Eager,
+        })
         class App {
           value: any;
         }
@@ -1021,7 +1220,12 @@ describe('acceptance integration tests', () => {
       });
 
       it('should work correctly with existing static classes', () => {
-        @Component({template: '<span class="existing" [class.active]="value"></span>'})
+        @Component({
+          template: '<span class="existing" [class.active]="value"></span>',
+          standalone: false,
+
+          changeDetection: ChangeDetectionStrategy.Eager,
+        })
         class App {
           value: any;
         }
@@ -1038,10 +1242,21 @@ describe('acceptance integration tests', () => {
       });
 
       it('should apply classes properly when nodes are components', () => {
-        @Component({selector: 'my-comp', template: 'Comp Content'})
+        @Component({
+          selector: 'my-comp',
+          template: 'Comp Content',
+          standalone: false,
+
+          changeDetection: ChangeDetectionStrategy.Eager,
+        })
         class MyComp {}
 
-        @Component({template: '<my-comp [class.active]="value"></my-comp>'})
+        @Component({
+          template: '<my-comp [class.active]="value"></my-comp>',
+          standalone: false,
+
+          changeDetection: ChangeDetectionStrategy.Eager,
+        })
         class App {
           value: any;
         }
@@ -1061,7 +1276,13 @@ describe('acceptance integration tests', () => {
       });
 
       it('should apply classes properly when nodes have containers', () => {
-        @Component({selector: 'structural-comp', template: 'Comp Content'})
+        @Component({
+          selector: 'structural-comp',
+          template: 'Comp Content',
+          standalone: false,
+
+          changeDetection: ChangeDetectionStrategy.Eager,
+        })
         class StructuralComp {
           @Input() tmp!: TemplateRef<any>;
 
@@ -1077,6 +1298,9 @@ describe('acceptance integration tests', () => {
             <ng-template #foo>Temp Content</ng-template>
             <structural-comp [class.active]="value" [tmp]="foo"></structural-comp>
           `,
+          standalone: false,
+
+          changeDetection: ChangeDetectionStrategy.Eager,
         })
         class App {
           @ViewChild(StructuralComp) structuralComp!: StructuralComp;
@@ -1100,7 +1324,10 @@ describe('acceptance integration tests', () => {
         expect(structuralCompEl.getAttribute('class')).toBeFalsy();
       });
 
-      @Directive({selector: '[DirWithClass]'})
+      @Directive({
+        selector: '[DirWithClass]',
+        standalone: false,
+      })
       class DirWithClassDirective {
         public classesVal: string = '';
 
@@ -1110,7 +1337,10 @@ describe('acceptance integration tests', () => {
         }
       }
 
-      @Directive({selector: '[DirWithStyle]'})
+      @Directive({
+        selector: '[DirWithStyle]',
+        standalone: false,
+      })
       class DirWithStyleDirective {
         public stylesVal: any = '';
 
@@ -1121,7 +1351,12 @@ describe('acceptance integration tests', () => {
       }
 
       it('should delegate initial classes to a [class] input binding if present on a directive on the same element', () => {
-        @Component({template: '<div class="apple orange banana" DirWithClass></div>'})
+        @Component({
+          template: '<div class="apple orange banana" DirWithClass></div>',
+          standalone: false,
+
+          changeDetection: ChangeDetectionStrategy.Eager,
+        })
         class App {
           @ViewChild(DirWithClassDirective) mockClassDirective!: DirWithClassDirective;
         }
@@ -1138,7 +1373,12 @@ describe('acceptance integration tests', () => {
       });
 
       it('should delegate initial styles to a [style] input binding if present on a directive on the same element', () => {
-        @Component({template: '<div style="width: 100px; height: 200px" DirWithStyle></div>'})
+        @Component({
+          template: '<div style="width: 100px; height: 200px" DirWithStyle></div>',
+          standalone: false,
+
+          changeDetection: ChangeDetectionStrategy.Eager,
+        })
         class App {
           @ViewChild(DirWithStyleDirective) mockStyleDirective!: DirWithStyleDirective;
         }
@@ -1153,7 +1393,12 @@ describe('acceptance integration tests', () => {
       });
 
       it('should update `[class]` and bindings in the provided directive if the input is matched', () => {
-        @Component({template: '<div DirWithClass [class]="value"></div>'})
+        @Component({
+          template: '<div DirWithClass [class]="value"></div>',
+          standalone: false,
+
+          changeDetection: ChangeDetectionStrategy.Eager,
+        })
         class App {
           @ViewChild(DirWithClassDirective) mockClassDirective!: DirWithClassDirective;
           value = '';
@@ -1168,7 +1413,12 @@ describe('acceptance integration tests', () => {
       });
 
       it('should update `[style]` and bindings in the provided directive if the input is matched', () => {
-        @Component({template: '<div DirWithStyle [style]="value"></div>'})
+        @Component({
+          template: '<div DirWithStyle [style]="value"></div>',
+          standalone: false,
+
+          changeDetection: ChangeDetectionStrategy.Eager,
+        })
         class App {
           @ViewChild(DirWithStyleDirective) mockStyleDirective!: DirWithStyleDirective;
           value!: {[key: string]: string};
@@ -1194,15 +1444,17 @@ describe('acceptance integration tests', () => {
             'style': 'color: purple',
             '[style.font-weight]': '"bold"',
           },
+          standalone: false,
         })
         class DirWithInitialStyling {}
 
         @Component({
           template: `
-                <div DirWithInitialStyling
-                  class="big"
-                  style="color:black; font-size:200px"></div>
-             `,
+            <div DirWithInitialStyling class="big" style="color:black; font-size:200px"></div>
+          `,
+          standalone: false,
+
+          changeDetection: ChangeDetectionStrategy.Eager,
         })
         class App {}
 
@@ -1229,6 +1481,7 @@ describe('acceptance integration tests', () => {
             '[style.width]': 'width',
             '[style.height]': 'height',
           },
+          standalone: false,
         })
         class DirWithSingleStylingBindings {
           width: string | null | undefined = undefined;
@@ -1237,9 +1490,10 @@ describe('acceptance integration tests', () => {
         }
 
         @Component({
-          template: `
-              <div DirWithSingleStylingBindings class="abc" style="width:100px;"></div>
-            `,
+          template: ` <div DirWithSingleStylingBindings class="abc" style="width:100px;"></div> `,
+          standalone: false,
+
+          changeDetection: ChangeDetectionStrategy.Eager,
         })
         class App {
           @ViewChild(DirWithSingleStylingBindings) dirInstance!: DirWithSingleStylingBindings;
@@ -1279,7 +1533,11 @@ describe('acceptance integration tests', () => {
       });
 
       it('should properly prioritize single style binding collisions when they exist on multiple directives', () => {
-        @Directive({selector: '[Dir1WithStyle]', host: {'[style.width]': 'width'}})
+        @Directive({
+          selector: '[Dir1WithStyle]',
+          host: {'[style.width]': 'width'},
+          standalone: false,
+        })
         class Dir1WithStyle {
           width: null | string | undefined = undefined;
         }
@@ -1287,12 +1545,18 @@ describe('acceptance integration tests', () => {
         @Directive({
           selector: '[Dir2WithStyle]',
           host: {'style': 'width: 111px', '[style.width]': 'width'},
+          standalone: false,
         })
         class Dir2WithStyle {
           width: null | string | undefined = undefined;
         }
 
-        @Component({template: '<div Dir1WithStyle Dir2WithStyle [style.width]="width"></div>'})
+        @Component({
+          template: '<div Dir1WithStyle Dir2WithStyle [style.width]="width"></div>',
+          standalone: false,
+
+          changeDetection: ChangeDetectionStrategy.Eager,
+        })
         class App {
           @ViewChild(Dir1WithStyle) dir1Instance!: Dir1WithStyle;
           @ViewChild(Dir2WithStyle) dir2Instance!: Dir2WithStyle;
@@ -1338,6 +1602,7 @@ describe('acceptance integration tests', () => {
         @Directive({
           selector: '[Dir1WithStyling]',
           host: {'[style]': 'stylesExp', '[class]': 'classesExp'},
+          standalone: false,
         })
         class Dir1WithStyling {
           classesExp: any = {};
@@ -1347,6 +1612,7 @@ describe('acceptance integration tests', () => {
         @Directive({
           selector: '[Dir2WithStyling]',
           host: {'style': 'width: 111px', '[style]': 'stylesExp'},
+          standalone: false,
         })
         class Dir2WithStyling {
           stylesExp: any = {};
@@ -1355,6 +1621,9 @@ describe('acceptance integration tests', () => {
         @Component({
           template:
             '<div Dir1WithStyling Dir2WithStyling [style]="stylesExp" [class]="classesExp"></div>',
+          standalone: false,
+
+          changeDetection: ChangeDetectionStrategy.Eager,
         })
         class App {
           @ViewChild(Dir1WithStyling) dir1Instance!: Dir1WithStyling;
@@ -1432,7 +1701,12 @@ describe('acceptance integration tests', () => {
     });
 
     it('should properly handle and render interpolation for class attribute bindings', () => {
-      @Component({template: '<div class="-{{name}}-{{age}}-"></div>'})
+      @Component({
+        template: '<div class="-{{name}}-{{age}}-"></div>',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {
         name = '';
         age = '';
@@ -1454,7 +1728,12 @@ describe('acceptance integration tests', () => {
 
   describe('NgModule assertions', () => {
     it('should throw with descriptive error message when a module imports itself', () => {
-      @Component({template: ''})
+      @Component({
+        template: '',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class FixtureComponent {}
 
       @NgModule({imports: [SomeModule], declarations: [FixtureComponent]})
@@ -1465,7 +1744,12 @@ describe('acceptance integration tests', () => {
     });
 
     it('should throw with descriptive error message when a directive is passed to imports', () => {
-      @Component({template: ''})
+      @Component({
+        template: '',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class SomeComponent {}
 
       @NgModule({imports: [SomeComponent]})
@@ -1480,9 +1764,17 @@ describe('acceptance integration tests', () => {
     });
 
     it('should throw with descriptive error message when a pipe is passed to imports', () => {
-      @Component({template: ''})
+      @Component({
+        template: '',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class FixtureComponent {}
-      @Pipe({name: 'somePipe'})
+      @Pipe({
+        name: 'somePipe',
+        standalone: false,
+      })
       class SomePipe {}
       @NgModule({imports: [SomePipe], declarations: [FixtureComponent]})
       class ModuleWithImportedPipe {}
@@ -1496,7 +1788,12 @@ describe('acceptance integration tests', () => {
     });
 
     it('should throw with descriptive error message when a module is passed to declarations', () => {
-      @Component({template: ''})
+      @Component({
+        template: '',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class FixtureComponent {}
       @NgModule({})
       class SomeModule {}
@@ -1513,7 +1810,12 @@ describe('acceptance integration tests', () => {
     });
 
     it('should throw with descriptive error message when a declaration is missing annotation', () => {
-      @Component({template: ''})
+      @Component({
+        template: '',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class FixtureComponent {}
       class SomeClass {}
       @NgModule({declarations: [SomeClass, FixtureComponent]})
@@ -1526,7 +1828,12 @@ describe('acceptance integration tests', () => {
     });
 
     it('should throw with descriptive error message when an imported module is missing annotation', () => {
-      @Component({template: ''})
+      @Component({
+        template: '',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class FixtureComponent {}
       class SomeModule {}
       @NgModule({imports: [SomeModule], declarations: [FixtureComponent]})
@@ -1543,10 +1850,21 @@ describe('acceptance integration tests', () => {
 
   describe('self-closing tags', () => {
     it('should allow a self-closing tag for a custom tag name', () => {
-      @Component({selector: 'my-comp', template: 'hello'})
+      @Component({
+        selector: 'my-comp',
+        template: 'hello',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class MyComp {}
 
-      @Component({template: '<my-comp/>'})
+      @Component({
+        template: '<my-comp/>',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {}
 
       TestBed.configureTestingModule({declarations: [App, MyComp]});
@@ -1556,10 +1874,21 @@ describe('acceptance integration tests', () => {
     });
 
     it('should not confuse self-closing tag for an end tag', () => {
-      @Component({selector: 'my-comp', template: '<ng-content/>'})
+      @Component({
+        selector: 'my-comp',
+        template: '<ng-content/>',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class MyComp {}
 
-      @Component({template: '<my-comp title="a">Before<my-comp title="b"/>After</my-comp>'})
+      @Component({
+        template: '<my-comp title="a">Before<my-comp title="b"/>After</my-comp>',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {}
 
       TestBed.configureTestingModule({declarations: [App, MyComp]});
@@ -1574,7 +1903,12 @@ describe('acceptance integration tests', () => {
   it('should only call inherited host listeners once', () => {
     let clicks = 0;
 
-    @Component({template: ''})
+    @Component({
+      template: '',
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
     class ButtonSuperClass {
       @HostListener('click')
       clicked() {
@@ -1582,10 +1916,21 @@ describe('acceptance integration tests', () => {
       }
     }
 
-    @Component({selector: 'button[custom-button]', template: ''})
+    @Component({
+      selector: 'button[custom-button]',
+      template: '',
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
     class ButtonSubClass extends ButtonSuperClass {}
 
-    @Component({template: '<button custom-button></button>'})
+    @Component({
+      template: '<button custom-button></button>',
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
     class MyApp {}
 
     TestBed.configureTestingModule({declarations: [MyApp, ButtonSuperClass, ButtonSubClass]});
@@ -1600,18 +1945,37 @@ describe('acceptance integration tests', () => {
   });
 
   it('should support inherited view queries', () => {
-    @Directive({selector: '[someDir]'})
+    @Directive({
+      selector: '[someDir]',
+      standalone: false,
+    })
     class SomeDir {}
 
-    @Component({template: '<div someDir></div>'})
+    @Component({
+      template: '<div someDir></div>',
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
     class SuperComp {
       @ViewChildren(SomeDir) dirs!: QueryList<SomeDir>;
     }
 
-    @Component({selector: 'button[custom-button]', template: '<div someDir></div>'})
+    @Component({
+      selector: 'button[custom-button]',
+      template: '<div someDir></div>',
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
     class SubComp extends SuperComp {}
 
-    @Component({template: '<button custom-button></button>'})
+    @Component({
+      template: '<button custom-button></button>',
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
     class MyApp {}
 
     TestBed.configureTestingModule({declarations: [MyApp, SuperComp, SubComp, SomeDir]});
@@ -1626,6 +1990,7 @@ describe('acceptance integration tests', () => {
   it('should not set inputs after destroy', () => {
     @Directive({
       selector: '[no-assign-after-destroy]',
+      standalone: false,
     })
     class NoAssignAfterDestroy {
       private _isDestroyed = false;
@@ -1648,7 +2013,12 @@ describe('acceptance integration tests', () => {
       }
     }
 
-    @Component({template: '<div no-assign-after-destroy [value]="directiveValue"></div>'})
+    @Component({
+      template: '<div no-assign-after-destroy [value]="directiveValue"></div>',
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
     class App {
       directiveValue = 'initial-value';
     }
@@ -1668,6 +2038,9 @@ describe('acceptance integration tests', () => {
       selector: 'test-component',
       template: `foo`,
       host: {'[attr.aria-disabled]': 'true'},
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
     })
     class TestComponent {
       @ContentChild(TemplateRef, {static: true}) tpl!: TemplateRef<any>;
@@ -1686,10 +2059,21 @@ describe('acceptance integration tests', () => {
       @Input() isDisabled!: boolean;
     }
 
-    @Component({selector: 'button[custom-button]', template: ''})
+    @Component({
+      selector: 'button[custom-button]',
+      template: '',
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
     class ButtonSubClass extends ButtonSuperClass {}
 
-    @Component({template: '<button custom-button [isDisabled]="disableButton"></button>'})
+    @Component({
+      template: '<button custom-button [isDisabled]="disableButton"></button>',
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
     class MyApp {
       disableButton = false;
     }
@@ -1717,10 +2101,21 @@ describe('acceptance integration tests', () => {
       }
     }
 
-    @Component({selector: 'button[custom-button]', template: ''})
+    @Component({
+      selector: 'button[custom-button]',
+      template: '',
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
     class ButtonSubClass extends ButtonSuperClass {}
 
-    @Component({template: '<button custom-button (clicked)="handleClick()"></button>'})
+    @Component({
+      template: '<button custom-button (clicked)="handleClick()"></button>',
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
     class MyApp {
       handleClick() {
         clicks++;
@@ -1742,10 +2137,21 @@ describe('acceptance integration tests', () => {
       @HostBinding('attr.tabindex') tabindex = -1;
     }
 
-    @Component({selector: '[sub-button]', template: '<ng-content></ng-content>'})
+    @Component({
+      selector: '[sub-button]',
+      template: '<ng-content></ng-content>',
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
     class SubButton extends BaseButton {}
 
-    @Component({template: '<button sub-button>Click me</button>'})
+    @Component({
+      template: '<button sub-button>Click me</button>',
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
     class App {}
 
     TestBed.configureTestingModule({declarations: [SubButton, App]});
@@ -1768,10 +2174,21 @@ describe('acceptance integration tests', () => {
 
     class BaseButton extends SuperBaseButton {}
 
-    @Component({selector: '[sub-button]', template: '<ng-content></ng-content>'})
+    @Component({
+      selector: '[sub-button]',
+      template: '<ng-content></ng-content>',
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
     class SubButton extends BaseButton {}
 
-    @Component({template: '<button sub-button>Click me</button>'})
+    @Component({
+      template: '<button sub-button>Click me</button>',
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
     class App {}
 
     TestBed.configureTestingModule({declarations: [SubButton, App]});
@@ -1797,10 +2214,21 @@ describe('acceptance integration tests', () => {
       }
     }
 
-    @Component({selector: '[sub-button]', template: '<ng-content></ng-content>'})
+    @Component({
+      selector: '[sub-button]',
+      template: '<ng-content></ng-content>',
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
     class SubButton extends BaseButton {}
 
-    @Component({template: '<button sub-button>Click me</button>'})
+    @Component({
+      template: '<button sub-button>Click me</button>',
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
     class App {}
 
     TestBed.configureTestingModule({declarations: [SubButton, App]});
@@ -1816,7 +2244,10 @@ describe('acceptance integration tests', () => {
   it('should inherit host listeners from superclasses once', () => {
     let clicks = 0;
 
-    @Directive({selector: '[baseButton]'})
+    @Directive({
+      selector: '[baseButton]',
+      standalone: false,
+    })
     class BaseButton {
       @HostListener('click')
       handleClick() {
@@ -1824,10 +2255,21 @@ describe('acceptance integration tests', () => {
       }
     }
 
-    @Component({selector: '[subButton]', template: '<ng-content></ng-content>'})
+    @Component({
+      selector: '[subButton]',
+      template: '<ng-content></ng-content>',
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
     class SubButton extends BaseButton {}
 
-    @Component({template: '<button subButton>Click me</button>'})
+    @Component({
+      template: '<button subButton>Click me</button>',
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
     class App {}
 
     TestBed.configureTestingModule({declarations: [SubButton, BaseButton, App]});
@@ -1843,7 +2285,10 @@ describe('acceptance integration tests', () => {
   it('should inherit host listeners from grand superclasses once', () => {
     let clicks = 0;
 
-    @Directive({selector: '[superBaseButton]'})
+    @Directive({
+      selector: '[superBaseButton]',
+      standalone: false,
+    })
     class SuperBaseButton {
       @HostListener('click')
       handleClick() {
@@ -1851,13 +2296,27 @@ describe('acceptance integration tests', () => {
       }
     }
 
-    @Directive({selector: '[baseButton]'})
+    @Directive({
+      selector: '[baseButton]',
+      standalone: false,
+    })
     class BaseButton extends SuperBaseButton {}
 
-    @Component({selector: '[subButton]', template: '<ng-content></ng-content>'})
+    @Component({
+      selector: '[subButton]',
+      template: '<ng-content></ng-content>',
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
     class SubButton extends BaseButton {}
 
-    @Component({template: '<button subButton>Click me</button>'})
+    @Component({
+      template: '<button subButton>Click me</button>',
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
     class App {}
 
     TestBed.configureTestingModule({declarations: [SubButton, SuperBaseButton, BaseButton, App]});
@@ -1873,7 +2332,10 @@ describe('acceptance integration tests', () => {
   it('should inherit host listeners from grand grand superclasses once', () => {
     let clicks = 0;
 
-    @Directive({selector: '[superSuperBaseButton]'})
+    @Directive({
+      selector: '[superSuperBaseButton]',
+      standalone: false,
+    })
     class SuperSuperBaseButton {
       @HostListener('click')
       handleClick() {
@@ -1881,16 +2343,33 @@ describe('acceptance integration tests', () => {
       }
     }
 
-    @Directive({selector: '[superBaseButton]'})
+    @Directive({
+      selector: '[superBaseButton]',
+      standalone: false,
+    })
     class SuperBaseButton extends SuperSuperBaseButton {}
 
-    @Directive({selector: '[baseButton]'})
+    @Directive({
+      selector: '[baseButton]',
+      standalone: false,
+    })
     class BaseButton extends SuperBaseButton {}
 
-    @Component({selector: '[subButton]', template: '<ng-content></ng-content>'})
+    @Component({
+      selector: '[subButton]',
+      template: '<ng-content></ng-content>',
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
     class SubButton extends BaseButton {}
 
-    @Component({template: '<button subButton>Click me</button>'})
+    @Component({
+      template: '<button subButton>Click me</button>',
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
     class App {}
 
     TestBed.configureTestingModule({
@@ -1909,6 +2388,7 @@ describe('acceptance integration tests', () => {
     @Directive({
       selector: '[dir]',
       inputs: ['dir'],
+      standalone: false,
     })
     class Dir {
       get dir(): any {
@@ -1922,6 +2402,9 @@ describe('acceptance integration tests', () => {
 
     @Component({
       template: '<div [dir]="3"></div>',
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
     })
     class Cmp {
       ngAfterViewInit(): void {
@@ -1944,10 +2427,12 @@ describe('acceptance integration tests', () => {
     @Component({
       template: `
         <span [title]="'Your last name is ' + (lastName ?? lastNameFallback ?? 'unknown')">
-          Hello, {{ firstName ?? 'Frodo' }}!
-          You are a Balrog: {{ falsyValue ?? true }}
+          Hello, {{ firstName ?? 'Frodo' }}! You are a Balrog: {{ falsyValue ?? true }}
         </span>
       `,
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
     })
     class App {
       firstName: string | null = null;
@@ -1966,16 +2451,18 @@ describe('acceptance integration tests', () => {
     expect(content).toContain(`<span title="Your last name is Baggins">`);
   });
 
-  it('should handle safe keyed reads inside templates', () => {
+  it('should handle safe keyed reads inside templates (indexed access)', () => {
     @Component({
       template: `
-      <span [title]="'Your last name is ' + (unknownNames?.[0] || 'unknown')">
-        Hello, {{ knownNames?.[0]?.[1] }}!
-        You are a Balrog: {{ species?.[0]?.[1]?.[2]?.[3]?.[4]?.[5] || 'unknown' }}
-        You are an Elf: {{ speciesMap?.[keys?.[0] ?? 'key'] }}
-        You are an Orc: {{ speciesMap?.['key'] }}
-      </span>
-    `,
+        <span [title]="'Your last name is ' + (unknownNames?.[0] || 'unknown')">
+          Hello, {{ knownNames?.[0]?.[1] }}! You are a Balrog:
+          {{ species?.[0]?.[1]?.[2]?.[3]?.[4]?.[5] || 'unknown' }} You are an Elf:
+          {{ speciesMap?.[keys?.[0] ?? 'key'] }} You are an Orc: {{ speciesMap?.['key'] }}
+        </span>
+      `,
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
     })
     class App {
       unknownNames: string[] | null = null;
@@ -2000,10 +2487,13 @@ describe('acceptance integration tests', () => {
     @Component({
       template: `
         <span [title]="'Your last name is ' + (person.getLastName?.() ?? 'unknown')">
-          Hello, {{ person.getName?.() }}!
-          You are a Balrog: {{ person.getSpecies?.()?.()?.()?.()?.() || 'unknown' }}
+          Hello, {{ person.getName?.() }}! You are a Balrog:
+          {{ person.getSpecies?.()?.()?.()?.()?.() || 'unknown' }}
         </span>
       `,
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
     })
     class App {
       person: {
@@ -2028,7 +2518,12 @@ describe('acceptance integration tests', () => {
     let plainCalls = 0;
     let safeCalls = 0;
 
-    @Component({template: `{{ safe?.()?.()?.()?.()?.() }} {{ plain()()()()() }}`})
+    @Component({
+      template: `{{ safe?.()?.()?.()?.()?.() }} {{ plain()()()()() }}`,
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
     class App {
       plain() {
         plainCalls++;
@@ -2058,6 +2553,7 @@ describe('acceptance integration tests', () => {
         '[attr.first-name]': `'Hello, ' + (firstName ?? 'Frodo') + '!'`,
         '(click)': `logLastName(lastName ?? lastNameFallback ?? 'unknown')`,
       },
+      standalone: false,
     })
     class Dir {
       firstName: string | null = null;
@@ -2069,7 +2565,12 @@ describe('acceptance integration tests', () => {
       }
     }
 
-    @Component({template: `<button some-dir>Click me</button>`})
+    @Component({
+      template: `<button some-dir>Click me</button>`,
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
     class App {}
 
     TestBed.configureTestingModule({declarations: [App, Dir]});
@@ -2092,6 +2593,9 @@ describe('acceptance integration tests', () => {
           </ng-template>
         </svg>
       `,
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
     })
     class MyComp {
       condition = true;
@@ -2105,12 +2609,20 @@ describe('acceptance integration tests', () => {
   });
 
   it('should handle shorthand property declarations in templates', () => {
-    @Directive({selector: '[my-dir]'})
+    @Directive({
+      selector: '[my-dir]',
+      standalone: false,
+    })
     class Dir {
       @Input('my-dir') value: any;
     }
 
-    @Component({template: `<div [my-dir]="{a, b: 2, someProp}"></div>`})
+    @Component({
+      template: `<div [my-dir]="{a, b: 2, someProp}"></div>`,
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
     class App {
       @ViewChild(Dir) directive!: Dir;
       a = 1;
@@ -2125,7 +2637,12 @@ describe('acceptance integration tests', () => {
   });
 
   it('should handle numeric separators in templates', () => {
-    @Component({template: 'Balance: ${{ 1_000_000 * multiplier }}'})
+    @Component({
+      template: 'Balance: ${{ 1_000_000 * multiplier }}',
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
     class App {
       multiplier = 5;
     }
@@ -2139,9 +2656,10 @@ describe('acceptance integration tests', () => {
 
   it('should handle calls to a safe access in templates', () => {
     @Component({
-      template: `
-      <span>Hello, {{ (person?.getName() || 'unknown') }}!</span>
-    `,
+      template: ` <span>Hello, {{ person?.getName() || 'unknown' }}!</span> `,
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
     })
     class App {
       person = null;
@@ -2171,8 +2689,17 @@ describe('acceptance integration tests', () => {
 
     @Component({
       template: `
-      <span>Hello, {{ (person?.getName(getConfig('showTitle')?.enabled ?? getDefaultShowTitle()) ?? getFallbackName()) }}!</span>
-    `,
+        <span
+          >Hello,
+          {{
+            person?.getName(getConfig('showTitle')?.enabled ?? getDefaultShowTitle()) ??
+              getFallbackName()
+          }}!</span
+        >
+      `,
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
     })
     class App {
       person: Person | null = null;
@@ -2221,13 +2748,30 @@ describe('acceptance integration tests', () => {
   });
 
   it('should remove child LView from the registry when the root view is destroyed', () => {
-    @Component({template: '<child></child>'})
+    @Component({
+      template: '<child></child>',
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
     class App {}
 
-    @Component({selector: 'child', template: '<grand-child></grand-child>'})
+    @Component({
+      selector: 'child',
+      template: '<grand-child></grand-child>',
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
     class Child {}
 
-    @Component({selector: 'grand-child', template: ''})
+    @Component({
+      selector: 'grand-child',
+      template: '',
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
     class GrandChild {}
 
     TestBed.configureTestingModule({declarations: [App, Child, GrandChild]});
@@ -2254,7 +2798,12 @@ describe('acceptance integration tests', () => {
   });
 
   it('should handle content inside <template> elements', () => {
-    @Component({template: '<template><strong>Hello</strong><em>World</em></template>'})
+    @Component({
+      template: '<template><strong>Hello</strong><em>World</em></template>',
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
     class App {}
 
     TestBed.configureTestingModule({declarations: [App]});
@@ -2273,7 +2822,12 @@ describe('acceptance integration tests', () => {
   });
 
   it('should be able to insert and remove elements inside <template>', () => {
-    @Component({template: '<template><strong *ngIf="render">Hello</strong></template>'})
+    @Component({
+      template: '<template><strong *ngIf="render">Hello</strong></template>',
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
     class App {
       render = true;
     }
@@ -2298,7 +2852,12 @@ describe('acceptance integration tests', () => {
   });
 
   it('should handle data binding inside <template> elements', () => {
-    @Component({template: '<template><strong>Hello {{name}}</strong></template>'})
+    @Component({
+      template: '<template><strong>Hello {{name}}</strong></template>',
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
     class App {
       name = 'Bilbo';
     }
@@ -2321,6 +2880,8 @@ describe('acceptance integration tests', () => {
   });
 
   it('should not throw for a non-null assertion after a safe access', () => {
+    // prettier will add parentheses which will change the meaning of the test
+    // prettier-ignore
     @Component({
       template: `
         {{ val?.foo!.bar }}
@@ -2328,7 +2889,9 @@ describe('acceptance integration tests', () => {
         {{ foo(val)?.foo!.bar }}
         {{ $any(val)?.foo!.bar }}
       `,
-    })
+      standalone: false,
+    
+      changeDetection: ChangeDetectionStrategy.Eager,})
     class Comp {
       val: any = null;
 
@@ -2339,6 +2902,495 @@ describe('acceptance integration tests', () => {
 
     TestBed.configureTestingModule({declarations: [Comp]});
     expect(() => TestBed.createComponent(Comp).detectChanges()).not.toThrow();
+  });
+
+  it('should support template literals in expressions', () => {
+    @Component({
+      template: 'Message: {{`Hello, ${name} - ${value}`}}',
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
+    class TestComponent {
+      name = 'Frodo';
+      value = 0;
+    }
+
+    const fixture = TestBed.createComponent(TestComponent);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Message: Hello, Frodo - 0');
+
+    fixture.componentInstance.value++;
+    fixture.componentInstance.name = 'Bilbo';
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Message: Hello, Bilbo - 1');
+  });
+
+  it('should support regular expressions in templates', () => {
+    @Component({
+      template: 'Matches: {{/\\d+/.test(value)}}',
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
+    class App {
+      value = '123';
+    }
+
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toBe('Matches: true');
+
+    fixture.componentInstance.value = 'hello';
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toBe('Matches: false');
+  });
+
+  it('should support void expressions', () => {
+    @Component({
+      host: {
+        '(click)': 'void doStuff($event)',
+      },
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
+    class TestComponent {
+      e: Event | null = null;
+
+      doStuff(e: Event) {
+        this.e = e;
+        return false;
+      }
+    }
+
+    const fixture = TestBed.createComponent(TestComponent);
+    fixture.detectChanges();
+    fixture.nativeElement.click();
+    expect(fixture.componentInstance.e).not.toBeNull();
+    expect(fixture.componentInstance.e!.defaultPrevented).toBe(false);
+  });
+
+  it('should support object spread assigments in templates', () => {
+    @Component({
+      template: '@let obj = {a: {...foo}}; Hello, {{obj.a.b}}',
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
+    class TestComponent {
+      foo = {b: 'Frodo'};
+    }
+
+    const fixture = TestBed.createComponent(TestComponent);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Hello, Frodo');
+
+    fixture.componentInstance.foo = {b: 'Bilbo'};
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Hello, Bilbo');
+  });
+
+  it('should support arrays with spread elements in templates', () => {
+    @Component({
+      template: "@let arr = [...[...[...foo]], 'Baggins']; Hello, {{arr[0]}} {{arr[1]}}",
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
+    class TestComponent {
+      foo = ['Frodo'];
+    }
+
+    const fixture = TestBed.createComponent(TestComponent);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Hello, Frodo Baggins');
+
+    fixture.componentInstance.foo = ['Bilbo'];
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Hello, Bilbo Baggins');
+  });
+
+  it('should support calls with rest arguments in templates', () => {
+    @Component({
+      template: "{{fn('Hello', ...foo)}}",
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
+    class TestComponent {
+      foo = ['Frodo', 'Baggins'];
+
+      fn(prefix: string, ...args: string[]) {
+        return `${prefix}, ${args.join(' ')}`;
+      }
+    }
+
+    const fixture = TestBed.createComponent(TestComponent);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Hello, Frodo Baggins');
+
+    fixture.componentInstance.foo = ['J.', 'R.', 'R.', 'Tolkien'];
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Hello, J. R. R. Tolkien');
+  });
+
+  it('should have correct operator precedence', () => {
+    @Component({
+      template: '{{1 + 10 ** -2 * 3}}',
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
+    class TestComponent {}
+    const fixture = TestBed.createComponent(TestComponent);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toEqual('1.03');
+  });
+
+  it('should throw on ambiguous unary operator in exponentiation expression', () => {
+    @Component({
+      template: '{{1 + -10 ** -2 * 3}}',
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
+    class TestComponent {}
+    expect(() => TestBed.createComponent(TestComponent)).toThrowError(
+      /Unary operator used immediately before exponentiation expression. Parenthesis must be used to disambiguate operator precedence/,
+    );
+  });
+
+  it('should not throw on unambiguous unary operator in exponentiation expression', () => {
+    @Component({
+      template: '{{1 + (-10) ** -2 * 3}} | {{1 + -(10 ** -2) * 3}}',
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
+    class TestComponent {}
+    const fixture = TestBed.createComponent(TestComponent);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toEqual('1.03 | 0.97');
+  });
+
+  it('should have right-to-left associativity for exponentiation', () => {
+    @Component({
+      template: '{{2 ** 2 ** 3}}',
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
+    class TestComponent {}
+    const fixture = TestBed.createComponent(TestComponent);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toEqual('256');
+  });
+
+  it('should support addition assignment operator in templates', () => {
+    @Component({
+      template: '<button (click)="a += b += c"></button>',
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
+    class TestComponent {
+      a = 2;
+      b = 3;
+      c = 4;
+    }
+    const fixture = TestBed.createComponent(TestComponent);
+    const button = fixture.nativeElement.querySelector('button');
+    fixture.detectChanges();
+
+    button.click();
+    fixture.detectChanges();
+    expect(fixture.componentInstance.a).toBe(9);
+    expect(fixture.componentInstance.b).toBe(7);
+    expect(fixture.componentInstance.c).toBe(4);
+
+    button.click();
+    fixture.detectChanges();
+    expect(fixture.componentInstance.a).toBe(20);
+    expect(fixture.componentInstance.b).toBe(11);
+    expect(fixture.componentInstance.c).toBe(4);
+  });
+
+  it('should support subtraction assignment operator in templates', () => {
+    @Component({
+      template: '<button (click)="a -= b -= c"></button>',
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
+    class TestComponent {
+      a = 2;
+      b = 3;
+      c = 4;
+    }
+    const fixture = TestBed.createComponent(TestComponent);
+    const button = fixture.nativeElement.querySelector('button');
+    fixture.detectChanges();
+
+    button.click();
+    fixture.detectChanges();
+    expect(fixture.componentInstance.a).toBe(3);
+    expect(fixture.componentInstance.b).toBe(-1);
+    expect(fixture.componentInstance.c).toBe(4);
+
+    button.click();
+    fixture.detectChanges();
+    expect(fixture.componentInstance.a).toBe(8);
+    expect(fixture.componentInstance.b).toBe(-5);
+    expect(fixture.componentInstance.c).toBe(4);
+  });
+
+  it('should support multiplication assignment operator in templates', () => {
+    @Component({
+      template: '<button (click)="a *= b *= c"></button>',
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
+    class TestComponent {
+      a = 2;
+      b = 3;
+      c = 4;
+    }
+    const fixture = TestBed.createComponent(TestComponent);
+    const button = fixture.nativeElement.querySelector('button');
+    fixture.detectChanges();
+
+    button.click();
+    fixture.detectChanges();
+    expect(fixture.componentInstance.a).toBe(24);
+    expect(fixture.componentInstance.b).toBe(12);
+    expect(fixture.componentInstance.c).toBe(4);
+
+    button.click();
+    fixture.detectChanges();
+    expect(fixture.componentInstance.a).toBe(1152);
+    expect(fixture.componentInstance.b).toBe(48);
+    expect(fixture.componentInstance.c).toBe(4);
+  });
+
+  it('should support division assignment operator in templates', () => {
+    @Component({
+      template: '<button (click)="a /= b /= c"></button>',
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
+    class TestComponent {
+      a = 4;
+      b = 8;
+      c = 16;
+    }
+    const fixture = TestBed.createComponent(TestComponent);
+    const button = fixture.nativeElement.querySelector('button');
+    fixture.detectChanges();
+
+    button.click();
+    fixture.detectChanges();
+    expect(fixture.componentInstance.a).toBe(8);
+    expect(fixture.componentInstance.b).toBe(0.5);
+    expect(fixture.componentInstance.c).toBe(16);
+
+    button.click();
+    fixture.detectChanges();
+    expect(fixture.componentInstance.a).toBe(256);
+    expect(fixture.componentInstance.b).toBe(0.03125);
+    expect(fixture.componentInstance.c).toBe(16);
+  });
+
+  it('should support remainder assignment operator in templates', () => {
+    @Component({
+      template: '<button (click)="a %= b %= c"></button>',
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
+    class TestComponent {
+      a = 4;
+      b = 3;
+      c = 2;
+    }
+    const fixture = TestBed.createComponent(TestComponent);
+    const button = fixture.nativeElement.querySelector('button');
+    fixture.detectChanges();
+
+    button.click();
+    fixture.detectChanges();
+    expect(fixture.componentInstance.a).toBe(0);
+    expect(fixture.componentInstance.b).toBe(1);
+    expect(fixture.componentInstance.c).toBe(2);
+  });
+
+  it('should support exponentiation assignment operator in templates', () => {
+    @Component({
+      template: '<button (click)="a **= b **= c"></button>',
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
+    class TestComponent {
+      a = 0.5;
+      b = 2;
+      c = 3;
+    }
+    const fixture = TestBed.createComponent(TestComponent);
+    const button = fixture.nativeElement.querySelector('button');
+    fixture.detectChanges();
+
+    button.click();
+    fixture.detectChanges();
+    expect(fixture.componentInstance.a).toBe(0.00390625);
+    expect(fixture.componentInstance.b).toBe(8);
+    expect(fixture.componentInstance.c).toBe(3);
+
+    button.click();
+    fixture.detectChanges();
+    expect(fixture.componentInstance.a).toBe(0);
+    expect(fixture.componentInstance.b).toBe(512);
+    expect(fixture.componentInstance.c).toBe(3);
+  });
+
+  it('should support logical and assignment operator in templates', () => {
+    @Component({
+      template: '<button (click)="a &&= b"></button>',
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
+    class TestComponent {
+      a = 0;
+      b = 2;
+    }
+    const fixture = TestBed.createComponent(TestComponent);
+    const button = fixture.nativeElement.querySelector('button');
+    fixture.detectChanges();
+
+    button.click();
+    fixture.detectChanges();
+    expect(fixture.componentInstance.a).toBe(0);
+
+    fixture.componentInstance.a = 1;
+    button.click();
+    fixture.detectChanges();
+    expect(fixture.componentInstance.a).toBe(2);
+  });
+
+  it('should support logical or assignment operator in templates', () => {
+    @Component({
+      template: '<button (click)="a ||= b"></button>',
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
+    class TestComponent {
+      a = 0;
+      b = 2;
+    }
+    const fixture = TestBed.createComponent(TestComponent);
+    const button = fixture.nativeElement.querySelector('button');
+    fixture.detectChanges();
+
+    button.click();
+    fixture.detectChanges();
+    expect(fixture.componentInstance.a).toBe(2);
+
+    fixture.componentInstance.a = 1;
+    button.click();
+    fixture.detectChanges();
+    expect(fixture.componentInstance.a).toBe(1);
+  });
+
+  it('should support nullish coalescing assignment operator in templates', () => {
+    @Component({
+      template: '<button (click)="a ??= b"></button>',
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
+    class TestComponent {
+      a: number | null = 0;
+      b = 1;
+    }
+    const fixture = TestBed.createComponent(TestComponent);
+    const button = fixture.nativeElement.querySelector('button');
+    fixture.detectChanges();
+
+    button.click();
+    fixture.detectChanges();
+    expect(fixture.componentInstance.a).toBe(0);
+
+    fixture.componentInstance.a = null;
+    button.click();
+    fixture.detectChanges();
+    expect(fixture.componentInstance.a!).toBe(1);
+  });
+
+  it('should support tagged template literals with no interpolations in expressions', () => {
+    @Component({
+      template: `
+        <p>:{{ caps\`Hello, World!\` }}:{{ (excited?.caps(3))\`Uncomfortably excited\` }}:</p>
+        <p>{{ greet\`Hi, I'm \${name}, and I'm \${age}\` }}</p>
+      `,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
+    class TestComponent {
+      name = 'Frodo';
+      age = 50;
+      greet(strings: TemplateStringsArray, person: string, age: number) {
+        return `${strings[0]}${person}${strings[1]}${age} years old${strings[2]}`;
+      }
+      caps(strings: TemplateStringsArray) {
+        return strings.join('').toUpperCase();
+      }
+      excited = {
+        caps: (excitementLevel: number) => {
+          return (strings: TemplateStringsArray) => {
+            return strings.join('').toUpperCase() + '!'.repeat(excitementLevel);
+          };
+        },
+      };
+    }
+
+    const fixture = TestBed.createComponent(TestComponent);
+    fixture.detectChanges();
+    const text = fixture.nativeElement.textContent;
+    expect(text).toContain(':HELLO, WORLD!:');
+    expect(text).toContain(':UNCOMFORTABLY EXCITED!!!:');
+    expect(text).toContain(`Hi, I'm Frodo, and I'm 50 years old`);
+  });
+
+  it('should not confuse operators for template literal tags', () => {
+    @Component({
+      template: '{{ typeof`test` }}',
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
+    class TestComponent {
+      typeof = (...args: unknown[]) => 'fail';
+    }
+
+    const fixture = TestBed.createComponent(TestComponent);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toBe(`string`);
+  });
+
+  it('should support "in" expressions', () => {
+    @Component({
+      template: `{{ 'foo' in obj ? 'OK' : 'KO' }}`,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
+    class TestComponent {
+      obj: any = {foo: 'bar'};
+    }
+
+    const fixture = TestBed.createComponent(TestComponent);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('OK');
+
+    fixture.componentInstance.obj = {bar: 'foo'};
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('KO');
+  });
+
+  it('should support "instanceof" expressions', () => {
+    class MyClass {}
+
+    @Component({
+      template: `{{ obj instanceof MyClass ? 'OK' : 'KO' }}`,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
+    class TestComponent {
+      MyClass = MyClass;
+      obj: any = new MyClass();
+    }
+
+    const fixture = TestBed.createComponent(TestComponent);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('OK');
+
+    fixture.componentInstance.obj = {};
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('KO');
   });
 
   describe('tView.firstUpdatePass', () => {
@@ -2356,6 +3408,7 @@ describe('acceptance integration tests', () => {
     it('should be marked with `firstUpdatePass` up until the template and host bindings are evaluated', () => {
       @Directive({
         selector: '[dir]',
+        standalone: false,
       })
       class Dir {
         @HostBinding('attr.data-dir')
@@ -2366,6 +3419,9 @@ describe('acceptance integration tests', () => {
 
       @Component({
         template: '<div [attr.data-comp]="text" dir></div>',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class Cmp {
         get text() {
@@ -2390,6 +3446,7 @@ describe('acceptance integration tests', () => {
     it('tView.firstUpdatePass should be applied immediately after the first embedded view is processed', () => {
       @Directive({
         selector: '[dir]',
+        standalone: false,
       })
       class Dir {
         @HostBinding('attr.data-dir')
@@ -2399,11 +3456,10 @@ describe('acceptance integration tests', () => {
       }
 
       @Component({
-        template: `
-          <div *ngFor="let item of items" dir [attr.data-comp]="text">
-            ...
-          </div>
-        `,
+        template: ` <div *ngFor="let item of items" dir [attr.data-comp]="text">...</div> `,
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class Cmp {
         items = [1, 2, 3];
@@ -2439,9 +3495,7 @@ describe('acceptance integration tests', () => {
 
       @Component({
         template: `
-          <div *ngIf="showWarningMessage; else listOfItems">
-            Nooo!
-          </div>
+          <div *ngIf="showWarningMessage; else listOfItems">Nooo!</div>
 
           <ng-template #listOfItems>
             <animation-comp *ngFor="let item of items; trackBy: itemTrackFn">
@@ -2449,6 +3503,9 @@ describe('acceptance integration tests', () => {
             </animation-comp>
           </ng-template>
         `,
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class Cmp {
         showWarningMessage = false;
@@ -2474,9 +3531,10 @@ describe('acceptance integration tests', () => {
             transition('* => *', [animate('1s')]),
           ]),
         ],
-        template: `
-                  <ng-content></ng-content>
-                `,
+        template: ` <ng-content></ng-content> `,
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class AnimationComp {
         @HostBinding('@host') public hostState = '';
@@ -2489,6 +3547,7 @@ describe('acceptance integration tests', () => {
 
       TestBed.configureTestingModule({
         declarations: [Cmp, AnimationComp],
+        imports: [NoopAnimationsModule],
         providers: [{provide: AnimationDriver, useClass: MockAnimationDriver}],
       });
       const fixture = TestBed.createComponent(Cmp);
@@ -2534,17 +3593,28 @@ describe('acceptance integration tests', () => {
         ],
         template: `
           <div *ngIf="showRoot" (@root.start)="track('root', $event)" @root>
-            <div *ngIf="showIfContents; else innerCompList" (@outer.start)="track('outer', $event)" @outer>
+            <div
+              *ngIf="showIfContents; else innerCompList"
+              (@outer.start)="track('outer', $event)"
+              @outer
+            >
               Nooo!
             </div>
 
             <ng-template #innerCompList>
-              <inner-comp *ngFor="let item of items; trackBy: itemTrackFn" (@inner.start)="track('inner', $event)" @inner>
+              <inner-comp
+                *ngFor="let item of items; trackBy: itemTrackFn"
+                (@inner.start)="track('inner', $event)"
+                @inner
+              >
                 {{ item.value }}
               </inner-comp>
             </ng-template>
           </div>
         `,
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class Cmp {
         showRoot = true;
@@ -2560,9 +3630,10 @@ describe('acceptance integration tests', () => {
       @Component({
         selector: 'inner-comp',
         animations: [trigger('host', [transition('* => *', [])])],
-        template: `
-                  <ng-content></ng-content>
-                `,
+        template: ` <ng-content></ng-content> `,
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class InnerComp {
         @HostBinding('@host') public hostState = '';
@@ -2577,6 +3648,7 @@ describe('acceptance integration tests', () => {
 
       TestBed.configureTestingModule({
         declarations: [Cmp, InnerComp],
+        imports: [NoopAnimationsModule],
         providers: [{provide: AnimationDriver, useClass: MockAnimationDriver}],
       });
       const fixture = TestBed.createComponent(Cmp);
@@ -2610,6 +3682,320 @@ describe('acceptance integration tests', () => {
         'inner', // removal of the inner comp element
       ]);
     }));
+  });
+
+  describe('arrow functions', () => {
+    it('should support a basic arrow function in an event listener', () => {
+      @Component({
+        template: `<button (click)="value.update(prev => prev + 1)">Increment</button>`,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
+      class TestComponent {
+        value = signal(0);
+      }
+      const fixture = TestBed.createComponent(TestComponent);
+      const button = fixture.nativeElement.querySelector('button');
+      fixture.detectChanges();
+      expect(fixture.componentInstance.value()).toBe(0);
+
+      button.click();
+      fixture.detectChanges();
+      expect(fixture.componentInstance.value()).toBe(1);
+    });
+
+    it('should support an arrow function accessing value from different views in an event listener', () => {
+      @Component({
+        template: `
+          @let parent = 'parent';
+
+          @if (true) {
+            @let child = 'child';
+
+            @if (true) {
+              @let grandchild = 'grandchild';
+              <button
+                (click)="value.update(prev => prev + '->' + grandchild + '->' + child + '->' + parent)"
+              >
+                Assign
+              </button>
+            }
+          }
+        `,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
+      class TestComponent {
+        value = signal('initial');
+      }
+      const fixture = TestBed.createComponent(TestComponent);
+      fixture.detectChanges();
+      const button = fixture.nativeElement.querySelector('button');
+      expect(fixture.componentInstance.value()).toBe('initial');
+
+      button.click();
+      fixture.detectChanges();
+      expect(fixture.componentInstance.value()).toBe('initial->grandchild->child->parent');
+    });
+
+    it('should support an arrow function in a binding', () => {
+      @Component({
+        template: `Result: {{((a) => a + b)(1)}}`,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
+      class TestComponent {
+        b = 2;
+      }
+      const fixture = TestBed.createComponent(TestComponent);
+      fixture.detectChanges();
+      expect(fixture.nativeElement.textContent).toContain('Result: 3');
+
+      fixture.componentInstance.b = 5;
+      fixture.detectChanges();
+      expect(fixture.nativeElement.innerHTML).toContain('Result: 6');
+    });
+
+    it('should support an arrow function in a host binding', () => {
+      @Directive({
+        selector: '[test]',
+        host: {
+          '[attr.foo]': '((a) => a + 1 + directiveProp)(1000)',
+        },
+      })
+      class TestDir {
+        directiveProp = 0;
+      }
+
+      @Component({
+        imports: [TestDir],
+        template: '<div test></div>',
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
+      class App {
+        @ViewChild(TestDir) testDir!: TestDir;
+      }
+
+      const fixture = TestBed.createComponent(App);
+      fixture.detectChanges();
+      const element = fixture.nativeElement.querySelector('[test]');
+      expect(element.getAttribute('foo')).toBe('1001');
+
+      fixture.componentInstance.testDir.directiveProp = 1;
+      fixture.detectChanges();
+      expect(element.getAttribute('foo')).toBe('1002');
+    });
+
+    it('should support a basic arrow function in a host listener', () => {
+      @Directive({
+        selector: '[test]',
+        host: {
+          '(click)': 'directiveSignal.update(prev => prev + 1)',
+        },
+      })
+      class TestDir {
+        directiveSignal = signal(0);
+      }
+
+      @Component({
+        imports: [TestDir],
+        template: '<button test></button>',
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
+      class App {
+        @ViewChild(TestDir) testDir!: TestDir;
+      }
+
+      const fixture = TestBed.createComponent(App);
+      fixture.detectChanges();
+      const button = fixture.nativeElement.querySelector('button');
+      expect(fixture.componentInstance.testDir.directiveSignal()).toBe(0);
+
+      button.click();
+      fixture.detectChanges();
+      expect(fixture.componentInstance.testDir.directiveSignal()).toBe(1);
+    });
+
+    it('should support an arrow function that accesses the context in a host listener', () => {
+      @Directive({
+        selector: '[test]',
+        host: {
+          '(click)': 'directiveSignal.update(prev => (prev + 2) * multiplier)',
+        },
+      })
+      class TestDir {
+        directiveSignal = signal(0);
+        multiplier = 10;
+      }
+
+      @Component({
+        imports: [TestDir],
+        template: '<button test></button>',
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
+      class App {
+        @ViewChild(TestDir) testDir!: TestDir;
+      }
+
+      const fixture = TestBed.createComponent(App);
+      fixture.detectChanges();
+      const button = fixture.nativeElement.querySelector('button');
+      expect(fixture.componentInstance.testDir.directiveSignal()).toBe(0);
+
+      button.click();
+      fixture.detectChanges();
+      expect(fixture.componentInstance.testDir.directiveSignal()).toBe(20);
+    });
+
+    it('should support an arrow function returning another arrow function with access across multiple views', () => {
+      @Component({
+        template: `
+          @let topLevelLet = 1;
+
+          @if (true) {
+            @let nestedLet = 2;
+
+            @if (true) {
+              Result:
+              {{(a => b => c => d => a + b + c + d + componentProp + topLevelLet + nestedLet)(1)(2)(3)(4)}}
+            }
+          }
+        `,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
+      class App {
+        componentProp = 0;
+      }
+
+      const fixture = TestBed.createComponent(App);
+      fixture.detectChanges();
+      expect(fixture.nativeElement.textContent).toContain('Result: 13');
+
+      fixture.componentInstance.componentProp = 1000;
+      fixture.detectChanges();
+      expect(fixture.nativeElement.textContent).toContain('Result: 1013');
+    });
+
+    it('should support an arrow function using safe accesses', () => {
+      @Component({
+        template: `
+          @if (true) {
+            Result: {{(() => componentProp?.a?.b?.c?.()?.()?.()?.())()}}.
+          }
+        `,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
+      class App {
+        componentProp: {a?: {b?: {c?: () => () => () => () => string}}} = {};
+      }
+
+      const fixture = TestBed.createComponent(App);
+      fixture.detectChanges();
+      expect(fixture.nativeElement.textContent).toContain('Result: .');
+
+      fixture.componentInstance.componentProp = {a: {b: {c: () => () => () => () => 'hello'}}};
+      fixture.detectChanges();
+      expect(fixture.nativeElement.textContent).toContain('Result: hello.');
+    });
+
+    it('should be able to use local references in an arrow function', () => {
+      @Component({
+        template: `
+          <input #inp />
+          @let fn = (prefix) => prefix + (inp.value || '<empty>');
+
+          {{ fn('Hello ') }}
+        `,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
+      class App {}
+
+      const fixture = TestBed.createComponent(App);
+      fixture.detectChanges();
+      expect(fixture.nativeElement.textContent).toContain('Hello <empty>');
+
+      fixture.nativeElement.querySelector('input').value = 'Bilbo';
+      fixture.detectChanges();
+      expect(fixture.nativeElement.textContent).toContain('Hello Bilbo');
+    });
+
+    it('should be able to pass arrow functions through as inputs', () => {
+      @Directive({selector: '[test]'})
+      class TestDir {
+        @Input() callback!: () => void;
+      }
+
+      @Component({
+        template: `<button test [callback]="() => prop = prop + 1"></button> `,
+        imports: [TestDir],
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
+      class App {
+        @ViewChild(TestDir) testDir!: TestDir;
+        prop = 0;
+      }
+
+      const fixture = TestBed.createComponent(App);
+      fixture.detectChanges();
+      expect(fixture.componentInstance.prop).toBe(0);
+
+      fixture.componentInstance.testDir.callback();
+      fixture.detectChanges();
+      expect(fixture.componentInstance.prop).toBe(1);
+    });
+
+    it('should be able to use $event in an arrow function', () => {
+      @Component({
+        template: `<button (click)="value.update(prev => $event.type + prev)">Click</button>`,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
+      class TestComponent {
+        value = signal('');
+      }
+      const fixture = TestBed.createComponent(TestComponent);
+      const button = fixture.nativeElement.querySelector('button');
+      fixture.detectChanges();
+      expect(fixture.componentInstance.value()).toBe('');
+
+      button.click();
+      fixture.detectChanges();
+      expect(fixture.componentInstance.value()).toBe('click');
+    });
+
+    it('should be able to reference loop variables in an arrow function', () => {
+      @Component({
+        template: `
+          @for (item of items; track $index) {
+            {{ item }}: {{(() => prefix + ($even ? 'even' : 'odd'))()}}
+          }
+        `,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
+      class TestComponent {
+        items = ['Zero', 'One', 'Two', 'Three'];
+        prefix = '';
+      }
+      const fixture = TestBed.createComponent(TestComponent);
+      fixture.detectChanges();
+      expect(fixture.nativeElement.textContent).toContain(
+        'Zero: even  One: odd  Two: even  Three: odd',
+      );
+
+      fixture.componentInstance.prefix = 'is ';
+      fixture.detectChanges();
+      expect(fixture.nativeElement.textContent).toContain(
+        'Zero: is even  One: is odd  Two: is even  Three: is odd',
+      );
+    });
   });
 });
 

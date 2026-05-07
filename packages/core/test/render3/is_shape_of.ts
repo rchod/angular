@@ -6,9 +6,9 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
-import {TI18n, TIcu} from '@angular/core/src/render3/interfaces/i18n';
-import {TNode} from '@angular/core/src/render3/interfaces/node';
-import {TView} from '@angular/core/src/render3/interfaces/view';
+import {TI18n, TIcu} from '../../src/render3/interfaces/i18n';
+import {TNode} from '../../src/render3/interfaces/node';
+import {TView} from '../../src/render3/interfaces/view';
 
 /**
  * A type used to create a runtime representation of a shape of object which matches the declared
@@ -18,7 +18,7 @@ import {TView} from '@angular/core/src/render3/interfaces/view';
  * This is later used by `isShapeOf` method to ensure that a particular object has a particular
  * shape.
  *
- * ```
+ * ```ts
  * interface MyShape {
  *   foo: string,
  *   bar: number
@@ -34,7 +34,7 @@ import {TView} from '@angular/core/src/render3/interfaces/view';
  * `MyShape` is refactored to change a set of properties we would like to have a compile time error
  * that the `ExpectedPropertiesOfShape` also needs to be changed.
  *
- * ```
+ * ```ts
  * const ExpectedPropertiesOfShape = <ShapeOf<MyShape>>{foo: true, bar: true};
  * ```
  * The above code will force through compile time checks that the `ExpectedPropertiesOfShape` match
@@ -50,7 +50,7 @@ export type ShapeOf<T> = {
 /**
  * Determines if a particular object is of a given shape (duck-type version of `instanceof`.)
  *
- * ```
+ * ```ts
  * isShapeOf(someObj, {foo: true, bar: true});
  * ```
  *
@@ -154,6 +154,8 @@ const ShapeOfTNode: ShapeOf<TNode> = {
   directiveEnd: true,
   directiveStylingLast: true,
   componentOffset: true,
+  controlDirectiveIndex: true,
+  customControlIndex: true,
   propertyBindings: true,
   flags: true,
   providerIndexes: true,
@@ -163,7 +165,10 @@ const ShapeOfTNode: ShapeOf<TNode> = {
   localNames: true,
   initialInputs: true,
   inputs: true,
+  hostDirectiveInputs: true,
   outputs: true,
+  hostDirectiveOutputs: true,
+  directiveToIndex: true,
   tView: true,
   next: true,
   prev: true,

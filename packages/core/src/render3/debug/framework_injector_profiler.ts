@@ -10,11 +10,14 @@ import {Injector} from '../../di/injector';
 import {EnvironmentInjector} from '../../di/r3_injector';
 import {Type} from '../../interface/type';
 import {assertDefined, throwError} from '../../util/assert';
-import {assertTNode, assertTNodeForLView} from '../assert';
-import {getComponentDef} from '../definition';
+import {assertTNodeForLView} from '../assert';
+import {getComponentDef} from '../def_getters';
 import {getNodeInjectorLView, getNodeInjectorTNode, NodeInjector} from '../di';
 import {TNode} from '../interfaces/node';
 import {LView} from '../interfaces/view';
+import {AfterRenderPhaseEffectNode} from '../reactivity/after_render_effect';
+import {EffectRefImpl} from '../reactivity/effect';
+import {SIGNAL} from '../../../primitives/signals';
 
 import {
   InjectedService,
@@ -67,6 +70,10 @@ class DIDebugData {
     WeakMap<Type<unknown>, InjectedService[]>
   >();
   resolverToProviders = new WeakMap<Injector | TNode, ProviderRecord[]>();
+  resolverToEffects = new WeakMap<
+    Injector | LView,
+    (EffectRefImpl | AfterRenderPhaseEffectNode)[]
+  >();
   standaloneInjectorToComponent = new WeakMap<Injector, Type<unknown>>();
 
   reset() {
@@ -99,12 +106,10 @@ export function getFrameworkDIDebugData(): DIDebugData {
  */
 export function setupFrameworkInjectorProfiler(): void {
   frameworkDIDebugData.reset();
-  setInjectorProfiler((injectorProfilerEvent) =>
-    handleInjectorProfilerEvent(injectorProfilerEvent),
-  );
+  setInjectorProfiler(injectorProfilerEventHandler);
 }
 
-function handleInjectorProfilerEvent(injectorProfilerEvent: InjectorProfilerEvent): void {
+function injectorProfilerEventHandler(injectorProfilerEvent: InjectorProfilerEvent): void {
   const {context, type} = injectorProfilerEvent;
 
   if (type === InjectorProfilerEventType.Inject) {
@@ -113,7 +118,40 @@ function handleInjectorProfilerEvent(injectorProfilerEvent: InjectorProfilerEven
     handleInstanceCreatedByInjectorEvent(context, injectorProfilerEvent.instance);
   } else if (type === InjectorProfilerEventType.ProviderConfigured) {
     handleProviderConfiguredEvent(context, injectorProfilerEvent.providerRecord);
+  } else if (type === InjectorProfilerEventType.EffectCreated) {
+    handleEffectCreatedEvent(context, injectorProfilerEvent.effect);
+  } else if (type === InjectorProfilerEventType.AfterRenderEffectPhaseCreated) {
+    handleEffectCreatedEvent(context, injectorProfilerEvent.effectPhase);
   }
+}
+
+function handleEffectCreatedEvent(
+  context: InjectorProfilerContext,
+  effect: EffectRefImpl | AfterRenderPhaseEffectNode,
+): void {
+  const diResolver = getDIResolver(context.injector);
+  if (diResolver === null) {
+    throwError('An EffectCreated event must be run within an injection context.');
+  }
+
+  const {resolverToEffects} = frameworkDIDebugData;
+  const cleanupContainer = effect instanceof EffectRefImpl ? effect[SIGNAL] : effect.sequence;
+  let trackedEffects = resolverToEffects.get(diResolver);
+
+  if (!trackedEffects) {
+    trackedEffects = [];
+    resolverToEffects.set(diResolver, trackedEffects);
+  }
+
+  trackedEffects.push(effect);
+  cleanupContainer.onDestroyFns ??= [];
+  cleanupContainer.onDestroyFns.push(() => {
+    const index = trackedEffects!.indexOf(effect);
+
+    if (index > -1) {
+      trackedEffects!.splice(index, 1);
+    }
+  });
 }
 
 /**
@@ -200,6 +238,12 @@ function handleInstanceCreatedByInjectorEvent(
   data: InjectorCreatedInstance,
 ): void {
   const {value} = data;
+
+  // It might happen that a DI token is requested but there is no corresponding value.
+  // The InstanceCreatedByInjectorEvent will be still emitted in this case (to mirror the InjectorToCreateInstanceEvent) but we don't want to do any particular processing for those situations.
+  if (data.value == null) {
+    return;
+  }
 
   if (getDIResolver(context.injector) === null) {
     throwError('An InjectorCreatedInstance event must be run within an injection context.');

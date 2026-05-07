@@ -1,4 +1,6 @@
-TestDir.ɵdir = /*@__PURE__*/ $r3$.ɵɵdefineDirective({
+export class TestDir {
+  …
+  static ɵdir = /*@__PURE__*/ $r3$.ɵɵdefineDirective({
     …
     outputs: {
         a: "a",
@@ -6,6 +8,7 @@ TestDir.ɵdir = /*@__PURE__*/ $r3$.ɵɵdefineDirective({
         c: "cPublic",
         d: "d",
         e: "e"
-    },
+    }
     …
   });
+}

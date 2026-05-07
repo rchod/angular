@@ -12,14 +12,7 @@ import {migrateCase} from './cases';
 import {migrateFor} from './fors';
 import {migrateIf} from './ifs';
 import {migrateSwitch} from './switches';
-import {
-  AnalyzedFile,
-  endI18nMarker,
-  endMarker,
-  MigrateError,
-  startI18nMarker,
-  startMarker,
-} from './types';
+import {AnalyzedFile, endI18nMarker, endMarker, startI18nMarker, startMarker} from './types';
 import {
   canRemoveCommonModule,
   formatTemplate,
@@ -27,6 +20,7 @@ import {
   removeImports,
   validateMigratedTemplate,
 } from './util';
+import {MigrateError} from '../../utils/parse_html';
 
 /**
  * Actually migrates a given template to the new syntax
@@ -49,7 +43,7 @@ export function migrateTemplate(
       return {migrated: template, errors: switchResult.errors};
     }
     const caseResult = migrateCase(switchResult.migrated);
-    const templateResult = processNgTemplates(caseResult.migrated);
+    const templateResult = processNgTemplates(caseResult.migrated, file.sourceFile);
     if (templateResult.err !== undefined) {
       return {migrated: template, errors: [{type: 'template', error: templateResult.err}]};
     }

@@ -7,162 +7,216 @@
  */
 
 import {
-  afterNextRender,
   Component,
-  effect,
+  computed,
+  DestroyRef,
   ElementRef,
   inject,
   input,
+  linkedSignal,
+  signal,
   viewChild,
 } from '@angular/core';
-import * as d3 from 'd3';
-import {Events, MessageBus, Route} from 'protocol';
+import {TreeVisualizerComponent} from '../../shared/tree-visualizer/tree-visualizer.component';
+import {MatIconModule} from '@angular/material/icon';
+import {MatSnackBar, MatSnackBarModule} from '@angular/material/snack-bar';
+import {ApplicationOperations} from '../../application-operations/index';
+import {RouteDetailsRowComponent} from './router-details-row/route-details-row.component';
+import {FrameManager} from '../../application-services/frame_manager';
+import {Events, MessageBus, Route, RunGuardsAndResolvers} from '../../../../../protocol';
+import {SvgD3Node, TreeVisualizerConfig} from '../../shared/tree-visualizer/tree-visualizer';
+import {
+  RouterTreeD3Node,
+  transformRoutesIntoVisTree,
+  RouterTreeNode,
+  findNodesByLabel,
+  RouterTreeVisualizer,
+} from './router-tree-fns';
+import {ButtonComponent} from '../../shared/button/button.component';
+import {SplitComponent} from '../../shared/split/split.component';
+import {SplitAreaDirective} from '../../shared/split/splitArea.directive';
+import {Debouncer} from '../../shared/utils/debouncer';
+
+const SEARCH_DEBOUNCE = 250;
+const RUN_GUARDS_AND_RESOLVERS_OPTIONS: RunGuardsAndResolvers[] = [
+  'pathParamsChange',
+  'pathParamsOrQueryParamsChange',
+  'always',
+  'paramsChange',
+  'paramsOrQueryParamsChange',
+];
 
 @Component({
   selector: 'ng-router-tree',
   templateUrl: './router-tree.component.html',
   styleUrls: ['./router-tree.component.scss'],
-  standalone: true,
+  imports: [
+    TreeVisualizerComponent,
+    SplitComponent,
+    SplitAreaDirective,
+    MatIconModule,
+    MatSnackBarModule,
+    RouteDetailsRowComponent,
+    ButtonComponent,
+  ],
 })
 export class RouterTreeComponent {
-  private svgContainer = viewChild.required<ElementRef>('svgContainer');
-  private g = viewChild.required<ElementRef>('mainGroup');
+  private readonly searchInput = viewChild.required<ElementRef>('searchInput');
+  private readonly routerTree = viewChild.required<RouterTreeVisualizer>('routerTree');
 
-  routes = input<Route[]>([]);
+  private readonly messageBus = inject(MessageBus) as MessageBus<Events>;
+  private readonly appOperations = inject(ApplicationOperations);
+  private readonly frameManager = inject(FrameManager);
+  private readonly snackBar = inject(MatSnackBar);
 
-  private tree!: d3.TreeLayout<{}>;
-  private tooltip: any;
-  private _messageBus = inject<MessageBus<Events>>(MessageBus);
+  protected selectedRoute = signal<RouterTreeD3Node | null>(null);
+  protected routeData = computed<RouterTreeNode | undefined>(() => {
+    return this.selectedRoute()?.data;
+  });
+
+  protected hasStaticOptionRunGuardsAndResolvers = computed(() =>
+    RUN_GUARDS_AND_RESOLVERS_OPTIONS.includes(
+      this.routeData()?.runGuardsAndResolvers as RunGuardsAndResolvers,
+    ),
+  );
+
+  routes = input.required<Route[]>();
+  routerDebugApiSupport = input<boolean>(false);
+
+  private readonly showFullPath = signal(false);
+  protected readonly d3RootNode = linkedSignal<RouterTreeNode | null>(() => {
+    const routes = this.routes();
+    if (routes.length) {
+      return transformRoutesIntoVisTree(routes[0], this.showFullPath());
+    }
+    return null;
+  });
+
+  private searchMatches: Set<RouterTreeNode> = new Set();
+
+  private readonly searchDebouncer = new Debouncer();
+
+  protected readonly searchRoutes = this.searchDebouncer.debounce((inputValue: string) => {
+    const d3RootNode = this.d3RootNode();
+    if (!d3RootNode) {
+      return;
+    }
+    this.searchMatches = findNodesByLabel(d3RootNode, inputValue.toLowerCase());
+    // Since `searchMatches` is used in the D3 node modifier, reset the root to trigger a re-render.
+    // Consider: Ideally, we could perform the search visual changes via direct DOM manipulations
+    // that won't require re-rendering the whole tree.
+    this.d3RootNode.set({...d3RootNode});
+  }, SEARCH_DEBOUNCE);
+
+  protected readonly routerTreeConfig: Partial<TreeVisualizerConfig<RouterTreeNode>> = {
+    nodeSeparation: () => 1,
+    d3NodeModifier: (n) => this.d3NodeModifier(n),
+  };
 
   constructor() {
-    effect(() => {
-      this.render();
-    });
-
-    afterNextRender({
-      read: () => {
-        this._messageBus.emit('getRoutes');
-      },
+    inject(DestroyRef).onDestroy(() => {
+      this.searchDebouncer.cancel();
     });
   }
 
-  private render(): void {
-    const routes = this.routes();
-    const gEl = this.g()?.nativeElement;
-    const svgContainerEl = this.svgContainer()?.nativeElement;
-    if (routes.length === 0 || !this.g) {
+  togglePathSettings(): void {
+    this.searchInput().nativeElement.value = '';
+    this.searchMatches = new Set();
+    this.showFullPath.update((v) => !v);
+  }
+
+  viewSourceFromRouter(className: string, type: string): void {
+    const data = this.selectedRoute()?.data;
+    // Check if the selected route is a lazy loaded route or a redirecting route.
+    // These routes have no component associated with them.
+    if (data?.isLazy || data?.redirectTo) {
+      const message = 'Cannot view source for lazy loaded routes or redirecting routes.';
+      this.snackBar.open(message, 'Dismiss', {duration: 5000, horizontalPosition: 'left'});
       return;
     }
 
-    // cleanup old render
-    this.tooltip?.remove?.();
-    d3.select(gEl).selectAll('*').remove();
+    if (className === '[Function]') {
+      const message = 'Cannot view the source of functions defined inline (arrow or anonymous).';
+      this.snackBar.open(message, 'Dismiss', {duration: 5000, horizontalPosition: 'left'});
+      return;
+    }
 
-    this.tree = d3.tree();
-    const svg = d3.select(svgContainerEl);
-    svg.attr('height', 500).attr('width', 500);
+    this.appOperations.viewSourceFromRouter(className, type, this.frameManager.selectedFrame()!);
+  }
 
-    const g = d3.select(gEl);
+  viewComponentSource(component: string): void {
+    const data = this.selectedRoute()?.data;
+    // Check if the selected route is a lazy loaded route or a redirecting route.
+    // These routes have no component associated with them.
+    if (data?.isLazy || data?.redirectTo) {
+      const message = 'Cannot view source for lazy loaded routes or redirecting routes.';
+      this.snackBar.open(message, 'Dismiss', {duration: 5000, horizontalPosition: 'left'});
+      return;
+    }
 
-    const svgPadding = 20;
-
-    // Compute the new tree layout.
-    this.tree.nodeSize([75, 200]);
-
-    const root: any = routes;
-
-    const nodes = this.tree(
-      d3.hierarchy(
-        root.children.length === 0 || root.children.length > 1 ? root : root.children[0],
-        (d) => d.children,
-      ),
+    this.appOperations.viewSourceFromRouter(
+      component,
+      'component',
+      this.frameManager.selectedFrame()!,
     );
+  }
 
-    // Define the div for the tooltip
-    this.tooltip = d3
-      .select('body')
-      .append('div')
-      .attr('class', 'tooltip')
-      .style('opacity', 0)
-      .style('padding', '0');
+  viewFunctionSource(
+    functionName: string,
+    type: 'title' | 'redirectTo' | 'matcher' | 'runGuardsAndResolvers',
+  ): void {
+    if (functionName === '[Function]') {
+      const message =
+        'Cannot view the source of redirect functions defined inline (arrow or anonymous).';
+      this.snackBar.open(message, 'Dismiss', {duration: 5000, horizontalPosition: 'left'});
+      return;
+    }
 
-    g.selectAll('.link')
-      .data(nodes.descendants().slice(1))
-      .enter()
-      .append('path')
-      .attr('class', 'link')
-      .attr(
-        'd',
-        (d) => `
-            M${d.y},${d.x}
-            C${(d.y + (d as any).parent.y) / 2},
-              ${d.x} ${(d.y + (d as any).parent.y) / 2},
-              ${(d as any).parent.x} ${(d as any).parent.y},
-              ${(d as any).parent.x}`,
-      );
+    this.appOperations.viewSourceFromRouter(functionName, type, this.frameManager.selectedFrame()!);
+  }
 
-    // Declare the nodes
-    const node = g
-      .selectAll('g.node')
-      .data(nodes.descendants())
-      .enter()
-      .append('g')
-      .attr('class', 'node')
-      .on('mouseover', (n) => {
-        const content = `
-          <b>Name:</b> ${n.data.name}<br/>
-          <b>Path:</b> ${n.data.path}<br/>
-          <b>Auxiliary Route:</b> ${n.data.isAux}<br/>
-          <b>Specificity:</b> ${n.data.specificity}<br/>
-          <b>Handler:</b> ${n.data.handler}<br/>
-        `;
-        this.tooltip.style('padding', '4px 8px').transition().style('opacity', 0.9);
-        this.tooltip
-          .html(content)
-          .style('left', (d3 as any).event.pageX + 8 + 'px')
-          .style('top', (d3 as any).event.pageY + 8 + 'px');
-      })
-      .on('mouseout', () => this.tooltip.transition().style('opacity', 0))
-      .attr('transform', (d) => `translate(${d.y},${d.x})`);
+  navigateRoute(route: any): void {
+    this.messageBus.emit('navigateRoute', [route.data.path]);
+  }
 
-    node
-      .append('circle')
-      .attr('class', (d) => ((d.data as any).isAux ? 'node-aux-route' : 'node-route'))
-      .attr('r', 6);
+  onRouterTreeRender({initial}: {initial: boolean}) {
+    if (initial) {
+      this.routerTree().snapToRoot(0.6);
+    }
+  }
 
-    node
-      .append('text')
-      .attr('dy', (d) => (d.depth === 0 || !d.children ? '0.35em' : '-1.50em'))
-      .attr('dx', (d: any): any => {
-        if (d.parent && d.children) {
-          return 6;
-        } else if (!d.parent && d.children) {
-          return -13;
-        } else if (d.parent && !d.children) {
-          return 13;
-        }
-      })
-      .attr('text-anchor', (d) => (d.children ? 'end' : 'start'))
-      .text((d) => {
-        const label = (d.data as any).name;
-        return label.length > 20 ? label.slice(0, 17) + '...' : label;
-      });
+  nodeClick(node: RouterTreeD3Node) {
+    this.selectedRoute.set(node);
+    this.routerTree().snapToNode(node.data, 0.7);
+  }
 
-    // reset transform
-    g.attr('transform', 'translate(0, 0)');
+  private d3NodeModifier(d3Node: SvgD3Node<RouterTreeNode>) {
+    d3Node.attr('class', (node: RouterTreeD3Node) => {
+      // Drop all class labels and recompute them.
+      const classesToRemove = new Set([
+        'node-faded',
+        'node-element',
+        'node-lazy',
+        'node-search',
+        'node-environment',
+      ]);
 
-    const svgRect = svgContainerEl.getBoundingClientRect();
-    const gElRect = gEl.getBoundingClientRect();
+      const nodeClasses = d3Node
+        .attr('class')
+        .split(' ')
+        .filter((cls) => !classesToRemove.has(cls));
 
-    g.attr(
-      'transform',
-      `translate(
-        ${svgRect.left - gElRect.left + svgPadding},
-        ${svgRect.top - gElRect.top + svgPadding}
-      )`,
-    );
-    const height = gElRect.height + svgPadding * 2;
-    const width = gElRect.width + svgPadding * 2;
-    svg.attr('height', height).attr('width', width);
+      if (node.data.isActive) {
+        nodeClasses.push('node-element');
+      }
+
+      if (this.searchMatches.has(node.data)) {
+        nodeClasses.push('node-search');
+      } else if (this.searchMatches.size) {
+        nodeClasses.push('node-faded');
+      }
+
+      return nodeClasses.join(' ');
+    });
   }
 }

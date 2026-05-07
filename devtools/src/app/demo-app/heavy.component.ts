@@ -6,7 +6,7 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
-import {Component, Input} from '@angular/core';
+import {Component, input} from '@angular/core';
 
 const fib = (n: number): number => {
   if (n === 1 || n === 2) {
@@ -21,8 +21,7 @@ const fib = (n: number): number => {
   styleUrls: ['./heavy.component.scss'],
 })
 export class HeavyComponent {
-  @Input()
-  set foo(_: any) {}
+  readonly foo = input();
 
   state = {
     nested: {

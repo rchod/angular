@@ -6,14 +6,7 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
-import {
-  Attribute,
-  Block,
-  Element,
-  ParseTreeResult,
-  RecursiveVisitor,
-  Text,
-} from '@angular/compiler';
+import {Attribute, Block, Element, LetDeclaration, RecursiveVisitor, Text} from '@angular/compiler';
 import ts from 'typescript';
 
 import {lookupIdentifiersInSourceFile} from './identifier-lookup';
@@ -115,18 +108,7 @@ export interface AliasAttributes {
   aliases: Map<string, string>;
 }
 
-export interface ParseResult {
-  tree: ParseTreeResult | undefined;
-  errors: MigrateError[];
-}
-
-/**
- * Represents an error that happened during migration
- */
-export type MigrateError = {
-  type: string;
-  error: unknown;
-};
+export type {MigrateError} from '../../utils/parse_html';
 
 /**
  * Represents an element with a migratable attribute
@@ -390,12 +372,20 @@ export class CommonCollector extends RecursiveVisitor {
         this.count++;
       }
     }
+    super.visitBlock(ast, null);
   }
 
   override visitText(ast: Text) {
     if (this.hasPipes(ast.value)) {
       this.count++;
     }
+  }
+
+  override visitLetDeclaration(decl: LetDeclaration): void {
+    if (this.hasPipes(decl.value)) {
+      this.count++;
+    }
+    super.visitLetDeclaration(decl, null);
   }
 
   private hasDirectives(input: string): boolean {

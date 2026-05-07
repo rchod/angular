@@ -8,29 +8,37 @@
 
 import {Location} from '@angular/common';
 import {
+  ɵConsole as Console,
+  EnvironmentInjector,
   inject,
   Injectable,
-  Type,
-  ɵConsole as Console,
-  ɵPendingTasks as PendingTasks,
+  ɵPendingTasksInternal as PendingTasks,
   ɵRuntimeError as RuntimeError,
+  Signal,
+  Type,
+  untracked,
+  ɵINTERNAL_APPLICATION_ERROR_HANDLER,
+  ɵformatRuntimeError as formatRuntimeError,
 } from '@angular/core';
 import {Observable, Subject, Subscription, SubscriptionLike} from 'rxjs';
 
+import {standardizeConfig} from './components/empty_outlet';
 import {createSegmentGroupFromRoute, createUrlTreeFromSegmentGroup} from './create_url_tree';
 import {INPUT_BINDER} from './directives/router_outlet';
 import {RuntimeErrorCode} from './errors';
+
 import {
-  BeforeActivateRoutes,
   Event,
   IMPERATIVE_NAVIGATION,
+  isPublicRouterEvent,
   NavigationCancel,
   NavigationCancellationCode,
   NavigationEnd,
+  NavigationError,
   NavigationTrigger,
-  PrivateRouterEvents,
   RedirectRequest,
 } from './events';
+
 import {NavigationBehaviorOptions, OnSameUrlNavigation, Routes} from './models';
 import {
   isBrowserTriggeredNavigation,
@@ -40,7 +48,10 @@ import {
   RestoredState,
   UrlCreationOptions,
 } from './navigation_transition';
+import {ROUTE_INJECTOR_CLEANUP} from './route_injector_cleanup';
+
 import {RouteReuseStrategy} from './route_reuse_strategy';
+
 import {ROUTER_CONFIGURATION} from './router_config';
 import {ROUTES} from './router_config_loader';
 import {Params} from './shared';
@@ -48,41 +59,17 @@ import {StateManager} from './statemanager/state_manager';
 import {UrlHandlingStrategy} from './url_handling_strategy';
 import {
   containsTree,
+  exactMatchOptions,
   IsActiveMatchOptions,
   isUrlTree,
+  subsetMatchOptions,
   UrlSegmentGroup,
   UrlSerializer,
   UrlTree,
 } from './url_tree';
 import {validateConfig} from './utils/config';
 import {afterNextNavigation} from './utils/navigations';
-import {standardizeConfig} from './components/empty_outlet';
-
-function defaultErrorHandler(error: any): never {
-  throw error;
-}
-
-/**
- * The equivalent `IsActiveMatchOptions` options for `Router.isActive` is called with `true`
- * (exact = true).
- */
-export const exactMatchOptions: IsActiveMatchOptions = {
-  paths: 'exact',
-  fragment: 'ignored',
-  matrixParams: 'ignored',
-  queryParams: 'exact',
-};
-
-/**
- * The equivalent `IsActiveMatchOptions` options for `Router.isActive` is called with `false`
- * (exact = false).
- */
-export const subsetMatchOptions: IsActiveMatchOptions = {
-  paths: 'subset',
-  fragment: 'ignored',
-  matrixParams: 'ignored',
-  queryParams: 'subset',
-};
+import {RouterState} from './router_state';
 
 /**
  * @description
@@ -118,6 +105,7 @@ export class Router {
   private readonly urlSerializer = inject(UrlSerializer);
   private readonly location = inject(Location);
   private readonly urlHandlingStrategy = inject(UrlHandlingStrategy);
+  private readonly injector = inject(EnvironmentInjector);
 
   /**
    * The private `Subject` type for the public events exposed in the getter. This is used internally
@@ -138,7 +126,7 @@ export class Router {
   /**
    * The current state of routing in this NgModule.
    */
-  get routerState() {
+  get routerState(): RouterState {
     return this.stateManager.getRouterState();
   }
 
@@ -155,6 +143,11 @@ export class Router {
    *   `{provide: RouteReuseStrategy, useClass: MyStrategy}`.
    */
   routeReuseStrategy: RouteReuseStrategy = inject(RouteReuseStrategy);
+
+  /** @internal */
+  readonly injectorCleanup = inject(ROUTE_INJECTOR_CLEANUP, {optional: true});
+
+  // TODO: Consider exposing releaseUnusedRouteInjectors as a public API
 
   /**
    * How to handle a navigation request to the current URL.
@@ -177,16 +170,23 @@ export class Router {
    */
   readonly componentInputBindingEnabled: boolean = !!inject(INPUT_BINDER, {optional: true});
 
+  /**
+   * Signal of the current `Navigation` object when the router is navigating, and `null` when idle.
+   *
+   * Note: The current navigation becomes to null after the NavigationEnd event is emitted.
+   */
+  readonly currentNavigation = this.navigationTransitions.currentNavigation.asReadonly();
+
   constructor() {
     this.resetConfig(this.config);
 
-    this.navigationTransitions
-      .setupNavigations(this, this.currentUrlTree, this.routerState)
-      .subscribe({
-        error: (e) => {
-          this.console.warn(ngDevMode ? `Unhandled Navigation Error: ${e}` : e);
-        },
-      });
+    this.navigationTransitions.setupNavigations(this).subscribe({
+      error: (e) => {
+        // Note: This subscription is not unsubscribed when the `Router` is destroyed.
+        // This is intentional as the `Router` is generally never destroyed.
+        // If it is destroyed, the `events` subject is completed, which cleans up this subscription.
+      },
+    });
     this.subscribeToNavigationEvents();
   }
 
@@ -195,7 +195,8 @@ export class Router {
     const subscription = this.navigationTransitions.events.subscribe((e) => {
       try {
         const currentTransition = this.navigationTransitions.currentTransition;
-        const currentNavigation = this.navigationTransitions.currentNavigation;
+        const currentNavigation = untracked(this.navigationTransitions.currentNavigation);
+
         if (currentTransition !== null && currentNavigation !== null) {
           this.stateManager.handleRouterEvent(e, currentNavigation);
           if (
@@ -209,6 +210,7 @@ export class Router {
             this.navigated = true;
           } else if (e instanceof NavigationEnd) {
             this.navigated = true;
+            this.injectorCleanup?.(this.routeReuseStrategy, this.routerState, this.config);
           } else if (e instanceof RedirectRequest) {
             const opts = e.navigationBehaviorOptions;
             const mergedTree = this.urlHandlingStrategy.merge(
@@ -216,6 +218,7 @@ export class Router {
               currentTransition.currentRawUrl,
             );
             const extras = {
+              scroll: currentTransition.extras.scroll,
               browserUrl: currentTransition.extras.browserUrl,
               info: currentTransition.extras.info,
               skipLocationChange: currentTransition.extras.skipLocationChange,
@@ -238,6 +241,7 @@ export class Router {
             });
           }
         }
+
         // Note that it's important to have the Router process the events _before_ the event is
         // pushed through the public observable. This ensures the correct router state is in place
         // before applications observe the events.
@@ -245,7 +249,7 @@ export class Router {
           this._events.next(e);
         }
       } catch (e: unknown) {
-        this.navigationTransitions.transitionAbortSubject.next(e as Error);
+        this.navigationTransitions.transitionAbortWithErrorSubject.next(e as Error);
       }
     });
     this.eventsSubscription.add(subscription);
@@ -269,6 +273,7 @@ export class Router {
         this.location.path(true),
         IMPERATIVE_NAVIGATION,
         this.stateManager.restoredState(),
+        {replaceUrl: true},
       );
     }
   }
@@ -283,13 +288,11 @@ export class Router {
     // already patch onPopState, so location change callback will
     // run into ngZone
     this.nonRouterCurrentEntryChangeSubscription ??=
-      this.stateManager.registerNonRouterCurrentEntryChangeListener((url, state) => {
-        // The `setTimeout` was added in #12160 and is likely to support Angular/AngularJS
-        // hybrid apps.
-        setTimeout(() => {
-          this.navigateToSyncWithBrowser(url, 'popstate', state);
-        }, 0);
-      });
+      this.stateManager.registerNonRouterCurrentEntryChangeListener(
+        (url, state, source, extras) => {
+          this.navigateToSyncWithBrowser(url, source, state, extras);
+        },
+      );
   }
 
   /**
@@ -303,9 +306,8 @@ export class Router {
     url: string,
     source: NavigationTrigger,
     state: RestoredState | null | undefined,
+    extras: NavigationExtras,
   ) {
-    const extras: NavigationExtras = {replaceUrl: true};
-
     // TODO: restoredState should always include the entire state, regardless
     // of navigationId. This requires a breaking change to update the type on
     // NavigationStart’s restoredState, which currently requires navigationId
@@ -316,19 +318,33 @@ export class Router {
     // position for the page.
     const restoredState = state?.navigationId ? state : null;
 
+    // When `browserUrl` was used during the original navigation, the actual route URL
+    // was stored in history state as `ɵrouterUrl`. Use it for route matching and
+    // preserve the browser URL as the displayed URL.
+    const routerUrl = state?.ɵrouterUrl ?? url;
+    if (state?.ɵrouterUrl) {
+      extras = {...extras, browserUrl: url};
+    }
+
     // Separate to NavigationStart.restoredState, we must also restore the state to
     // history.state and generate a new navigationId, since it will be overwritten
     if (state) {
       const stateCopy = {...state} as Partial<RestoredState>;
       delete stateCopy.navigationId;
       delete stateCopy.ɵrouterPageId;
+      delete stateCopy.ɵrouterUrl;
       if (Object.keys(stateCopy).length !== 0) {
         extras.state = stateCopy;
       }
     }
 
-    const urlTree = this.parseUrl(url);
-    this.scheduleNavigation(urlTree, source, restoredState, extras);
+    const urlTree = this.parseUrl(routerUrl);
+    this.scheduleNavigation(urlTree, source, restoredState, extras).catch((e) => {
+      if (this.disposed) {
+        return;
+      }
+      this.injector.get(ɵINTERNAL_APPLICATION_ERROR_HANDLER)(e);
+    });
   }
 
   /** The current URL. */
@@ -339,16 +355,18 @@ export class Router {
   /**
    * Returns the current `Navigation` object when the router is navigating,
    * and `null` when idle.
+   *
+   * @deprecated 20.2 Use the `currentNavigation` signal instead.
    */
   getCurrentNavigation(): Navigation | null {
-    return this.navigationTransitions.currentNavigation;
+    return untracked(this.navigationTransitions.currentNavigation);
   }
 
   /**
    * The `Navigation` object of the most recent navigation to succeed and `null` if there
    *     has not been a successful navigation yet.
    */
-  get lastSuccessfulNavigation(): Navigation | null {
+  get lastSuccessfulNavigation(): Signal<Navigation | null> {
     return this.navigationTransitions.lastSuccessfulNavigation;
   }
 
@@ -359,7 +377,7 @@ export class Router {
    *
    * @usageNotes
    *
-   * ```
+   * ```ts
    * router.resetConfig([
    *  { path: 'team/:id', component: TeamCmp, children: [
    *    { path: 'simple', component: SimpleCmp },
@@ -374,18 +392,22 @@ export class Router {
     this.navigated = false;
   }
 
-  /** @nodoc */
+  /** @docs-private */
   ngOnDestroy(): void {
     this.dispose();
   }
 
   /** Disposes of the router. */
   dispose(): void {
+    // We call `unsubscribe()` to release observers, as users may forget to
+    // unsubscribe manually when subscribing to `router.events`. We do not call
+    // `complete()` because it is unsafe; if someone subscribes using the `first`
+    // operator and the observable completes before emitting a value,
+    // RxJS will throw an error.
+    this._events.unsubscribe();
     this.navigationTransitions.complete();
-    if (this.nonRouterCurrentEntryChangeSubscription) {
-      this.nonRouterCurrentEntryChangeSubscription.unsubscribe();
-      this.nonRouterCurrentEntryChangeSubscription = undefined;
-    }
+    this.nonRouterCurrentEntryChangeSubscription?.unsubscribe();
+    this.nonRouterCurrentEntryChangeSubscription = undefined;
     this.disposed = true;
     this.eventsSubscription.unsubscribe();
   }
@@ -403,7 +425,7 @@ export class Router {
    *
    * @usageNotes
    *
-   * ```
+   * ```ts
    * // create /team/33/user/11
    * router.createUrlTree(['/team', 33, 'user', 11]);
    *
@@ -433,12 +455,12 @@ export class Router {
    *
    * // navigate to /team/44/user/22
    * router.createUrlTree(['../../team/44/user/22'], {relativeTo: route});
-   *
+   * ```
    * Note that a value of `null` or `undefined` for `relativeTo` indicates that the
    * tree should be created relative to the root.
-   * ```
+   *
    */
-  createUrlTree(commands: any[], navigationExtras: UrlCreationOptions = {}): UrlTree {
+  createUrlTree(commands: readonly any[], navigationExtras: UrlCreationOptions = {}): UrlTree {
     const {relativeTo, queryParams, fragment, queryParamsHandling, preserveFragment} =
       navigationExtras;
     const f = preserveFragment ? this.currentUrlTree.fragment : fragment;
@@ -479,7 +501,13 @@ export class Router {
       }
       relativeToUrlSegmentGroup = this.currentUrlTree.root;
     }
-    return createUrlTreeFromSegmentGroup(relativeToUrlSegmentGroup, commands, q, f ?? null);
+    return createUrlTreeFromSegmentGroup(
+      relativeToUrlSegmentGroup,
+      commands,
+      q,
+      f ?? null,
+      this.urlSerializer,
+    );
   }
 
   /**
@@ -496,7 +524,7 @@ export class Router {
    *
    * The following calls request navigation to an absolute path.
    *
-   * ```
+   * ```ts
    * router.navigateByUrl("/team/33/user/11");
    *
    * // Navigate without updating the URL
@@ -538,7 +566,7 @@ export class Router {
    *
    * The following calls request navigation to a dynamic route path relative to the current URL.
    *
-   * ```
+   * ```ts
    * router.navigate(['team', 33, 'user', 11], {relativeTo: route});
    *
    * // Navigate without updating the URL, overriding the default behavior
@@ -549,7 +577,7 @@ export class Router {
    *
    */
   navigate(
-    commands: any[],
+    commands: readonly any[],
     extras: NavigationExtras = {skipLocationChange: false},
   ): Promise<boolean> {
     validateCommands(commands);
@@ -565,7 +593,13 @@ export class Router {
   parseUrl(url: string): UrlTree {
     try {
       return this.urlSerializer.parse(url);
-    } catch {
+    } catch (e) {
+      this.console.warn(
+        formatRuntimeError(
+          RuntimeErrorCode.ERROR_PARSING_URL,
+          ngDevMode && `Error parsing URL ${url}. Falling back to '/' instead. \n` + e,
+        ),
+      );
       return this.urlSerializer.parse('/');
     }
   }
@@ -583,19 +617,24 @@ export class Router {
    */
   isActive(url: string | UrlTree, exact: boolean): boolean;
   /**
-   * Returns whether the url is activated.
+   * @see {@link isActive}
+   * @deprecated 21.1 - Use the `isActive` function instead.
    */
-  isActive(url: string | UrlTree, matchOptions: IsActiveMatchOptions): boolean;
+  isActive(url: string | UrlTree, matchOptions: Partial<IsActiveMatchOptions>): boolean;
   /** @internal */
   isActive(url: string | UrlTree, matchOptions: boolean | IsActiveMatchOptions): boolean;
-  isActive(url: string | UrlTree, matchOptions: boolean | IsActiveMatchOptions): boolean {
+  /**
+   * @deprecated 21.1 - Use the `isActive` function instead.
+   * @see {@link isActive}
+   */
+  isActive(url: string | UrlTree, matchOptions: boolean | Partial<IsActiveMatchOptions>): boolean {
     let options: IsActiveMatchOptions;
     if (matchOptions === true) {
       options = {...exactMatchOptions};
     } else if (matchOptions === false) {
       options = {...subsetMatchOptions};
     } else {
-      options = matchOptions;
+      options = {...subsetMatchOptions, ...matchOptions};
     }
     if (isUrlTree(url)) {
       return containsTree(this.currentUrlTree, url, options);
@@ -667,13 +706,12 @@ export class Router {
 
     // Make sure that the error is propagated even though `processNavigations` catch
     // handler does not rethrow
-    return promise.catch((e: any) => {
-      return Promise.reject(e);
-    });
+    // perf: Use `.bind` to avoid holding the other closures in this scope while this promise is unsettled.
+    return promise.catch(Promise.reject.bind(Promise));
   }
 }
 
-function validateCommands(commands: string[]): void {
+function validateCommands(commands: readonly string[]): void {
   for (let i = 0; i < commands.length; i++) {
     const cmd = commands[i];
     if (cmd == null) {
@@ -684,8 +722,4 @@ function validateCommands(commands: string[]): void {
       );
     }
   }
-}
-
-function isPublicRouterEvent(e: Event | PrivateRouterEvents): e is Event {
-  return !(e instanceof BeforeActivateRoutes) && !(e instanceof RedirectRequest);
 }

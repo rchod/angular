@@ -8,7 +8,7 @@
 
 import {TestBed, waitForAsync} from '@angular/core/testing';
 import {RouterModule} from '@angular/router';
-import {ApplicationOperations} from 'ng-devtools';
+import {ApplicationOperations} from '../../../ng-devtools';
 
 import {AppComponent} from './app.component';
 
@@ -24,7 +24,7 @@ describe('AppComponent', () => {
           useClass: applicationOperationsSPy,
         },
       ],
-    }).compileComponents();
+    });
   }));
 
   it('should create the app', () => {

@@ -6,16 +6,11 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
-import {initMockFileSystem} from '@angular/compiler-cli/src/ngtsc/file_system/testing';
 import ts from 'typescript';
 
 import {createModuleAndProjectWithDeclarations, LanguageServiceTestEnv} from '../testing';
 
 describe('get outlining spans', () => {
-  beforeEach(() => {
-    initMockFileSystem('Native');
-  });
-
   it('should get block outlining spans for an inline template', () => {
     const files = {
       'app.ts': `
@@ -25,6 +20,7 @@ describe('get outlining spans', () => {
         template: \`
         @if (1) { if body }
         \`,
+        standalone: false,
       })
       export class AppCmp {
       }`,
@@ -48,6 +44,7 @@ describe('get outlining spans', () => {
 
         @Component({
           templateUrl: './app.html',
+          standalone: false,
         })
         export class AppCmp {
         }`,
@@ -81,7 +78,8 @@ describe('get outlining spans', () => {
           } @loading {
             defer loading block
           }
-          \`
+          \`,
+          standalone: false,
         })
         export class AppCmp {
         }`,
@@ -116,7 +114,8 @@ describe('get outlining spans', () => {
           } @else {
             else block
           }
-          \`
+          \`,
+          standalone: false,
         })
         export class AppCmp {
           val1: any;
@@ -154,7 +153,8 @@ describe('get outlining spans', () => {
                 just in case
             }
           }
-          \`
+          \`,
+          standalone: false,
         })
         export class AppCmp {
             test = 'test';
@@ -187,7 +187,8 @@ describe('get outlining spans', () => {
           } @empty {
             empty list
           }
-          \`
+          \`,
+          standalone: false,
         })
         export class AppCmp {
             items = [];

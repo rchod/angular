@@ -7,9 +7,9 @@
  */
 
 import {DOCUMENT} from '@angular/common';
-import {Component, destroyPlatform, inject} from '@angular/core';
+import {Component, destroyPlatform} from '@angular/core';
 import {bootstrapApplication} from '@angular/platform-browser';
-import {withBody} from '@angular/private/testing';
+import {withBody, isNode} from '@angular/private/testing';
 import {
   Event,
   NavigationEnd,
@@ -17,7 +17,7 @@ import {
   Router,
   withDisabledInitialNavigation,
   withViewTransitions,
-} from '@angular/router';
+} from '../index';
 
 describe('view transitions', () => {
   if (isNode) {
@@ -30,7 +30,6 @@ describe('view transitions', () => {
 
   @Component({
     selector: 'test-app',
-    standalone: true,
     template: ``,
   })
   class App {}
@@ -62,7 +61,6 @@ describe('view transitions', () => {
     @Component({
       selector: 'component-b',
       template: `b`,
-      standalone: true,
     })
     class ComponentB {}
 
@@ -83,8 +81,7 @@ describe('view transitions', () => {
     it('should not create a view transition if only the fragment changes', async () => {
       @Component({
         selector: 'test-app',
-        standalone: true,
-        template: `{{checks}}`,
+        template: `{{ checks }}`,
       })
       class App {
         checks = 0;

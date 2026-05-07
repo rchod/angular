@@ -20,7 +20,9 @@ import {controlPath} from './shared';
  *
  * @publicApi
  */
-@Directive()
+@Directive({
+  standalone: false,
+})
 export class AbstractFormGroupDirective extends ControlContainer implements OnInit, OnDestroy {
   /**
    * @description
@@ -28,22 +30,19 @@ export class AbstractFormGroupDirective extends ControlContainer implements OnIn
    *
    * @internal
    */
-  // TODO(issue/24571): remove '!'.
   _parent!: ControlContainer;
 
-  /** @nodoc */
+  /** @docs-private */
   ngOnInit(): void {
     this._checkParentType();
     // Register the group with its parent group.
     this.formDirective!.addFormGroup(this);
   }
 
-  /** @nodoc */
+  /** @docs-private */
   ngOnDestroy(): void {
-    if (this.formDirective) {
-      // Remove the group from its parent group.
-      this.formDirective.removeFormGroup(this);
-    }
+    // Remove the group from its parent group.
+    this.formDirective?.removeFormGroup(this);
   }
 
   /**

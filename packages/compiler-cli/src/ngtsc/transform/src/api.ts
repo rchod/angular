@@ -216,6 +216,15 @@ export interface DecoratorHandler<D, A, S extends SemanticSymbol | null, R> {
   ): CompileResult | CompileResult[];
 
   /**
+   * Generates the function that will update a class' metadata at runtime during HMR.
+   */
+  compileHmrUpdateDeclaration?(
+    node: ClassDeclaration,
+    analysis: Readonly<A>,
+    resolution: Readonly<R>,
+  ): ts.FunctionDeclaration | null;
+
+  /**
    * Generates code based on each individual source file without using its
    * dependencies (suitable for local dev edit/refresh workflow)
    */
@@ -279,11 +288,6 @@ export interface ResolveResult<R> {
 }
 
 export interface DtsTransform {
-  transformClassElement?(element: ts.ClassElement, imports: ImportManager): ts.ClassElement;
-  transformFunctionDeclaration?(
-    element: ts.FunctionDeclaration,
-    imports: ImportManager,
-  ): ts.FunctionDeclaration;
   transformClass?(
     clazz: ts.ClassDeclaration,
     elements: ReadonlyArray<ts.ClassElement>,

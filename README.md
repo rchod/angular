@@ -24,20 +24,8 @@
 </p>
 
 <p align="center">
-  <a href="https://circleci.com/gh/angular/workflows/angular/tree/main">
-    <img src="https://img.shields.io/circleci/build/github/angular/angular/main.svg?logo=circleci&logoColor=fff&label=CircleCI" alt="CI status" />
-  </a>&nbsp;
   <a href="https://www.npmjs.com/@angular/core">
     <img src="https://img.shields.io/npm/v/@angular/core.svg?logo=npm&logoColor=fff&label=NPM+package&color=limegreen" alt="Angular on npm" />
-  </a>&nbsp;
-  <a href="https://discord.gg/angular">
-    <img src="https://img.shields.io/discord/463752820026376202.svg?logo=discord&logoColor=fff&label=Discord&color=7389d8" alt="Discord conversation" />
-  </a>
-</p>
-
-<p align="center">
-  <a href="https://app.circleci.com/insights/github/angular/angular/workflows/default_workflow?branch=main">
-    <img src="https://dl.circleci.com/insights-snapshot/gh/angular/angular/main/default_workflow/badge.svg" alt="InsightsSnapshot" />
   </a>
 </p>
 
@@ -79,7 +67,7 @@ Install the Angular CLI globally:
 npm install -g @angular/cli
 ```
 
-Create workspace:
+Create a workspace:
 
 ```
 ng new [PROJECT NAME]
@@ -134,8 +122,8 @@ Help us keep Angular open and inclusive. Please read and follow our [Code of Con
 Join the conversation and help the community.
 
 - [X (formerly Twitter)][X (formerly Twitter)]
+- [Bluesky][bluesky]
 - [Discord][discord]
-- [Gitter][gitter]
 - [YouTube][youtube]
 - [StackOverflow][stackoverflow]
 - Find a Local [Meetup][meetup]
@@ -149,7 +137,7 @@ Join the conversation and help the community.
 [changelog]: CHANGELOG.md
 [ng]: https://angular.dev
 [documentation]: https://angular.dev/overview
-[angularmaterial]: https://material.angular.io/
+[angularmaterial]: https://material.angular.dev/
 [cli]: https://angular.dev/tools/cli
 [architecture]: https://angular.dev/essentials
 [componentstemplates]: https://angular.dev/tutorials/learn-angular/1-components-in-angular
@@ -158,13 +146,13 @@ Join the conversation and help the community.
 [angularelements]: https://angular.dev/guide/elements
 [ssr]: https://angular.dev/guide/ssr
 [schematics]: https://angular.dev/tools/cli/schematics
-[lazyloading]: https://angular.dev/guide/ngmodules/lazy-loading
+[lazyloading]: https://angular.dev/guide/routing/define-routes#lazily-loaded-components
 [node.js]: https://nodejs.org/
 [npm]: https://www.npmjs.com/get-npm
 [codeofconduct]: CODE_OF_CONDUCT.md
-[X (formerly Twitter)]: https://www.twitter.com/angular
+[X (formerly Twitter)]: https://www.x.com/angular
+[bluesky]: https://bsky.app/profile/angular.dev
 [discord]: https://discord.gg/angular
-[gitter]: https://gitter.im/angular/angular
 [stackoverflow]: https://stackoverflow.com/questions/tagged/angular
 [youtube]: https://youtube.com/angular
 [meetup]: https://www.meetup.com/find/?keywords=angular

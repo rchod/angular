@@ -7,10 +7,9 @@
  */
 
 import {Component} from '@angular/core';
-import {Routes} from '@angular/router';
+import {Routes} from '../index';
 
 @Component({
-  standalone: true,
   template: 'default exported',
   selector: 'test-route',
 })

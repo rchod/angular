@@ -6,7 +6,8 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
-import {indexForest} from './';
+import {indexForest} from './index';
+import {DevToolsNode} from '../../../../../../../protocol';
 
 describe('indexForest', () => {
   it('should work with an empty forest', () => {
@@ -41,7 +42,10 @@ describe('indexForest', () => {
               ],
               component: null,
               children: [],
-            },
+              changeDetection: 'ng-on-push',
+              controlFlowBlock: null,
+              hasNativeElement: true,
+            } as DevToolsNode & {hasNativeElement?: boolean},
             {
               element: 'Child1_2',
               directives: [],
@@ -52,8 +56,14 @@ describe('indexForest', () => {
                 id: 1,
               },
               children: [],
-            },
+              changeDetection: 'ng-on-push',
+              controlFlowBlock: null,
+              hasNativeElement: true,
+            } as DevToolsNode & {hasNativeElement?: boolean},
           ],
+          changeDetection: 'ng-on-push',
+          controlFlowBlock: null,
+          hasNativeElement: true,
         },
         {
           element: 'Parent2',
@@ -72,7 +82,10 @@ describe('indexForest', () => {
               hydration: null,
               component: null,
               children: [],
-            },
+              changeDetection: 'ng-eager',
+              controlFlowBlock: null,
+              hasNativeElement: true,
+            } as DevToolsNode & {hasNativeElement?: boolean},
             {
               element: 'Child2_2',
               directives: [
@@ -88,8 +101,14 @@ describe('indexForest', () => {
               component: null,
               hydration: null,
               children: [],
-            },
+              changeDetection: 'ng-eager',
+              controlFlowBlock: null,
+              hasNativeElement: true,
+            } as DevToolsNode & {hasNativeElement?: boolean},
           ],
+          changeDetection: 'ng-eager',
+          controlFlowBlock: null,
+          hasNativeElement: true,
         },
       ]),
     ).toEqual([
@@ -120,6 +139,9 @@ describe('indexForest', () => {
             component: null,
             hydration: null,
             children: [],
+            changeDetection: 'ng-on-push',
+            controlFlowBlock: null,
+            hasNativeElement: true,
           },
           {
             element: 'Child1_2',
@@ -132,8 +154,15 @@ describe('indexForest', () => {
             },
             hydration: null,
             children: [],
+            controlFlowBlock: null,
+            changeDetection: 'ng-on-push',
+
+            hasNativeElement: true,
           },
         ],
+        controlFlowBlock: null,
+        changeDetection: 'ng-on-push',
+        hasNativeElement: true,
       },
       {
         element: 'Parent2',
@@ -154,6 +183,9 @@ describe('indexForest', () => {
             component: null,
             hydration: null,
             children: [],
+            changeDetection: 'ng-eager',
+            controlFlowBlock: null,
+            hasNativeElement: true,
           },
           {
             element: 'Child2_2',
@@ -171,8 +203,14 @@ describe('indexForest', () => {
             component: null,
             children: [],
             hydration: null,
+            changeDetection: 'ng-eager',
+            controlFlowBlock: null,
+            hasNativeElement: true,
           },
         ],
+        changeDetection: 'ng-eager',
+        controlFlowBlock: null,
+        hasNativeElement: true,
       },
     ]);
   });

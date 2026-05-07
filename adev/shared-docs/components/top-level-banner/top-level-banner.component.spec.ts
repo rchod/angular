@@ -1,3 +1,11 @@
+/**
+ * @license
+ * Copyright Google LLC All Rights Reserved.
+ *
+ * Use of this source code is governed by an MIT-style license that can be
+ * found in the LICENSE file at https://angular.dev/license
+ */
+
 import {ComponentFixture, TestBed} from '@angular/core/testing';
 
 import {STORAGE_KEY_PREFIX, TopLevelBannerComponent} from './top-level-banner.component';
@@ -26,13 +34,13 @@ describe('TopLevelBannerComponent', () => {
     fixture.componentRef.setInput('id', EXAMPLE_ID);
 
     component = fixture.componentInstance;
-    fixture.detectChanges();
+    await fixture.whenStable();
   });
 
-  it('should render an anchor element when link is provided', () => {
+  it('should render an anchor element when link is provided', async () => {
     fixture.componentRef.setInput('text', EXAMPLE_TEXT);
     fixture.componentRef.setInput('link', EXAMPLE_LINK);
-    fixture.detectChanges();
+    await fixture.whenStable();
 
     const bannerElement = fixture.nativeElement.querySelector('a.docs-top-level-banner');
     expect(bannerElement).toBeTruthy();
@@ -40,41 +48,49 @@ describe('TopLevelBannerComponent', () => {
     expect(bannerElement.textContent).toContain(EXAMPLE_TEXT);
   });
 
-  it('should render a div element when link is not provided', () => {
+  it('should render a div element when link is not provided', async () => {
     const EXAMPLE_TEXT = 'No Link Available';
 
     fixture.componentRef.setInput('text', EXAMPLE_TEXT);
-    fixture.detectChanges();
+    await fixture.whenStable();
 
     const bannerElement = fixture.nativeElement.querySelector('div.docs-top-level-banner');
     expect(bannerElement).toBeTruthy();
     expect(bannerElement.textContent).toContain(EXAMPLE_TEXT);
   });
 
-  it('should correctly render the text input', () => {
+  it('should correctly render the text input', async () => {
     const EXAMPLE_TEXT = 'Lorem ipsum dolor...';
 
     fixture.componentRef.setInput('text', EXAMPLE_TEXT);
-    fixture.detectChanges();
+    await fixture.whenStable();
 
     const bannerElement = fixture.nativeElement.querySelector('.docs-top-level-banner-cta');
     expect(bannerElement).toBeTruthy();
     expect(bannerElement.textContent).toBe(EXAMPLE_TEXT);
   });
 
-  it('should set hasClosed to true if the banner was closed before', () => {
+  it('should set hasClosed to true if the banner was closed before', async () => {
     mockLocalStorage.getItem.and.returnValue('true');
 
-    component.ngOnInit();
+    fixture = TestBed.createComponent(TopLevelBannerComponent);
+    fixture.componentRef.setInput('text', EXAMPLE_TEXT);
+    fixture.componentRef.setInput('id', EXAMPLE_ID);
+    component = fixture.componentInstance;
+    await fixture.whenStable();
 
     expect(component.hasClosed()).toBeTrue();
     expect(mockLocalStorage.getItem).toHaveBeenCalledWith(`${STORAGE_KEY_PREFIX}${EXAMPLE_ID}`);
   });
 
-  it('should set hasClosed to false if the banner was not closed before', () => {
+  it('should set hasClosed to false if the banner was not closed before', async () => {
     mockLocalStorage.getItem.and.returnValue('false');
 
-    component.ngOnInit();
+    fixture = TestBed.createComponent(TopLevelBannerComponent);
+    fixture.componentRef.setInput('text', EXAMPLE_TEXT);
+    fixture.componentRef.setInput('id', EXAMPLE_ID);
+    component = fixture.componentInstance;
+    await fixture.whenStable();
 
     expect(component.hasClosed()).toBeFalse();
     expect(mockLocalStorage.getItem).toHaveBeenCalledWith(`${STORAGE_KEY_PREFIX}${EXAMPLE_ID}`);
@@ -82,8 +98,6 @@ describe('TopLevelBannerComponent', () => {
 
   it('should set hasClosed to false if accessing localStorage throws an error', () => {
     mockLocalStorage.getItem.and.throwError('Local storage error');
-
-    component.ngOnInit();
 
     expect(component.hasClosed()).toBeFalse();
   });

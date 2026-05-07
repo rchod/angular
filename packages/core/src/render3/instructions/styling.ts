@@ -125,7 +125,9 @@ export function ɵɵclassProp(
  *
  * @codeGenApi
  */
-export function ɵɵstyleMap(styles: {[styleName: string]: any} | string | undefined | null): void {
+export function ɵɵstyleMap(
+  styles: {[styleName: string]: any} | string | undefined | null | NO_CHANGE,
+): void {
   checkStylingMap(styleKeyValueArraySet, styleStringParser, styles, false);
 }
 
@@ -163,7 +165,14 @@ export function styleStringParser(keyValueArray: KeyValueArray<any>, text: strin
  * @codeGenApi
  */
 export function ɵɵclassMap(
-  classes: {[className: string]: boolean | undefined | null} | string | undefined | null,
+  classes:
+    | {[className: string]: boolean | undefined | null}
+    | string
+    | string[]
+    | Set<string>
+    | undefined
+    | null
+    | NO_CHANGE,
 ): void {
   checkStylingMap(classKeyValueArraySet, classStringParser, classes, true);
 }
@@ -473,7 +482,7 @@ function getTemplateHeadTStylingKey(
  * method allows us to update the first template instruction `TStylingKey` with a new value.
  *
  * Assume:
- * ```
+ * ```angular-ts
  * <div my-dir style="color: red" [style.color]="tmplExp"></div>
  *
  * @Directive({
@@ -486,7 +495,7 @@ function getTemplateHeadTStylingKey(
  * ```
  *
  * when `[style.color]="tmplExp"` executes it creates this data structure.
- * ```
+ * ```ts
  *  ['', 'color', 'color', 'red', 'width', '100px'],
  * ```
  *
@@ -496,14 +505,14 @@ function getTemplateHeadTStylingKey(
  * `color' and 'width`)
  *
  * When `'[style.color]': 'dirExp',` executes we need to insert a new data into the linked list.
- * ```
+ * ```ts
  *  ['', 'color', 'width', '100px'],  // newly inserted
  *  ['', 'color', 'color', 'red', 'width', '100px'], // this is wrong
  * ```
  *
  * Notice that the template statics is now wrong as it incorrectly contains `width` so we need to
  * update it like so:
- * ```
+ * ```ts
  *  ['', 'color', 'width', '100px'],
  *  ['', 'color', 'color', 'red'],    // UPDATE
  * ```
@@ -673,14 +682,22 @@ function collectStylingFromTAttrs(
 export function toStylingKeyValueArray(
   keyValueArraySet: (keyValueArray: KeyValueArray<any>, key: string, value: any) => void,
   stringParser: (styleKeyValueArray: KeyValueArray<any>, text: string) => void,
-  value: string | string[] | {[key: string]: any} | SafeValue | null | undefined,
+  value: string | string[] | Set<string> | {[key: string]: any} | SafeValue | null | undefined,
 ): KeyValueArray<any> {
   if (value == null /*|| value === undefined */ || value === '') return EMPTY_ARRAY as any;
   const styleKeyValueArray: KeyValueArray<any> = [] as any;
-  const unwrappedValue = unwrapSafeValue(value) as string | string[] | {[key: string]: any};
+  const unwrappedValue = unwrapSafeValue(value) as
+    | string
+    | string[]
+    | Set<string>
+    | {[key: string]: any};
   if (Array.isArray(unwrappedValue)) {
     for (let i = 0; i < unwrappedValue.length; i++) {
       keyValueArraySet(styleKeyValueArray, unwrappedValue[i], true);
+    }
+  } else if (unwrappedValue instanceof Set) {
+    for (const current of unwrappedValue) {
+      keyValueArraySet(styleKeyValueArray, current, true);
     }
   } else if (typeof unwrappedValue === 'object') {
     for (const key in unwrappedValue) {
@@ -692,7 +709,9 @@ export function toStylingKeyValueArray(
     stringParser(styleKeyValueArray, unwrappedValue);
   } else {
     ngDevMode &&
-      throwError('Unsupported styling type ' + typeof unwrappedValue + ': ' + unwrappedValue);
+      throwError(
+        'Unsupported styling type: ' + typeof unwrappedValue + ' (' + unwrappedValue + ')',
+      );
   }
   return styleKeyValueArray;
 }

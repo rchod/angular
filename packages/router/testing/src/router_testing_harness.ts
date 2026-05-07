@@ -7,6 +7,7 @@
  */
 
 import {
+  ChangeDetectionStrategy,
   Component,
   DebugElement,
   Injectable,
@@ -16,7 +17,7 @@ import {
   signal,
 } from '@angular/core';
 import {ComponentFixture, TestBed} from '@angular/core/testing';
-import {Router, RouterOutlet, ɵafterNextNavigation as afterNextNavigation} from '@angular/router';
+import {Router, RouterOutlet, ɵafterNextNavigation as afterNextNavigation} from '../../index';
 
 @Injectable({providedIn: 'root'})
 export class RootFixtureService {
@@ -42,9 +43,9 @@ export class RootFixtureService {
 }
 
 @Component({
-  standalone: true,
   template: '<router-outlet [routerOutletData]="routerOutletData()"></router-outlet>',
   imports: [RouterOutlet],
+  changeDetection: ChangeDetectionStrategy.Eager,
 })
 export class RootCmp {
   @ViewChild(RouterOutlet) outlet?: RouterOutlet;

@@ -11,6 +11,9 @@ import * as o from '../output/output_ast';
 
 import {Identifiers} from './r3_identifiers';
 
+/** Regex that includes unsafe characters in an object literal property name. */
+const UNSAFE_OBJECT_KEY_NAME_REGEXP = /[-.]/;
+
 export function typeWithParameters(type: o.Expression, numParams: number): o.ExpressionType {
   if (numParams === 0) {
     return o.expressionType(type);
@@ -36,17 +39,17 @@ export interface R3CompiledExpression {
   statements: o.Statement[];
 }
 
-const ANIMATE_SYMBOL_PREFIX = '@';
+const LEGACY_ANIMATE_SYMBOL_PREFIX = '@';
 export function prepareSyntheticPropertyName(name: string) {
-  return `${ANIMATE_SYMBOL_PREFIX}${name}`;
+  return `${LEGACY_ANIMATE_SYMBOL_PREFIX}${name}`;
 }
 
 export function prepareSyntheticListenerName(name: string, phase: string) {
-  return `${ANIMATE_SYMBOL_PREFIX}${name}.${phase}`;
+  return `${LEGACY_ANIMATE_SYMBOL_PREFIX}${name}.${phase}`;
 }
 
 export function getSafePropertyAccessString(accessor: string, name: string): string {
-  const escapedName = escapeIdentifier(name, false, false);
+  const escapedName = escapeIdentifier(name, false);
   return escapedName !== name ? `${accessor}[${escapedName}]` : `${accessor}.${name}`;
 }
 
@@ -75,7 +78,6 @@ export function guardedExpression(guard: string, expr: o.Expression): o.Expressi
     guardExpr,
     /* type */ undefined,
     /* sourceSpan */ undefined,
-    true,
   );
   return new o.BinaryOperatorExpr(o.BinaryOperator.And, guardUndefinedOrTrue, expr);
 }
@@ -88,6 +90,14 @@ export function wrapReference(value: any): R3Reference {
 export function refsToArray(refs: R3Reference[], shouldForwardDeclare: boolean): o.Expression {
   const values = o.literalArr(refs.map((ref) => ref.value));
   return shouldForwardDeclare ? o.arrowFn([], values) : values;
+}
+
+export function tsIgnoreComment(): o.LeadingComment {
+  return o.leadingComment('@ts-ignore', true, true);
+}
+
+export function isUnsafeObjectKey(key: string): boolean {
+  return UNSAFE_OBJECT_KEY_NAME_REGEXP.test(key);
 }
 
 /**
@@ -157,7 +167,7 @@ export function convertFromMaybeForwardRefExpression({
 /**
  * Generate an expression that has the given `expr` wrapped in the following form:
  *
- * ```
+ * ```ts
  * forwardRef(() => expr)
  * ```
  */

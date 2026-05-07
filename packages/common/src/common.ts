@@ -17,6 +17,7 @@ export {formatDate} from './i18n/format_date';
 export {formatCurrency, formatNumber, formatPercent} from './i18n/format_number';
 export {NgLocaleLocalization, NgLocalization} from './i18n/localization';
 export {registerLocaleData} from './i18n/locale_data';
+export {PlatformNavigation} from './navigation/platform_navigation';
 export {
   Plural,
   NumberFormatStyle,
@@ -66,7 +67,6 @@ export {
   NgTemplateOutlet,
   NgComponentOutlet,
 } from './directives/index';
-export {DOCUMENT} from './dom_tokens';
 export {
   AsyncPipe,
   DatePipe,
@@ -111,3 +111,6 @@ export {
   provideNetlifyLoader,
 } from './directives/ng_optimized_image';
 export {normalizeQueryParams as ɵnormalizeQueryParams} from './location/util';
+
+// Backwards compatibility re-export.
+export {DOCUMENT} from '@angular/core';

@@ -6,7 +6,13 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
-import {Component, Input, NgModule} from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  Input,
+  NgModule,
+  provideZoneChangeDetection,
+} from '@angular/core';
 import {BrowserModule} from '@angular/platform-browser';
 
 import {emptyTable, TableCell} from '../util';
@@ -25,6 +31,8 @@ import {emptyTable, TableCell} from '../util';
       </tr>
     </tbody>
   </table>`,
+  standalone: false,
+  changeDetection: ChangeDetectionStrategy.Eager,
 })
 export class TableComponent {
   @Input() data: TableCell[][] = emptyTable;
@@ -34,5 +42,10 @@ export class TableComponent {
   }
 }
 
-@NgModule({imports: [BrowserModule], bootstrap: [TableComponent], declarations: [TableComponent]})
+@NgModule({
+  imports: [BrowserModule],
+  bootstrap: [TableComponent],
+  providers: [provideZoneChangeDetection()],
+  declarations: [TableComponent],
+})
 export class AppModule {}

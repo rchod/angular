@@ -6,9 +6,8 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
-import {Xliff} from '@angular/compiler/src/i18n/serializers/xliff';
-import {waitForAsync} from '@angular/core/testing';
-import {expect} from '@angular/platform-browser/testing/src/matchers';
+import {Xliff} from '../../src/i18n/serializers/xliff';
+import {expect} from '@angular/private/testing/matchers';
 
 import {
   configureCompiler,
@@ -21,8 +20,7 @@ import {
 // TODO(alxhub): figure out if this test is still relevant.
 xdescribe('i18n XLIFF integration spec', () => {
   describe('(with LF line endings)', () => {
-    beforeEach(waitForAsync(() =>
-      configureCompiler(XLIFF_TOMERGE + LF_LINE_ENDING_XLIFF_TOMERGE, 'xlf')));
+    beforeEach(() => configureCompiler(XLIFF_TOMERGE + LF_LINE_ENDING_XLIFF_TOMERGE, 'xlf'));
 
     it('should extract from templates', () => {
       const serializer = new Xliff();
@@ -41,8 +39,7 @@ xdescribe('i18n XLIFF integration spec', () => {
   });
 
   describe('(with CRLF line endings', () => {
-    beforeEach(waitForAsync(() =>
-      configureCompiler(XLIFF_TOMERGE + CRLF_LINE_ENDING_XLIFF_TOMERGE, 'xlf')));
+    beforeEach(() => configureCompiler(XLIFF_TOMERGE + CRLF_LINE_ENDING_XLIFF_TOMERGE, 'xlf'));
 
     it('should extract from templates (with CRLF line endings)', () => {
       const serializer = new Xliff();

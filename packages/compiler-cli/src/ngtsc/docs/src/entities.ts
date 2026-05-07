@@ -15,6 +15,10 @@ export interface EntryCollection {
 
   moduleLabel: string;
   entries: DocEntry[];
+
+  repo: string; // The github repo
+
+  symbols?: string[][];
 }
 
 /** Type of top-level documentation entry. */
@@ -33,6 +37,7 @@ export enum EntryType {
   TypeAlias = 'type_alias',
   UndecoratedClass = 'undecorated_class',
   InitializerApiFunction = 'initializer_api_function',
+  Namespace = 'namespace',
 }
 
 /** Types of class members */
@@ -42,6 +47,8 @@ export enum MemberType {
   Getter = 'getter',
   Setter = 'setter',
   EnumItem = 'enum_item',
+  Interface = 'interface',
+  TypeAlias = 'type_alias',
 }
 
 export enum DecoratorType {
@@ -88,6 +95,7 @@ export interface DocEntryWithSourceInfo extends DocEntry {
 /** Base type for all documentation entities. */
 export interface DocEntry {
   entryType: EntryType;
+  aliases?: string[];
   name: string;
   description: string;
   rawComment: string;
@@ -100,7 +108,10 @@ export interface ConstantEntry extends DocEntry {
 }
 
 /** Documentation entity for a type alias. */
-export type TypeAliasEntry = ConstantEntry;
+export interface TypeAliasEntry extends ConstantEntry {
+  generics: GenericEntry[];
+  members: MemberEntry[]; // For merged namespaces
+}
 
 /** Documentation entity for a TypeScript class. */
 export interface ClassEntry extends DocEntry {
@@ -111,10 +122,13 @@ export interface ClassEntry extends DocEntry {
   implements: string[];
 }
 
-// From an API doc perspective, class and interfaces are identical.
-
 /** Documentation entity for a TypeScript interface. */
-export type InterfaceEntry = ClassEntry;
+export interface InterfaceEntry extends DocEntry {
+  members: MemberEntry[];
+  generics: GenericEntry[];
+  extends: string[];
+  implements: string[];
+}
 
 /** Documentation entity for a TypeScript enum. */
 export interface EnumEntry extends DocEntry {
@@ -124,7 +138,14 @@ export interface EnumEntry extends DocEntry {
 /** Documentation entity for an Angular decorator. */
 export interface DecoratorEntry extends DocEntry {
   decoratorType: DecoratorType;
-  members: PropertyEntry[];
+  // Used when the decorator matches 1-to-1 an Interface, ex: Component, Interface
+  members: PropertyEntry[] | null;
+
+  // For all other cases, the decorator is akin to a function
+  signatures: {
+    parameters: ParameterEntry[];
+    jsdocTags: JsDocTagEntry[];
+  }[];
 }
 
 /** Documentation entity for an Angular directives and components. */
@@ -135,9 +156,10 @@ export interface DirectiveEntry extends ClassEntry {
 }
 
 export interface PipeEntry extends ClassEntry {
-  pipeName: string;
+  pipeName: string | null;
   isStandalone: boolean;
-  // TODO: add `isPure`.
+  usage: string;
+  isPure: boolean;
 }
 
 export interface FunctionSignatureMetadata extends DocEntry {
@@ -175,6 +197,12 @@ export interface PropertyEntry extends MemberEntry {
 /** Sub-entry for a class method. */
 export type MethodEntry = MemberEntry & FunctionEntry;
 
+/** Sub-entry for an interface (included via namespace). */
+export type InterfaceMemberEntry = MemberEntry & InterfaceEntry;
+
+/** Sub-entry for a type alias (included via namespace). */
+export type TypeAliasMemberEntry = MemberEntry & TypeAliasEntry;
+
 /** Sub-entry for a single function parameter. */
 export interface ParameterEntry {
   name: string;
@@ -194,6 +222,11 @@ export interface FunctionDefinitionEntry {
   name: string;
   signatures: FunctionSignatureMetadata[];
   implementation: FunctionSignatureMetadata | null;
+}
+
+/** Documentation entity for a TypeScript namespace. */
+export interface NamespaceEntry extends DocEntry {
+  members: DocEntry[];
 }
 
 /**

@@ -10,11 +10,10 @@ import {
   AST,
   EmptyExpr,
   ImplicitReceiver,
-  LetDeclaration,
   LiteralPrimitive,
   PropertyRead,
-  PropertyWrite,
   SafePropertyRead,
+  ThisReceiver,
   TmplAstLetDeclaration,
   TmplAstNode,
   TmplAstReference,
@@ -27,14 +26,14 @@ import {AbsoluteFsPath} from '../../file_system';
 import {
   CompletionKind,
   GlobalCompletion,
+  LetDeclarationCompletion,
   ReferenceCompletion,
   TcbLocation,
   VariableCompletion,
-  LetDeclarationCompletion,
 } from '../api';
 
 import {ExpressionIdentifier, findFirstMatchingNode} from './comments';
-import {TemplateData} from './context';
+import {TypeCheckData} from './context';
 
 /**
  * Powers autocompletion for a specific component.
@@ -44,6 +43,10 @@ import {TemplateData} from './context';
  */
 export class CompletionEngine {
   private componentContext: TcbLocation | null;
+  /**
+   * Get the `TcbLocation` for the global context, which is the location of the `this` variable.
+   */
+  private globalTsContext: TcbLocation | null;
 
   /**
    * Cache of completions for various levels of the template, including the root template (`null`).
@@ -61,7 +64,7 @@ export class CompletionEngine {
 
   constructor(
     private tcb: ts.Node,
-    private data: TemplateData,
+    private data: TypeCheckData,
     private tcbPath: AbsoluteFsPath,
     private tcbIsShim: boolean,
   ) {
@@ -80,9 +83,19 @@ export class CompletionEngine {
         // for the component context.
         positionInFile: globalRead.name.getStart(),
       };
+      this.globalTsContext = {
+        tcbPath: this.tcbPath,
+        isShimFile: this.tcbIsShim,
+        positionInFile: globalRead.name.getStart() - 1,
+      };
     } else {
       this.componentContext = null;
+      this.globalTsContext = null;
     }
+  }
+
+  getGlobalTsContext(): TcbLocation | null {
+    return this.globalTsContext;
   }
 
   /**
@@ -121,7 +134,10 @@ export class CompletionEngine {
       }
     }
 
-    if (node instanceof PropertyRead && node.receiver instanceof ImplicitReceiver) {
+    if (
+      node instanceof PropertyRead &&
+      (node.receiver instanceof ImplicitReceiver || node.receiver instanceof ThisReceiver)
+    ) {
       const nodeLocation = findFirstMatchingNode(this.tcb, {
         filter: ts.isPropertyAccessExpression,
         withSpan: node.sourceSpan,
@@ -142,40 +158,46 @@ export class CompletionEngine {
     };
   }
 
-  getExpressionCompletionLocation(
-    expr: PropertyRead | PropertyWrite | SafePropertyRead,
-  ): TcbLocation | null {
+  getExpressionCompletionLocation(expr: PropertyRead | SafePropertyRead): TcbLocation | null {
     if (this.expressionCompletionCache.has(expr)) {
       return this.expressionCompletionCache.get(expr)!;
     }
 
     // Completion works inside property reads and method calls.
     let tsExpr: ts.PropertyAccessExpression | null = null;
-    if (expr instanceof PropertyRead || expr instanceof PropertyWrite) {
+    if (expr instanceof PropertyRead) {
       // Non-safe navigation operations are trivial: `foo.bar` or `foo.bar()`
       tsExpr = findFirstMatchingNode(this.tcb, {
         filter: ts.isPropertyAccessExpression,
         withSpan: expr.nameSpan,
       });
     } else if (expr instanceof SafePropertyRead) {
-      // Safe navigation operations are a little more complex, and involve a ternary. Completion
-      // happens in the "true" case of the ternary.
-      const ternaryExpr = findFirstMatchingNode(this.tcb, {
-        filter: ts.isParenthesizedExpression,
-        withSpan: expr.sourceSpan,
+      // Safe navigation operations in strict mode are emitted as optional chains and in
+      // compatibility mode as regular property accesses wrapped in casts/assertions.
+      tsExpr = findFirstMatchingNode(this.tcb, {
+        filter: ts.isPropertyAccessExpression,
+        withSpan: expr.nameSpan,
       });
-      if (ternaryExpr === null || !ts.isConditionalExpression(ternaryExpr.expression)) {
-        return null;
-      }
-      const whenTrue = ternaryExpr.expression.whenTrue;
 
-      if (ts.isPropertyAccessExpression(whenTrue)) {
-        tsExpr = whenTrue;
-      } else if (
-        ts.isCallExpression(whenTrue) &&
-        ts.isPropertyAccessExpression(whenTrue.expression)
-      ) {
-        tsExpr = whenTrue.expression;
+      // Fall back to the older ternary-based TCB shape for compatibility.
+      const ternaryExpr =
+        tsExpr === null
+          ? findFirstMatchingNode(this.tcb, {
+              filter: ts.isParenthesizedExpression,
+              withSpan: expr.sourceSpan,
+            })
+          : null;
+      if (ternaryExpr !== null && ts.isConditionalExpression(ternaryExpr.expression)) {
+        const whenTrue = ternaryExpr.expression.whenTrue;
+
+        if (ts.isPropertyAccessExpression(whenTrue)) {
+          tsExpr = whenTrue;
+        } else if (
+          ts.isCallExpression(whenTrue) &&
+          ts.isPropertyAccessExpression(whenTrue.expression)
+        ) {
+          tsExpr = whenTrue.expression;
+        }
       }
     }
 

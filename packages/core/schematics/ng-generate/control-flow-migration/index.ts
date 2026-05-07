@@ -8,84 +8,83 @@
 
 import {Rule, SchematicContext, SchematicsException, Tree} from '@angular-devkit/schematics';
 import {join, relative} from 'path';
+import ts from 'typescript';
 
-import {normalizePath} from '../../utils/change_tracker';
 import {canMigrateFile, createMigrationProgram} from '../../utils/typescript/compiler_host';
 
 import {migrateTemplate} from './migration';
-import {AnalyzedFile, MigrateError} from './types';
+import {AnalyzedFile} from './types';
 import {analyze} from './util';
+import {getProjectTsConfigPaths} from '../../utils/project_tsconfig_paths';
+import {normalizePath} from '../../utils/change_tracker';
+import {MigrateError} from '../../utils/parse_html';
 
 interface Options {
-  path: string;
+  path?: string;
   format: boolean;
 }
 
 export function migrate(options: Options): Rule {
   return async (tree: Tree, context: SchematicContext) => {
-    const basePath = process.cwd();
-    const pathToMigrate = normalizePath(join(basePath, options.path));
     let allPaths = [];
-    if (pathToMigrate.trim() !== '') {
-      allPaths.push(pathToMigrate);
+    const basePath = process.cwd();
+    let pathToMigrate: string | undefined;
+    if (options.path) {
+      if (options.path.startsWith('..')) {
+        throw new SchematicsException(
+          'Cannot run control flow migration outside of the current project.',
+        );
+      }
+
+      pathToMigrate = normalizePath(join(basePath, options.path));
+      if (pathToMigrate.trim() !== '') {
+        allPaths.push(pathToMigrate);
+      }
+    } else {
+      const {buildPaths, testPaths} = await getProjectTsConfigPaths(tree);
+      allPaths = [...buildPaths, ...testPaths];
     }
 
     if (!allPaths.length) {
-      throw new SchematicsException(
+      context.logger.warn(
         'Could not find any tsconfig file. Cannot run the control flow migration.',
       );
+      return;
     }
 
     let errors: string[] = [];
+    let sourceFilesCount = 0;
 
     for (const tsconfigPath of allPaths) {
-      const migrateErrors = runControlFlowMigration(
-        tree,
-        tsconfigPath,
-        basePath,
-        pathToMigrate,
-        options,
-      );
+      const program = createMigrationProgram(tree, tsconfigPath, basePath);
+      const sourceFiles = program
+        .getSourceFiles()
+        .filter(
+          (sourceFile) =>
+            (pathToMigrate ? sourceFile.fileName.startsWith(pathToMigrate) : true) &&
+            canMigrateFile(basePath, sourceFile, program),
+        );
+
+      const migrateErrors = runControlFlowMigration(tree, sourceFiles, basePath, options);
       errors = [...errors, ...migrateErrors];
+      sourceFilesCount += sourceFiles.length;
     }
 
     if (errors.length > 0) {
       context.logger.warn(`WARNING: ${errors.length} errors occurred during your migration:\n`);
-      errors.forEach((err: string) => {
-        context.logger.warn(err);
-      });
+      errors.forEach((err) => context.logger.warn(err));
+    } else if (sourceFilesCount === 0) {
+      context.logger.warn('Control flow migration did not find any files to migrate');
     }
   };
 }
 
 function runControlFlowMigration(
   tree: Tree,
-  tsconfigPath: string,
+  sourceFiles: ts.SourceFile[],
   basePath: string,
-  pathToMigrate: string,
-  schematicOptions: Options,
+  schematicOptions?: Options,
 ): string[] {
-  if (schematicOptions.path.startsWith('..')) {
-    throw new SchematicsException(
-      'Cannot run control flow migration outside of the current project.',
-    );
-  }
-
-  const program = createMigrationProgram(tree, tsconfigPath, basePath);
-  const sourceFiles = program
-    .getSourceFiles()
-    .filter(
-      (sourceFile) =>
-        sourceFile.fileName.startsWith(pathToMigrate) &&
-        canMigrateFile(basePath, sourceFile, program),
-    );
-
-  if (sourceFiles.length === 0) {
-    throw new SchematicsException(
-      `Could not find any files to migrate under the path ${pathToMigrate}. Cannot run the control flow migration.`,
-    );
-  }
-
   const analysis = new Map<string, AnalyzedFile>();
   const migrateErrors = new Map<string, MigrateError[]>();
 
@@ -113,7 +112,7 @@ function runControlFlowMigration(
         type,
         node,
         file,
-        schematicOptions.format,
+        schematicOptions?.format ?? true,
         analysis,
       );
 

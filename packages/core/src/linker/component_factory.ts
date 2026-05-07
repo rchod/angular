@@ -6,19 +6,19 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
-import {ChangeDetectorRef} from '../change_detection/change_detection';
-import {Injector} from '../di/injector';
-import {EnvironmentInjector} from '../di/r3_injector';
-import {Type} from '../interface/type';
+import type {ChangeDetectorRef} from '../change_detection/change_detection';
+import type {Injector} from '../di/injector';
+import type {Type} from '../interface/type';
 
-import {ElementRef} from './element_ref';
-import {NgModuleRef} from './ng_module_factory';
-import {ViewRef} from './view_ref';
+import type {ElementRef} from './element_ref';
+import type {ViewRef} from './view_ref';
 
 /**
  * Represents a component created by a `ComponentFactory`.
  * Provides access to the component instance and related objects,
  * and provides the means of destroying the instance.
+ *
+ * @see [Programmatically rendering components](guide/components/programmatic-rendering)
  *
  * @publicApi
  */
@@ -76,51 +76,4 @@ export abstract class ComponentRef<C> {
    * associated with this component. Called when the `destroy()` method is invoked.
    */
   abstract onDestroy(callback: Function): void;
-}
-
-/**
- * Base class for a factory that can create a component dynamically.
- * Instantiate a factory for a given type of component with `resolveComponentFactory()`.
- * Use the resulting `ComponentFactory.create()` method to create a component of that type.
- *
- * @publicApi
- *
- * @deprecated Angular no longer requires Component factories. Please use other APIs where
- *     Component class can be used directly.
- */
-export abstract class ComponentFactory<C> {
-  /**
-   * The component's HTML selector.
-   */
-  abstract get selector(): string;
-  /**
-   * The type of component the factory will create.
-   */
-  abstract get componentType(): Type<any>;
-  /**
-   * Selector for all <ng-content> elements in the component.
-   */
-  abstract get ngContentSelectors(): string[];
-  /**
-   * The inputs of the component.
-   */
-  abstract get inputs(): {
-    propName: string;
-    templateName: string;
-    transform?: (value: any) => any;
-    isSignal: boolean;
-  }[];
-  /**
-   * The outputs of the component.
-   */
-  abstract get outputs(): {propName: string; templateName: string}[];
-  /**
-   * Creates a new component.
-   */
-  abstract create(
-    injector: Injector,
-    projectableNodes?: any[][],
-    rootSelectorOrNode?: string | any,
-    environmentInjector?: EnvironmentInjector | NgModuleRef<any>,
-  ): ComponentRef<C>;
 }

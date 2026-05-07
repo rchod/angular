@@ -10,9 +10,7 @@ import {
   AnimationMetadataType,
   AnimationOptions,
   ɵStyleDataMap,
-} from '@angular/animations';
-
-const EMPTY_ANIMATION_OPTIONS: AnimationOptions = {};
+} from '../../../src/animations';
 
 export interface AstVisitor {
   visitTrigger(ast: TriggerAst, context: any): any;

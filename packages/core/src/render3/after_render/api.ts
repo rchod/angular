@@ -23,19 +23,16 @@
  * so, Angular is better able to minimize the performance degradation associated with
  * manual DOM access, ensuring the best experience for the end users of your application
  * or library.
- *
- * @deprecated Specify the phase for your callback to run in by passing a spec-object as the first
- *   parameter to `afterRender` or `afterNextRender` instead of a function.
  */
-export enum AfterRenderPhase {
+export const enum AfterRenderPhase {
   /**
    * Use `AfterRenderPhase.EarlyRead` for callbacks that only need to **read** from the
    * DOM before a subsequent `AfterRenderPhase.Write` callback, for example to perform
    * custom layout that the browser doesn't natively support. Prefer the
-   * `AfterRenderPhase.EarlyRead` phase if reading can wait until after the write phase.
+   * `AfterRenderPhase.Read` phase if reading can wait until after the write phase.
    * **Never** write to the DOM in this phase.
    *
-   * <div class="alert is-important">
+   * <div class="docs-alert docs-alert-important">
    *
    * Using this value can degrade performance.
    * Instead, prefer using built-in browser functionality when possible.
@@ -55,7 +52,7 @@ export enum AfterRenderPhase {
    * DOM, that haven't been refactored to use a different phase. **Never** use this phase if
    * it is possible to divide the work among the other phases instead.
    *
-   * <div class="alert is-critical">
+   * <div class="docs-alert docs-alert-critical">
    *
    * Using this value can **significantly** degrade performance.
    * Instead, prefer dividing work into the appropriate phase callbacks.
@@ -74,7 +71,7 @@ export enum AfterRenderPhase {
 /**
  * A callback that runs after render.
  *
- * @developerPreview
+ * @publicApi
  */
 export interface AfterRenderRef {
   /**

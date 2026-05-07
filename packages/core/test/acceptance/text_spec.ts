@@ -5,12 +5,13 @@
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.dev/license
  */
-import {Component} from '@angular/core';
-import {TestBed} from '@angular/core/testing';
+import {Component} from '../../src/core';
+import {TestBed} from '../../testing';
 import {of} from 'rxjs';
 
 describe('text instructions', () => {
   it('should handle all flavors of interpolated text', () => {
+    // prettier-ignore
     @Component({
       template: `
         <div>a{{one}}b{{two}}c{{three}}d{{four}}e{{five}}f{{six}}g{{seven}}h{{eight}}i{{nine}}j</div>
@@ -24,6 +25,7 @@ describe('text instructions', () => {
         <div>a{{one}}b</div>
         <div>{{one}}</div>
       `,
+      standalone: false,
     })
     class App {
       one = 1;
@@ -60,10 +62,12 @@ describe('text instructions', () => {
   });
 
   it('should handle piped values in interpolated text', () => {
+    // prettier-ignore
     @Component({
       template: `
         <p>{{who | async}} sells {{(item | async)?.what}} down by the {{(item | async)?.where}}.</p>
       `,
+      standalone: false,
     })
     class App {
       who = of('Sally');
@@ -84,6 +88,7 @@ describe('text instructions', () => {
   it('should not sanitize urls in interpolated text', () => {
     @Component({
       template: '<p>{{thisisfine}}</p>',
+      standalone: false,
     })
     class App {
       thisisfine = 'javascript:alert("image_of_dog_with_coffee_in_burning_building.gif")';
@@ -102,6 +107,7 @@ describe('text instructions', () => {
   it('should not allow writing HTML in interpolated text', () => {
     @Component({
       template: '<div>{{test}}</div>',
+      standalone: false,
     })
     class App {
       test = '<h1>LOL, big text</h1>';
@@ -118,6 +124,7 @@ describe('text instructions', () => {
   it('should stringify functions used in bindings', () => {
     @Component({
       template: '<div>{{test}}</div>',
+      standalone: false,
     })
     class App {
       test = function foo() {};
@@ -142,7 +149,10 @@ describe('text instructions', () => {
       }
     }
 
-    @Component({template: '{{object}}'})
+    @Component({
+      template: '{{object}}',
+      standalone: false,
+    })
     class App {
       object = new TestObject();
     }
@@ -160,7 +170,10 @@ describe('text instructions', () => {
       return;
     }
 
-    @Component({template: '{{symbol}}'})
+    @Component({
+      template: '{{symbol}}',
+      standalone: false,
+    })
     class App {
       symbol = Symbol('hello');
     }
@@ -177,6 +190,7 @@ describe('text instructions', () => {
   it('should handle binding syntax used inside quoted text', () => {
     @Component({
       template: `{{'Interpolations look like {{this}}'}}`,
+      standalone: false,
     })
     class App {}
 

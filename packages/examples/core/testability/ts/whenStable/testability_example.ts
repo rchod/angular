@@ -6,8 +6,7 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
-import {Component, NgModule} from '@angular/core';
-import {BrowserModule} from '@angular/platform-browser';
+import {Component} from '@angular/core';
 
 @Component({
   selector: 'example-app',
@@ -25,6 +24,3 @@ export class StableTestCmp {
     }, 5000);
   }
 }
-
-@NgModule({imports: [BrowserModule], declarations: [StableTestCmp], bootstrap: [StableTestCmp]})
-export class AppModule {}

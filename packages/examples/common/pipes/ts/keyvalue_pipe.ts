@@ -6,16 +6,26 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
+import {KeyValuePipe} from '@angular/common';
 import {Component} from '@angular/core';
 
 // #docregion KeyValuePipe
 @Component({
   selector: 'keyvalue-pipe',
-  template: `<span>
+  imports: [KeyValuePipe],
+  template: ` <span>
     <p>Object</p>
-    <div *ngFor="let item of object | keyvalue">{{ item.key }}:{{ item.value }}</div>
+    @for (item of object | keyvalue; track item.key) {
+      <div>{{ item.key }}:{{ item.value }}</div>
+    }
     <p>Map</p>
-    <div *ngFor="let item of map | keyvalue">{{ item.key }}:{{ item.value }}</div>
+    @for (item of map | keyvalue; track item.key) {
+      <div>{{ item.key }}:{{ item.value }}</div>
+    }
+    <p>Natural order</p>
+    @for (item of map | keyvalue: null; track item.key) {
+      <div>{{ item.key }}:{{ item.value }}</div>
+    }
   </span>`,
 })
 export class KeyValuePipeComponent {

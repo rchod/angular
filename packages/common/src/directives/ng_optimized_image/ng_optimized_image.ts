@@ -7,35 +7,32 @@
  */
 
 import {
+  ApplicationRef,
   booleanAttribute,
+  ChangeDetectorRef,
+  DestroyRef,
   Directive,
   ElementRef,
+  ɵformatRuntimeError as formatRuntimeError,
+  ɵIMAGE_CONFIG as IMAGE_CONFIG,
+  ɵIMAGE_CONFIG_DEFAULTS as IMAGE_CONFIG_DEFAULTS,
+  ɵImageConfig as ImageConfig,
   inject,
   Injector,
   Input,
   NgZone,
   numberAttribute,
   OnChanges,
-  OnDestroy,
   OnInit,
-  PLATFORM_ID,
-  Renderer2,
-  SimpleChanges,
-  ɵformatRuntimeError as formatRuntimeError,
-  ɵIMAGE_CONFIG as IMAGE_CONFIG,
-  ɵIMAGE_CONFIG_DEFAULTS as IMAGE_CONFIG_DEFAULTS,
-  ɵImageConfig as ImageConfig,
   ɵperformanceMarkFeature as performanceMarkFeature,
+  Renderer2,
   ɵRuntimeError as RuntimeError,
   ɵSafeValue as SafeValue,
+  SimpleChanges,
   ɵunwrapSafeValue as unwrapSafeValue,
-  ChangeDetectorRef,
-  ApplicationRef,
-  ɵwhenStable as whenStable,
 } from '@angular/core';
 
 import {RuntimeErrorCode} from '../../errors';
-import {isPlatformServer} from '../../platform_id';
 
 import {imgDirectiveDetails} from './error_helper';
 import {cloudinaryLoaderInfo} from './image_loaders/cloudinary_loader';
@@ -115,11 +112,6 @@ const FIXED_SRCSET_WIDTH_LIMIT = 1920;
 const FIXED_SRCSET_HEIGHT_LIMIT = 1080;
 
 /**
- * Default blur radius of the CSS filter used on placeholder images, in pixels
- */
-export const PLACEHOLDER_BLUR_AMOUNT = 15;
-
-/**
  * Placeholder dimension (height or width) limit in pixels. Angular produces a warning
  * when this limit is crossed.
  */
@@ -191,11 +183,9 @@ export interface ImagePlaceholderConfig {
  * - Warns if the image will be visually distorted when rendered
  *
  * @usageNotes
- * The `NgOptimizedImage` directive is marked as [standalone](guide/components/importing) and can
- * be imported directly.
  *
  * Follow the steps below to enable and use the directive:
- * 1. Import it into the necessary NgModule or a standalone Component.
+ * 1. Import it into a Component.
  * 2. Optionally provide an `ImageLoader` if you use an image hosting service.
  * 3. Update the necessary `<img>` tags in templates and replace `src` attributes with `ngSrc`.
  * Using a `ngSrc` allows the directive to control when the `src` gets set, which triggers an image
@@ -203,21 +193,11 @@ export interface ImagePlaceholderConfig {
  *
  * Step 1: import the `NgOptimizedImage` directive.
  *
- * ```typescript
- * import { NgOptimizedImage } from '@angular/common';
- *
- * // Include it into the necessary NgModule
- * @NgModule({
- *   imports: [NgOptimizedImage],
- * })
- * class AppModule {}
- *
- * // ... or a standalone Component
+ * ```ts
  * @Component({
- *   standalone: true
  *   imports: [NgOptimizedImage],
  * })
- * class MyStandaloneComponent {}
+ * class MyPage {}
  * ```
  *
  * Step 2: configure a loader.
@@ -229,7 +209,7 @@ export interface ImagePlaceholderConfig {
  * To use an existing loader for a **third-party image service**: add the provider factory for your
  * chosen service to the `providers` array. In the example below, the Imgix loader is used:
  *
- * ```typescript
+ * ```ts
  * import {provideImgixLoader} from '@angular/common';
  *
  * // Call the function and add the result to the `providers` array:
@@ -250,7 +230,7 @@ export interface ImagePlaceholderConfig {
  * To use a **custom loader**: provide your loader function as a value for the `IMAGE_LOADER` DI
  * token.
  *
- * ```typescript
+ * ```ts
  * import {IMAGE_LOADER, ImageLoaderConfig} from '@angular/common';
  *
  * // Configure the loader using the `IMAGE_LOADER` token.
@@ -258,7 +238,7 @@ export interface ImagePlaceholderConfig {
  *   {
  *      provide: IMAGE_LOADER,
  *      useValue: (config: ImageLoaderConfig) => {
- *        return `https://example.com/${config.src}-${config.width}.jpg}`;
+ *        return `https://example.com/${config.src}-${config.width}.jpg`;
  *      }
  *   },
  * ],
@@ -266,14 +246,14 @@ export interface ImagePlaceholderConfig {
  *
  * Step 3: update `<img>` tags in templates to use `ngSrc` instead of `src`.
  *
- * ```
+ * ```html
  * <img ngSrc="logo.png" width="200" height="100">
  * ```
  *
  * @publicApi
+ * @see [Image Optimization Guide](guide/image-optimization)
  */
 @Directive({
-  standalone: true,
   selector: 'img[ngSrc]',
   host: {
     '[style.position]': 'fill ? "absolute" : null',
@@ -284,25 +264,26 @@ export interface ImagePlaceholderConfig {
     '[style.background-position]': 'placeholder ? "50% 50%" : null',
     '[style.background-repeat]': 'placeholder ? "no-repeat" : null',
     '[style.background-image]': 'placeholder ? generatePlaceholder(placeholder) : null',
-    '[style.filter]': `placeholder && shouldBlurPlaceholder(placeholderConfig) ? "blur(${PLACEHOLDER_BLUR_AMOUNT}px)" : null`,
+    '[style.filter]':
+      'placeholder && shouldBlurPlaceholder(placeholderConfig) ? "blur(15px)" : null',
   },
 })
-export class NgOptimizedImage implements OnInit, OnChanges, OnDestroy {
+export class NgOptimizedImage implements OnInit, OnChanges {
   private imageLoader = inject(IMAGE_LOADER);
   private config: ImageConfig = processConfig(inject(IMAGE_CONFIG));
   private renderer = inject(Renderer2);
   private imgElement: HTMLImageElement = inject(ElementRef).nativeElement;
   private injector = inject(Injector);
-  private readonly isServer = isPlatformServer(inject(PLATFORM_ID));
-  private readonly preloadLinkCreator = inject(PreloadLinkCreator);
+  private destroyRef = inject(DestroyRef);
 
-  // a LCP image observer - should be injected only in the dev mode
-  private lcpObserver = ngDevMode ? this.injector.get(LCPImageObserver) : null;
+  // An LCP image observer should be injected only in development mode.
+  // Do not assign it to `null` to avoid having a redundant property in the production bundle.
+  private lcpObserver?: LCPImageObserver;
 
   /**
    * Calculate the rewritten `src` once and store it.
    * This is needed to avoid repetitive calculations and make sure the directive cleanup in the
-   * `ngOnDestroy` does not rely on the `IMAGE_LOADER` logic (which in turn can rely on some other
+   * `DestroyRef.onDestroy` does not rely on the `IMAGE_LOADER` logic (which in turn can rely on some other
    * instance that might be already destroyed).
    */
   private _renderedSrc: string | null = null;
@@ -320,7 +301,7 @@ export class NgOptimizedImage implements OnInit, OnChanges, OnDestroy {
    * descriptors to generate the final `srcset` property of the image.
    *
    * Example:
-   * ```
+   * ```html
    * <img ngSrc="hello.jpg" ngSrcset="100w, 200w" />  =>
    * <img src="path/hello.jpg" srcset="path/hello.jpg?w=100 100w, path/hello.jpg?w=200 200w" />
    * ```
@@ -344,6 +325,18 @@ export class NgOptimizedImage implements OnInit, OnChanges, OnDestroy {
    * For fixed size images: the desired rendered height of the image in pixels.
    */
   @Input({transform: numberAttribute}) height: number | undefined;
+
+  /**
+   * The desired decoding behavior for the image. Defaults to `auto`
+   * if not explicitly set, matching native browser behavior.
+   *
+   * Use `async` to decode the image off the main thread (non-blocking),
+   * `sync` for immediate decoding (blocking), or `auto` to let the
+   * browser decide the optimal strategy.
+   *
+   * [Spec](https://html.spec.whatwg.org/multipage/images.html#image-decoding-hint)
+   */
+  @Input() decoding?: 'sync' | 'async' | 'auto';
 
   /**
    * The desired loading behavior (lazy, eager, or auto). Defaults to `lazy`,
@@ -403,7 +396,28 @@ export class NgOptimizedImage implements OnInit, OnChanges, OnDestroy {
    */
   @Input() srcset?: string;
 
-  /** @nodoc */
+  constructor() {
+    if (ngDevMode) {
+      this.lcpObserver = this.injector.get(LCPImageObserver);
+
+      this.destroyRef.onDestroy(() => {
+        if (!this.priority && this._renderedSrc !== null) {
+          this.lcpObserver!.unregisterImage(this._renderedSrc);
+        }
+      });
+    }
+
+    // Browsers might re-evaluate the image during DOM teardown when using `sizes="auto"`
+    // with `loading="lazy"`, potentially triggering an unnecessary image fetch.
+    // This is expected behavior per the HTML spec
+    // See: https://html.spec.whatwg.org/multipage/images.html#sizes-attributes
+    // See also: https://github.com/angular/angular/issues/67055#issuecomment-3898513831
+    this.destroyRef.onDestroy(() => {
+      this.renderer.removeAttribute(this.imgElement, 'loading');
+    });
+  }
+
+  /** @docs-private */
   ngOnInit() {
     performanceMarkFeature('NgOptimizedImage');
 
@@ -422,7 +436,7 @@ export class NgOptimizedImage implements OnInit, OnChanges, OnDestroy {
         // This leaves the Angular zone to avoid triggering unnecessary change detection cycles when
         // `load` tasks are invoked on images.
         ngZone.runOutsideAngular(() =>
-          assertNonZeroRenderedHeight(this, this.imgElement, this.renderer),
+          assertNonZeroRenderedHeight(this, this.imgElement, this.renderer, this.destroyRef),
         );
       } else {
         assertNonEmptyWidthAndHeight(this);
@@ -435,10 +449,11 @@ export class NgOptimizedImage implements OnInit, OnChanges, OnDestroy {
         // Only check for distorted images when not in fill mode, where
         // images may be intentionally stretched, cropped or letterboxed.
         ngZone.runOutsideAngular(() =>
-          assertNoImageDistortion(this, this.imgElement, this.renderer),
+          assertNoImageDistortion(this, this.imgElement, this.renderer, this.destroyRef),
         );
       }
       assertValidLoadingInput(this);
+      assertValidDecodingInput(this);
       if (!this.ngSrcset) {
         assertNoComplexSizes(this);
       }
@@ -447,18 +462,15 @@ export class NgOptimizedImage implements OnInit, OnChanges, OnDestroy {
       assertNoNgSrcsetWithoutLoader(this, this.imageLoader);
       assertNoLoaderParamsWithoutLoader(this, this.imageLoader);
 
-      if (this.lcpObserver !== null) {
-        const ngZone = this.injector.get(NgZone);
-        ngZone.runOutsideAngular(() => {
-          this.lcpObserver!.registerImage(this.getRewrittenSrc(), this.ngSrc, this.priority);
-        });
-      }
+      ngZone.runOutsideAngular(() => {
+        this.lcpObserver!.registerImage(this.getRewrittenSrc(), this.priority);
+      });
 
       if (this.priority) {
         const checker = this.injector.get(PreconnectLinkChecker);
         checker.assertPreconnect(this.getRewrittenSrc(), this.ngSrc);
 
-        if (!this.isServer) {
+        if (typeof ngServerMode !== 'undefined' && !ngServerMode) {
           const applicationRef = this.injector.get(ApplicationRef);
           assetPriorityCountBelowThreshold(applicationRef);
         }
@@ -482,6 +494,7 @@ export class NgOptimizedImage implements OnInit, OnChanges, OnDestroy {
 
     this.setHostAttribute('loading', this.getLoadingBehavior());
     this.setHostAttribute('fetchpriority', this.getFetchPriority());
+    this.setHostAttribute('decoding', this.getDecoding());
 
     // The `data-ng-img` attribute flags an image as using the directive, to allow
     // for analysis of the directive's performance.
@@ -507,8 +520,9 @@ export class NgOptimizedImage implements OnInit, OnChanges, OnDestroy {
       }
     }
 
-    if (this.isServer && this.priority) {
-      this.preloadLinkCreator.createPreloadLinkTag(
+    if (typeof ngServerMode !== 'undefined' && ngServerMode && this.priority) {
+      const preloadLinkCreator = this.injector.get(PreloadLinkCreator);
+      preloadLinkCreator.createPreloadLinkTag(
         this.renderer,
         this.getRewrittenSrc(),
         rewrittenSrcset,
@@ -517,8 +531,8 @@ export class NgOptimizedImage implements OnInit, OnChanges, OnDestroy {
     }
   }
 
-  /** @nodoc */
-  ngOnChanges(changes: SimpleChanges) {
+  /** @docs-private */
+  ngOnChanges(changes: SimpleChanges<NgOptimizedImage>) {
     if (ngDevMode) {
       assertNoPostInitInputChange(this, changes, [
         'ngSrcset',
@@ -535,18 +549,37 @@ export class NgOptimizedImage implements OnInit, OnChanges, OnDestroy {
     if (changes['ngSrc'] && !changes['ngSrc'].isFirstChange()) {
       const oldSrc = this._renderedSrc;
       this.updateSrcAndSrcset(true);
-      const newSrc = this._renderedSrc;
-      if (this.lcpObserver !== null && oldSrc && newSrc && oldSrc !== newSrc) {
-        const ngZone = this.injector.get(NgZone);
-        ngZone.runOutsideAngular(() => {
-          this.lcpObserver?.updateImage(oldSrc, newSrc);
-        });
+
+      if (ngDevMode) {
+        const newSrc = this._renderedSrc;
+        if (oldSrc && newSrc && oldSrc !== newSrc) {
+          const ngZone = this.injector.get(NgZone);
+          ngZone.runOutsideAngular(() => {
+            this.lcpObserver!.updateImage(oldSrc, newSrc);
+          });
+        }
       }
     }
 
-    if (ngDevMode && changes['placeholder']?.currentValue && !this.isServer) {
+    if (
+      ngDevMode &&
+      changes['placeholder']?.currentValue &&
+      typeof ngServerMode !== 'undefined' &&
+      !ngServerMode
+    ) {
       assertPlaceholderDimensions(this, this.imgElement);
     }
+  }
+
+  /**
+   * Calculates the aspect ratio of the image based on width and height.
+   * Returns null if the aspect ratio cannot be calculated (missing dimensions or height is 0).
+   */
+  private getAspectRatio(): number | null {
+    if (this.width && this.height && this.height !== 0) {
+      return this.width / this.height;
+    }
+    return null;
   }
 
   private callImageLoader(
@@ -555,6 +588,11 @@ export class NgOptimizedImage implements OnInit, OnChanges, OnDestroy {
     let augmentedConfig: ImageLoaderConfig = configWithoutCustomParams;
     if (this.loaderParams) {
       augmentedConfig.loaderParams = this.loaderParams;
+    }
+    // Calculate height if width is provided and aspect ratio is available
+    const ratio = this.getAspectRatio();
+    if (ratio !== null && augmentedConfig.width) {
+      augmentedConfig.height = Math.round(augmentedConfig.width / ratio);
     }
     return this.imageLoader(augmentedConfig);
   }
@@ -568,6 +606,20 @@ export class NgOptimizedImage implements OnInit, OnChanges, OnDestroy {
 
   private getFetchPriority(): string {
     return this.priority ? 'high' : 'auto';
+  }
+
+  private getDecoding(): string {
+    if (this.priority) {
+      // `sync` means the image is decoded immediately when it's loaded,
+      // reducing the risk of content shifting later (important for LCP).
+      // If we're marking an image as priority, we want it decoded and
+      // painted as early as possible.
+      return 'sync';
+    }
+    // Returns the value of the `decoding` attribute, defaulting to `auto`
+    // if not explicitly provided. This mimics native browser behavior and
+    // avoids breaking changes when no decoding strategy is specified.
+    return this.decoding ?? 'auto';
   }
 
   private getRewrittenSrc(): string {
@@ -672,7 +724,7 @@ export class NgOptimizedImage implements OnInit, OnChanges, OnDestroy {
    * * A base64 encoded image, which is wrapped and passed through.
    * * A boolean. If true, calls the image loader to generate a small placeholder url.
    */
-  private generatePlaceholder(placeholderInput: string | boolean): string | boolean | null {
+  protected generatePlaceholder(placeholderInput: string | boolean): string | boolean | null {
     const {placeholderResolution} = this.config;
     if (placeholderInput === true) {
       return `url(${this.callImageLoader({
@@ -690,7 +742,7 @@ export class NgOptimizedImage implements OnInit, OnChanges, OnDestroy {
    * Determines if blur should be applied, based on an optional boolean
    * property `blur` within the optional configuration object `placeholderConfig`.
    */
-  private shouldBlurPlaceholder(placeholderConfig?: ImagePlaceholderConfig): boolean {
+  protected shouldBlurPlaceholder(placeholderConfig?: ImagePlaceholderConfig): boolean {
     if (!placeholderConfig || !placeholderConfig.hasOwnProperty('blur')) {
       return true;
     }
@@ -709,16 +761,15 @@ export class NgOptimizedImage implements OnInit, OnChanges, OnDestroy {
     const removeLoadListenerFn = this.renderer.listen(img, 'load', callback);
     const removeErrorListenerFn = this.renderer.listen(img, 'error', callback);
 
-    callOnLoadIfImageIsLoaded(img, callback);
-  }
+    // Clean up listeners once the view is destroyed, before the image
+    // loads or fails to load, to avoid element from being captured
+    // in memory and redundant change detection.
+    this.destroyRef.onDestroy(() => {
+      removeLoadListenerFn();
+      removeErrorListenerFn();
+    });
 
-  /** @nodoc */
-  ngOnDestroy() {
-    if (ngDevMode) {
-      if (!this.priority && this._renderedSrc !== null && this.lcpObserver !== null) {
-        this.lcpObserver.unregisterImage(this._renderedSrc);
-      }
-    }
+    callOnLoadIfImageIsLoaded(img, callback);
   }
 
   private setHostAttribute(name: string, value: string): void {
@@ -974,7 +1025,7 @@ function postInitInputChangeError(dir: NgOptimizedImage, inputName: string): {} 
     `${imgDirectiveDetails(dir.ngSrc)} \`${inputName}\` was updated after initialization. ` +
       `The NgOptimizedImage directive will not react to this input change. ${reason} ` +
       `To fix this, either switch \`${inputName}\` to a static value ` +
-      `or wrap the image element in an *ngIf that is gated on the necessary value.`,
+      `or wrap the image element in an @if that is gated on the necessary value.`,
   );
 }
 
@@ -1026,6 +1077,7 @@ function assertNoImageDistortion(
   dir: NgOptimizedImage,
   img: HTMLImageElement,
   renderer: Renderer2,
+  destroyRef: DestroyRef,
 ) {
   const callback = () => {
     removeLoadListenerFn();
@@ -1133,6 +1185,14 @@ function assertNoImageDistortion(
     removeErrorListenerFn();
   });
 
+  // Clean up listeners once the view is destroyed, before the image
+  // loads or fails to load, to avoid element from being captured
+  // in memory and redundant change detection.
+  destroyRef.onDestroy(() => {
+    removeLoadListenerFn();
+    removeErrorListenerFn();
+  });
+
   callOnLoadIfImageIsLoaded(img, callback);
 }
 
@@ -1178,6 +1238,7 @@ function assertNonZeroRenderedHeight(
   dir: NgOptimizedImage,
   img: HTMLImageElement,
   renderer: Renderer2,
+  destroyRef: DestroyRef,
 ) {
   const callback = () => {
     removeLoadListenerFn();
@@ -1201,6 +1262,14 @@ function assertNonZeroRenderedHeight(
 
   // See comments in the `assertNoImageDistortion`.
   const removeErrorListenerFn = renderer.listen(img, 'error', () => {
+    removeLoadListenerFn();
+    removeErrorListenerFn();
+  });
+
+  // Clean up listeners once the view is destroyed, before the image
+  // loads or fails to load, to avoid element from being captured
+  // in memory and redundant change detection.
+  destroyRef.onDestroy(() => {
     removeLoadListenerFn();
     removeErrorListenerFn();
   });
@@ -1230,6 +1299,21 @@ function assertValidLoadingInput(dir: NgOptimizedImage) {
       `${imgDirectiveDetails(dir.ngSrc)} the \`loading\` attribute ` +
         `has an invalid value (\`${dir.loading}\`). ` +
         `To fix this, provide a valid value ("lazy", "eager", or "auto").`,
+    );
+  }
+}
+
+/**
+ * Verifies that the `decoding` attribute is set to a valid input.
+ */
+function assertValidDecodingInput(dir: NgOptimizedImage) {
+  const validInputs = ['sync', 'async', 'auto'];
+  if (typeof dir.decoding === 'string' && !validInputs.includes(dir.decoding)) {
+    throw new RuntimeError(
+      RuntimeErrorCode.INVALID_INPUT,
+      `${imgDirectiveDetails(dir.ngSrc)} the \`decoding\` attribute ` +
+        `has an invalid value (\`${dir.decoding}\`). ` +
+        `To fix this, provide a valid value ("sync", "async", or "auto").`,
     );
   }
 }
@@ -1310,7 +1394,7 @@ function assertNoLoaderParamsWithoutLoader(dir: NgOptimizedImage, imageLoader: I
 async function assetPriorityCountBelowThreshold(appRef: ApplicationRef) {
   if (IMGS_WITH_PRIORITY_ATTR_COUNT === 0) {
     IMGS_WITH_PRIORITY_ATTR_COUNT++;
-    await whenStable(appRef);
+    await appRef.whenStable();
     if (IMGS_WITH_PRIORITY_ATTR_COUNT > PRIORITY_COUNT_THRESHOLD) {
       console.warn(
         formatRuntimeError(

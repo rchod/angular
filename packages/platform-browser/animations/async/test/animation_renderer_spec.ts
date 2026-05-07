@@ -24,26 +24,29 @@ import {
   afterNextRender,
   ANIMATION_MODULE_TYPE,
   Component,
+  ErrorHandler,
   inject,
   Injectable,
   Injector,
   NgZone,
+  provideZoneChangeDetection,
   RendererFactory2,
   RendererType2,
   runInInjectionContext,
   ViewChild,
 } from '@angular/core';
 import {TestBed} from '@angular/core/testing';
-import {ɵDomRendererFactory2 as DomRendererFactory2} from '@angular/platform-browser';
-import {InjectableAnimationEngine} from '@angular/platform-browser/animations/src/providers';
-import {el} from '@angular/platform-browser/testing/src/browser_util';
+import {el, isNode} from '@angular/private/testing';
+import {InjectableAnimationEngine} from '../../../animations/src/providers';
+import {ɵDomRendererFactory2 as DomRendererFactory2} from '../../../index';
 
+import {ChangeDetectionStrategy} from '@angular/compiler';
+import {provideAnimationsAsync} from '../public_api';
 import {
   AsyncAnimationRendererFactory,
   DynamicDelegationRenderer,
   ɵASYNC_ANIMATION_LOADING_SCHEDULER_FN,
 } from '../src/async_animation_renderer';
-import {provideAnimationsAsync} from '../public_api';
 
 type AnimationBrowserModule = typeof import('@angular/animations/browser');
 
@@ -267,6 +270,7 @@ type AnimationBrowserModule = typeof import('@angular/animations/browser');
               ]),
             ]),
           ],
+          standalone: false,
         })
         class Cmp {
           exp: any;
@@ -306,13 +310,18 @@ type AnimationBrowserModule = typeof import('@angular/animations/browser');
               ]),
             ]),
           ],
+          standalone: false,
+          changeDetection: ChangeDetectionStrategy.Eager,
         })
         class Cmp {
           exp: any;
           @ViewChild('elm') public element: any;
         }
 
-        TestBed.configureTestingModule({declarations: [Cmp]});
+        TestBed.configureTestingModule({
+          declarations: [Cmp],
+          providers: [provideZoneChangeDetection()],
+        });
 
         const fixture = TestBed.createComponent(Cmp);
         const cmp = fixture.componentInstance;
@@ -336,14 +345,16 @@ type AnimationBrowserModule = typeof import('@angular/animations/browser');
         @Component({
           selector: 'my-cmp',
           template: `
-               <div #elm1 *ngIf="exp1"></div>
-               <div #elm2 @animation1 *ngIf="exp2"></div>
-               <div #elm3 @animation2 *ngIf="exp3"></div>
-            `,
+            <div #elm1 *ngIf="exp1"></div>
+            <div #elm2 @animation1 *ngIf="exp2"></div>
+            <div #elm3 @animation2 *ngIf="exp3"></div>
+          `,
           animations: [
             trigger('animation1', [transition('a => b', [])]),
             trigger('animation2', [transition(':leave', [])]),
           ],
+          standalone: false,
+          changeDetection: ChangeDetectionStrategy.Eager,
         })
         class Cmp {
           exp1: any = true;
@@ -357,7 +368,10 @@ type AnimationBrowserModule = typeof import('@angular/animations/browser');
           @ViewChild('elm3') public elm3: any;
         }
 
-        TestBed.configureTestingModule({declarations: [Cmp]});
+        TestBed.configureTestingModule({
+          declarations: [Cmp],
+          providers: [provideZoneChangeDetection()],
+        });
 
         const engine = TestBed.inject(AnimationEngine);
         const fixture = TestBed.createComponent(Cmp);
@@ -443,6 +457,26 @@ type AnimationBrowserModule = typeof import('@angular/animations/browser');
           expect((err as Error).message).toBe('SchedulingError');
         }
       });
+    });
+
+    it('should be able to inject the renderer factory in an ErrorHandler', async () => {
+      @Injectable({providedIn: 'root'})
+      class CustomErrorHandler {
+        renderer = inject(RendererFactory2).createRenderer(null, null);
+      }
+
+      @Component({template: ''})
+      class App {}
+
+      TestBed.resetTestingModule();
+      TestBed.configureTestingModule({
+        providers: [
+          provideAnimationsAsync(),
+          {provide: ErrorHandler, useClass: CustomErrorHandler},
+        ],
+      });
+
+      expect(() => TestBed.createComponent(App)).not.toThrow();
     });
   });
 })();

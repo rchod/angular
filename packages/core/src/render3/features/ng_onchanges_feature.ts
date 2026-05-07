@@ -7,12 +7,12 @@
  */
 
 import {InputSignalNode} from '../../authoring/input/input_signal_node';
-import {OnChanges} from '../../interface/lifecycle_hooks';
-import {SimpleChange, SimpleChanges} from '../../interface/simple_change';
+import {OnChanges} from '../../change_detection/lifecycle_hooks';
 import {assertString} from '../../util/assert';
 import {EMPTY_OBJ} from '../../util/empty';
 import {applyValueToInputField} from '../apply_value_input_field';
 import {DirectiveDef, DirectiveDefFeature} from '../interfaces/definition';
+import {SimpleChange, SimpleChanges} from '../../change_detection/simple_change';
 
 /**
  * The NgOnChangesFeature decorates a component with support for the ngOnChanges
@@ -26,7 +26,7 @@ import {DirectiveDef, DirectiveDefFeature} from '../interfaces/definition';
  *
  * Example usage:
  *
- * ```
+ * ```ts
  * static ɵcmp = defineComponent({
  *   ...
  *   inputs: {name: 'publicName'},
@@ -36,9 +36,16 @@ import {DirectiveDef, DirectiveDefFeature} from '../interfaces/definition';
  *
  * @codeGenApi
  */
-export function ɵɵNgOnChangesFeature<T>(): DirectiveDefFeature {
-  return NgOnChangesFeatureImpl;
-}
+export const ɵɵNgOnChangesFeature: () => DirectiveDefFeature = /* @__PURE__ */ (() => {
+  const ɵɵNgOnChangesFeatureImpl = () => NgOnChangesFeatureImpl;
+
+  // This option ensures that the ngOnChanges lifecycle hook will be inherited
+  // from superclasses (in InheritDefinitionFeature).
+  /** @nocollapse */
+  ɵɵNgOnChangesFeatureImpl.ngInherit = true;
+
+  return ɵɵNgOnChangesFeatureImpl;
+})();
 
 export function NgOnChangesFeatureImpl<T>(definition: DirectiveDef<T>) {
   if (definition.type.prototype.ngOnChanges) {
@@ -46,12 +53,6 @@ export function NgOnChangesFeatureImpl<T>(definition: DirectiveDef<T>) {
   }
   return rememberChangeHistoryAndInvokeOnChangesHook;
 }
-
-// This option ensures that the ngOnChanges lifecycle hook will be inherited
-// from superclasses (in InheritDefinitionFeature).
-/** @nocollapse */
-// tslint:disable-next-line:no-toplevel-property-access
-(ɵɵNgOnChangesFeature as DirectiveDefFeature).ngInherit = true;
 
 /**
  * This is a synthetic lifecycle hook which gets inserted into `TView.preOrderHooks` to simulate

@@ -246,7 +246,7 @@ function collectMessage(
   // Sort the params for consistency with TemaplateDefinitionBuilder output.
   messageOp.params = new Map([...messageOp.params.entries()].sort());
 
-  const mainVar = o.variable(job.pool.uniqueName(TRANSLATION_VAR_PREFIX));
+  const mainVar = o.variable(job.pool.uniqueName(TRANSLATION_VAR_PREFIX), o.DYNAMIC_TYPE);
   // Closure Compiler requires const names to start with `MSG_` but disallows any other
   // const to start with `MSG_`. We define a variable starting with `MSG_` just for the
   // `goog.getMsg` call
@@ -319,7 +319,7 @@ function addSubMessageParams(
 /**
  * Generate statements that define a given translation message.
  *
- * ```
+ * ```ts
  * var I18N_1;
  * if (typeof ngI18nClosureMode !== undefined && ngI18nClosureMode) {
  *     var MSG_EXTERNAL_XXX = goog.getMsg(
@@ -375,7 +375,7 @@ function getTranslationDeclStmts(
  * Create the expression that will be used to guard the closure mode block
  * It is equivalent to:
  *
- * ```
+ * ```ts
  * typeof ngI18nClosureMode !== undefined && ngI18nClosureMode
  * ```
  */

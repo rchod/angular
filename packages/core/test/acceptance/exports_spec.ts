@@ -7,6 +7,7 @@
  */
 
 import {
+  ChangeDetectionStrategy,
   Component,
   Directive,
   DoCheck,
@@ -15,8 +16,8 @@ import {
   OnInit,
   SimpleChanges,
   Type,
-} from '@angular/core';
-import {TestBed} from '@angular/core/testing';
+} from '../../src/core';
+import {TestBed} from '../../testing';
 
 describe('exports', () => {
   beforeEach(() => {
@@ -216,6 +217,7 @@ describe('exports', () => {
       fixture.detectChanges();
       fixture.componentInstance.outer = true;
       fixture.componentInstance.inner = true;
+      fixture.changeDetectorRef.markForCheck();
       fixture.detectChanges();
 
       // result should be <input value="one"><div>one <input value="two"><div>one - two</div></div>
@@ -229,32 +231,61 @@ describe('exports', () => {
 });
 
 function initWithTemplate(compType: Type<any>, template: string) {
-  TestBed.overrideComponent(compType, {set: new Component({template})});
+  TestBed.overrideComponent(compType, {
+    set: new Component({
+      template,
+      changeDetection: ChangeDetectionStrategy.Eager,
+    }),
+  });
   return TestBed.createComponent(compType);
 }
 
-@Component({selector: 'comp-to-ref', template: ''})
+@Component({
+  selector: 'comp-to-ref',
+  template: '',
+  standalone: false,
+
+  changeDetection: ChangeDetectionStrategy.Eager,
+})
 class ComponentToReference {
   name = 'Nancy';
 }
 
-@Component({selector: 'app-comp', template: ``})
+@Component({
+  selector: 'app-comp',
+  template: ``,
+  standalone: false,
+
+  changeDetection: ChangeDetectionStrategy.Eager,
+})
 class AppComp {
   outer = false;
   inner = false;
 }
 
-@Directive({selector: '[dir]', exportAs: 'dir'})
+@Directive({
+  selector: '[dir]',
+  exportAs: 'dir',
+  standalone: false,
+})
 class DirToReference {
   name = 'Drew';
 }
 
-@Directive({selector: '[dirWithInput]'})
+@Directive({
+  selector: '[dirWithInput]',
+  standalone: false,
+})
 class DirWithCompInput {
   @Input('dirWithInput') comp: ComponentToReference | null = null;
 }
 
-@Directive({selector: '[dir-on-change]', exportAs: 'dirOnChange', host: {'[title]': 'name'}})
+@Directive({
+  selector: '[dir-on-change]',
+  exportAs: 'dirOnChange',
+  host: {'[title]': 'name'},
+  standalone: false,
+})
 class DirToReferenceWithPreOrderHooks implements OnInit, OnChanges, DoCheck {
   @Input() in: any = null;
   name = 'Drew';

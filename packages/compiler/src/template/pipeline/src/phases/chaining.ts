@@ -11,36 +11,42 @@ import {Identifiers as R3} from '../../../../render3/r3_identifiers';
 import * as ir from '../../ir';
 import {CompilationJob} from '../compilation';
 
-const CHAINABLE = new Set([
-  R3.attribute,
-  R3.classProp,
-  R3.element,
-  R3.elementContainer,
-  R3.elementContainerEnd,
-  R3.elementContainerStart,
-  R3.elementEnd,
-  R3.elementStart,
-  R3.hostProperty,
-  R3.i18nExp,
-  R3.listener,
-  R3.listener,
-  R3.property,
-  R3.styleProp,
-  R3.stylePropInterpolate1,
-  R3.stylePropInterpolate2,
-  R3.stylePropInterpolate3,
-  R3.stylePropInterpolate4,
-  R3.stylePropInterpolate5,
-  R3.stylePropInterpolate6,
-  R3.stylePropInterpolate7,
-  R3.stylePropInterpolate8,
-  R3.stylePropInterpolateV,
-  R3.syntheticHostListener,
-  R3.syntheticHostProperty,
-  R3.templateCreate,
-  R3.twoWayProperty,
-  R3.twoWayListener,
-  R3.declareLet,
+const CHAIN_COMPATIBILITY = new Map<o.ExternalReference, o.ExternalReference>([
+  [R3.ariaProperty, R3.ariaProperty],
+  [R3.attribute, R3.attribute],
+  [R3.classProp, R3.classProp],
+  [R3.element, R3.element],
+  [R3.elementContainer, R3.elementContainer],
+  [R3.elementContainerEnd, R3.elementContainerEnd],
+  [R3.elementContainerStart, R3.elementContainerStart],
+  [R3.elementEnd, R3.elementEnd],
+  [R3.elementStart, R3.elementStart],
+  [R3.domProperty, R3.domProperty],
+  [R3.i18nExp, R3.i18nExp],
+  [R3.listener, R3.listener],
+  [R3.listener, R3.listener],
+  [R3.property, R3.property],
+  [R3.styleProp, R3.styleProp],
+  [R3.syntheticHostListener, R3.syntheticHostListener],
+  [R3.syntheticHostProperty, R3.syntheticHostProperty],
+  [R3.templateCreate, R3.templateCreate],
+  [R3.twoWayProperty, R3.twoWayProperty],
+  [R3.twoWayListener, R3.twoWayListener],
+  [R3.declareLet, R3.declareLet],
+  [R3.conditionalCreate, R3.conditionalBranchCreate],
+  [R3.conditionalBranchCreate, R3.conditionalBranchCreate],
+  [R3.domElement, R3.domElement],
+  [R3.domElementStart, R3.domElementStart],
+  [R3.domElementEnd, R3.domElementEnd],
+  [R3.domElementContainer, R3.domElementContainer],
+  [R3.domElementContainerStart, R3.domElementContainerStart],
+  [R3.domElementContainerEnd, R3.domElementContainerEnd],
+  [R3.domListener, R3.domListener],
+  [R3.domTemplate, R3.domTemplate],
+  [R3.animationEnter, R3.animationEnter],
+  [R3.animationLeave, R3.animationLeave],
+  [R3.animationEnterListener, R3.animationEnterListener],
+  [R3.animationLeaveListener, R3.animationLeaveListener],
 ]);
 
 /**
@@ -56,14 +62,14 @@ const MAX_CHAIN_LENGTH = 256;
  *
  * For example, two `elementStart` operations in sequence:
  *
- * ```typescript
+ * ```ts
  * elementStart(0, 'div');
  * elementStart(1, 'span');
  * ```
  *
  * Can be called as a chain instead:
  *
- * ```typescript
+ * ```ts
  * elementStart(0, 'div')(1, 'span');
  * ```
  */
@@ -92,7 +98,7 @@ function chainOperationsInList(opList: ir.OpList<ir.CreateOp | ir.UpdateOp>): vo
     }
 
     const instruction = op.statement.expr.fn.value;
-    if (!CHAINABLE.has(instruction)) {
+    if (!CHAIN_COMPATIBILITY.has(instruction)) {
       // This instruction isn't chainable.
       chain = null;
       continue;
@@ -100,7 +106,11 @@ function chainOperationsInList(opList: ir.OpList<ir.CreateOp | ir.UpdateOp>): vo
 
     // This instruction can be chained. It can either be added on to the previous chain (if
     // compatible) or it can be the start of a new chain.
-    if (chain !== null && chain.instruction === instruction && chain.length < MAX_CHAIN_LENGTH) {
+    if (
+      chain !== null &&
+      CHAIN_COMPATIBILITY.get(chain.instruction) === instruction &&
+      chain.length < MAX_CHAIN_LENGTH
+    ) {
       // This instruction can be added onto the previous chain.
       const expression = chain.expression.callFn(
         op.statement.expr.args,

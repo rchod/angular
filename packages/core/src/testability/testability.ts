@@ -6,7 +6,10 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
-import {Inject, Injectable, InjectionToken} from '../di';
+import {Inject, Injectable, InjectionToken, inject} from '../di';
+import {isInInjectionContext} from '../di/contextual';
+import {DestroyRef} from '../linker/destroy_ref';
+import {PendingTasksInternal} from '../pending_tasks_internal';
 import {NgZone} from '../zone/ng_zone';
 
 /**
@@ -60,6 +63,14 @@ export const TESTABILITY = new InjectionToken<Testability>('');
 export const TESTABILITY_GETTER = new InjectionToken<GetTestability>('');
 
 /**
+ * Internal injection token to signal whether to use pending tasks for stability.
+ */
+export const USE_PENDING_TASKS = new InjectionToken<boolean>('USE_PENDING_TASKS', {
+  providedIn: 'root',
+  factory: () => typeof Zone === 'undefined',
+});
+
+/**
  * The Testability service provides testing hooks that can be accessed from
  * the browser.
  *
@@ -71,7 +82,7 @@ export const TESTABILITY_GETTER = new InjectionToken<GetTestability>('');
  * providers using the `provideProtractorTestingSupport()` function and adding them into the
  * `options.providers` array. Example:
  *
- * ```typescript
+ * ```ts
  * import {provideProtractorTestingSupport} from '@angular/platform-browser';
  *
  * await bootstrapApplication(RootComponent, providers: [provideProtractorTestingSupport()]);
@@ -84,13 +95,23 @@ export class Testability implements PublicTestability {
   private _isZoneStable: boolean = true;
   private _callbacks: WaitCallback[] = [];
 
-  private taskTrackingZone: {macroTasks: Task[]} | null = null;
+  private _taskTrackingZone: {macroTasks: Task[]} | null = null;
 
+  private _destroyRef?: DestroyRef;
+
+  private readonly pendingTasksInternal = inject(PendingTasksInternal);
+  private readonly _usePendingTasks = inject(USE_PENDING_TASKS);
   constructor(
     private _ngZone: NgZone,
     private registry: TestabilityRegistry,
     @Inject(TESTABILITY_GETTER) testabilityGetter: GetTestability,
   ) {
+    // Attempt to retrieve a `DestroyRef` optionally.
+    // For backwards compatibility reasons, this cannot be required.
+    if (isInInjectionContext()) {
+      this._destroyRef = inject(DestroyRef, {optional: true}) ?? undefined;
+    }
+
     // If there was no Testability logic registered in the global scope
     // before, register the current testability getter as a global one.
     if (!_testabilityGetter) {
@@ -99,20 +120,35 @@ export class Testability implements PublicTestability {
     }
     this._watchAngularEvents();
     _ngZone.run(() => {
-      this.taskTrackingZone =
+      this._taskTrackingZone =
         typeof Zone == 'undefined' ? null : Zone.current.get('TaskTrackingZone');
     });
   }
 
   private _watchAngularEvents(): void {
-    this._ngZone.onUnstable.subscribe({
+    const onUnstableSubscription = this._ngZone.onUnstable.subscribe({
       next: () => {
         this._isZoneStable = false;
       },
     });
 
+    let pendingTasksSubscription: any;
+    let onStableSubscription: any;
+
     this._ngZone.runOutsideAngular(() => {
-      this._ngZone.onStable.subscribe({
+      if (this._usePendingTasks) {
+        pendingTasksSubscription = this.pendingTasksInternal.hasPendingTasksObservable.subscribe(
+          () => {
+            if (this.isStable()) {
+              this._ngZone.runOutsideAngular(() => {
+                this._runCallbacksIfReady();
+              });
+            }
+          },
+        );
+      }
+
+      onStableSubscription = this._ngZone.onStable.subscribe({
         next: () => {
           NgZone.assertNotInAngularZone();
           queueMicrotask(() => {
@@ -122,13 +158,23 @@ export class Testability implements PublicTestability {
         },
       });
     });
+
+    this._destroyRef?.onDestroy(() => {
+      onUnstableSubscription.unsubscribe();
+      pendingTasksSubscription?.unsubscribe();
+      onStableSubscription.unsubscribe();
+    });
   }
 
   /**
    * Whether an associated application is stable
    */
   isStable(): boolean {
-    return this._isZoneStable && !this._ngZone.hasPendingMacrotasks;
+    return (
+      this._isZoneStable &&
+      !this._ngZone.hasPendingMacrotasks &&
+      (!this._usePendingTasks || !this.pendingTasksInternal.hasPendingTasks)
+    );
   }
 
   private _runCallbacksIfReady(): void {
@@ -156,12 +202,12 @@ export class Testability implements PublicTestability {
   }
 
   private getPendingTasks(): PendingMacrotask[] {
-    if (!this.taskTrackingZone) {
+    if (!this._taskTrackingZone) {
       return [];
     }
 
     // Copy the tasks data so that we don't leak tasks.
-    return this.taskTrackingZone.macroTasks.map((t: Task) => {
+    return this._taskTrackingZone.macroTasks.map((t: Task) => {
       return {
         source: t.source,
         // From TaskTrackingZone:
@@ -196,7 +242,7 @@ export class Testability implements PublicTestability {
    *    and no further updates will be issued.
    */
   whenStable(doneCb: Function, timeout?: number, updateCb?: Function): void {
-    if (updateCb && !this.taskTrackingZone) {
+    if (updateCb && !this._taskTrackingZone) {
       throw new Error(
         'Task tracking zone is required when passing an update callback to ' +
           'whenStable(). Is "zone.js/plugins/task-tracking" loaded?',

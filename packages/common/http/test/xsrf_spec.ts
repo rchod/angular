@@ -6,16 +6,18 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
-import {HttpHeaders} from '@angular/common/http/src/headers';
-import {HttpRequest} from '@angular/common/http/src/request';
+import {MockPlatformLocation} from '@angular/common/testing';
+import {DOCUMENT, PlatformLocation} from '../..';
+import {HttpHeaders} from '../src/headers';
+import {HttpRequest} from '../src/request';
 import {
   HttpXsrfCookieExtractor,
   HttpXsrfInterceptor,
   HttpXsrfTokenExtractor,
   XSRF_ENABLED,
   XSRF_HEADER_NAME,
-} from '@angular/common/http/src/xsrf';
-import {HttpClientTestingBackend} from '@angular/common/http/testing/src/backend';
+} from '../src/xsrf';
+import {HttpClientTestingBackend} from '../testing/src/backend';
 import {TestBed} from '@angular/core/testing';
 
 class SampleTokenExtractor extends HttpXsrfTokenExtractor {
@@ -46,30 +48,77 @@ describe('HttpXsrfInterceptor', () => {
           provide: XSRF_ENABLED,
           useValue: true,
         },
+        {
+          provide: PlatformLocation,
+          useFactory: () =>
+            new MockPlatformLocation({
+              startUrl: 'http://sub.example.com/',
+            }),
+        },
+        HttpClientTestingBackend,
         HttpXsrfInterceptor,
       ],
     });
+
     interceptor = TestBed.inject(HttpXsrfInterceptor);
-    backend = new HttpClientTestingBackend();
+    backend = TestBed.inject(HttpClientTestingBackend);
   });
+
   it('applies XSRF protection to outgoing requests', () => {
     interceptor.intercept(new HttpRequest('POST', '/test', {}), backend).subscribe();
     const req = backend.expectOne('/test');
     expect(req.request.headers.get('X-XSRF-TOKEN')).toEqual('test');
     req.flush({});
   });
+
   it('does not apply XSRF protection when request is a GET', () => {
     interceptor.intercept(new HttpRequest('GET', '/test'), backend).subscribe();
     const req = backend.expectOne('/test');
     expect(req.request.headers.has('X-XSRF-TOKEN')).toEqual(false);
     req.flush({});
   });
+
   it('does not apply XSRF protection when request is a HEAD', () => {
     interceptor.intercept(new HttpRequest('HEAD', '/test'), backend).subscribe();
     const req = backend.expectOne('/test');
     expect(req.request.headers.has('X-XSRF-TOKEN')).toEqual(false);
     req.flush({});
   });
+
+  it('does not apply XSRF protection when request is absolute and cross-origin', () => {
+    interceptor
+      .intercept(new HttpRequest('POST', 'https://example.com/test', {}), backend)
+      .subscribe();
+    const req = backend.expectOne('https://example.com/test');
+    expect(req.request.headers.has('X-XSRF-TOKEN')).toBeFalse();
+    req.flush({});
+  });
+
+  it('does not apply XSRF protection when request is protocol relative and cross-origin', () => {
+    interceptor.intercept(new HttpRequest('POST', '//example.com/test', {}), backend).subscribe();
+    const req = backend.expectOne('//example.com/test');
+    expect(req.request.headers.has('X-XSRF-TOKEN')).toBeFalse();
+    req.flush({});
+  });
+
+  it('does apply XSRF protection when request is same-origin', () => {
+    interceptor
+      .intercept(new HttpRequest('POST', 'http://sub.example.com/test', {}), backend)
+      .subscribe();
+    const req = backend.expectOne('http://sub.example.com/test');
+    expect(req.request.headers.has('X-XSRF-TOKEN')).toBeTrue();
+    req.flush({});
+  });
+
+  it('does apply XSRF protection when request is protocol relative and same-origin', () => {
+    interceptor
+      .intercept(new HttpRequest('POST', '//sub.example.com/test', {}), backend)
+      .subscribe();
+    const req = backend.expectOne('//sub.example.com/test');
+    expect(req.request.headers.has('X-XSRF-TOKEN')).toBeTrue();
+    req.flush({});
+  });
+
   it('does not overwrite existing header', () => {
     interceptor
       .intercept(
@@ -122,7 +171,15 @@ describe('HttpXsrfCookieExtractor', () => {
     document = {
       cookie: 'XSRF-TOKEN=test',
     };
-    extractor = new HttpXsrfCookieExtractor(document, 'browser', 'XSRF-TOKEN');
+    TestBed.configureTestingModule({
+      providers: [
+        {
+          provide: DOCUMENT,
+          useValue: document,
+        },
+      ],
+    });
+    extractor = TestBed.inject(HttpXsrfCookieExtractor);
   });
   it('parses the cookie from document.cookie', () => {
     expect(extractor.getToken()).toEqual('test');

@@ -8,9 +8,9 @@
 
 import {ResourceLoader} from '@angular/compiler';
 import {
+  ChangeDetectionStrategy,
   Compiler,
   Component,
-  ComponentFactoryResolver,
   CUSTOM_ELEMENTS_SCHEMA,
   Directive,
   Inject,
@@ -21,8 +21,8 @@ import {
   NgModule,
   Optional,
   Pipe,
-  TransferState,
   SkipSelf,
+  TransferState,
   Type,
 } from '@angular/core';
 import {
@@ -34,11 +34,16 @@ import {
   waitForAsync,
   withModule,
 } from '@angular/core/testing';
-import {expect} from '@angular/platform-browser/testing/src/matchers';
+import {isBrowser} from '@angular/private/testing';
+import {expect} from '@angular/private/testing/matchers';
 
 // Services, and components for the tests.
 
-@Component({selector: 'child-comp', template: `<span>Original {{childBinding}}</span>`})
+@Component({
+  selector: 'child-comp',
+  template: `<span>Original {{ childBinding }}</span>`,
+  standalone: false,
+})
 @Injectable()
 class ChildComp {
   childBinding: string;
@@ -47,24 +52,38 @@ class ChildComp {
   }
 }
 
-@Component({selector: 'child-comp', template: `<span>Mock</span>`})
+@Component({
+  selector: 'child-comp',
+  template: `<span>Mock</span>`,
+  standalone: false,
+})
 @Injectable()
 class MockChildComp {}
 
 @Component({
   selector: 'parent-comp',
   template: `Parent(<child-comp></child-comp>)`,
+  standalone: false,
 })
 @Injectable()
 class ParentComp {}
 
-@Component({selector: 'my-if-comp', template: `MyIf(<span *ngIf="showMore">More</span>)`})
+@Component({
+  selector: 'my-if-comp',
+  template: `MyIf(<span *ngIf="showMore">More</span>)`,
+  standalone: false,
+  changeDetection: ChangeDetectionStrategy.Eager,
+})
 @Injectable()
 class MyIfComp {
   showMore: boolean = false;
 }
 
-@Component({selector: 'child-child-comp', template: `<span>ChildChild</span>`})
+@Component({
+  selector: 'child-child-comp',
+  template: `<span>ChildChild</span>`,
+  standalone: false,
+})
 @Injectable()
 class ChildChildComp {}
 
@@ -85,7 +104,8 @@ class MockFancyService extends FancyService {
 @Component({
   selector: 'my-service-comp',
   providers: [FancyService],
-  template: `injected value: {{fancyService.value}}`,
+  template: `injected value: {{ fancyService.value }}`,
+  standalone: false,
 })
 class TestProvidersComp {
   constructor(private fancyService: FancyService) {}
@@ -94,25 +114,37 @@ class TestProvidersComp {
 @Component({
   selector: 'my-service-comp',
   viewProviders: [FancyService],
-  template: `injected value: {{fancyService.value}}`,
+  template: `injected value: {{ fancyService.value }}`,
+  standalone: false,
 })
 class TestViewProvidersComp {
   constructor(private fancyService: FancyService) {}
 }
 
-@Directive({selector: '[someDir]', host: {'[title]': 'someDir'}})
+@Directive({
+  selector: '[someDir]',
+  host: {'[title]': 'someDir'},
+  standalone: false,
+})
 class SomeDirective {
   @Input() someDir!: string;
 }
 
-@Pipe({name: 'somePipe'})
+@Pipe({
+  name: 'somePipe',
+  standalone: false,
+})
 class SomePipe {
   transform(value: string) {
     return `transformed ${value}`;
   }
 }
 
-@Component({selector: 'comp', template: `<div  [someDir]="'someValue' | somePipe"></div>`})
+@Component({
+  selector: 'comp',
+  template: `<div [someDir]="'someValue' | somePipe"></div>`,
+  standalone: false,
+})
 class CompUsingModuleDirectiveAndPipe {}
 
 @NgModule()
@@ -312,7 +344,10 @@ describe('public testing API', () => {
       ));
 
       describe('provided schemas', () => {
-        @Component({template: '<some-element [someUnknownProp]="true"></some-element>'})
+        @Component({
+          template: '<some-element [someUnknownProp]="true"></some-element>',
+          standalone: false,
+        })
         class ComponentUsingInvalidProperty {}
 
         beforeEach(() => {
@@ -360,18 +395,18 @@ describe('public testing API', () => {
     xdescribe('components with template url', () => {
       let TestComponent!: Type<unknown>;
 
-      beforeEach(waitForAsync(async () => {
+      beforeEach(() => {
         @Component({
           selector: 'comp',
           templateUrl: '/base/angular/packages/platform-browser/test/static_assets/test.html',
+          standalone: false,
         })
         class CompWithUrlTemplate {}
 
         TestComponent = CompWithUrlTemplate;
 
         TestBed.configureTestingModule({declarations: [CompWithUrlTemplate]});
-        await TestBed.compileComponents();
-      }));
+      });
 
       isBrowser &&
         it('should allow to createSync components with templateUrl after explicit async compilation', () => {
@@ -383,22 +418,36 @@ describe('public testing API', () => {
     });
 
     describe('overwriting metadata', () => {
-      @Pipe({name: 'undefined'})
+      @Pipe({
+        name: 'undefined',
+        standalone: false,
+      })
       class SomePipe {
         transform(value: string): string {
           return `transformed ${value}`;
         }
       }
 
-      @Directive({selector: '[undefined]'})
+      @Directive({
+        selector: '[undefined]',
+        standalone: false,
+      })
       class SomeDirective {
         someProp = 'hello';
       }
 
-      @Component({selector: 'comp', template: 'someText'})
+      @Component({
+        selector: 'comp',
+        template: 'someText',
+        standalone: false,
+      })
       class SomeComponent {}
 
-      @Component({selector: 'comp', template: 'someOtherText'})
+      @Component({
+        selector: 'comp',
+        template: 'someOtherText',
+        standalone: false,
+      })
       class SomeOtherComponent {}
 
       @NgModule({declarations: [SomeComponent, SomeDirective, SomePipe]})
@@ -473,16 +522,6 @@ describe('public testing API', () => {
     });
 
     describe('overriding providers', () => {
-      describe('in core', () => {
-        it('ComponentFactoryResolver', () => {
-          const componentFactoryMock = jasmine.createSpyObj('componentFactory', [
-            'resolveComponentFactory',
-          ]);
-          TestBed.overrideProvider(ComponentFactoryResolver, {useValue: componentFactoryMock});
-          expect(TestBed.get(ComponentFactoryResolver)).toEqual(componentFactoryMock);
-        });
-      });
-
       describe('in NgModules', () => {
         it('should support useValue', () => {
           TestBed.configureTestingModule({
@@ -550,7 +589,9 @@ describe('public testing API', () => {
 
           const compiler = TestBed.inject(Compiler);
           const modFactory = compiler.compileModuleSync(MyModule);
-          expect(modFactory.create(getTestBed()).injector.get(aTok)).toBe('mockA: parentDepValue');
+          expect(modFactory.create(TestBed.inject(Injector)).injector.get(aTok)).toBe(
+            'mockA: parentDepValue',
+          );
         });
 
         it('should keep imported NgModules eager', () => {
@@ -612,6 +653,7 @@ describe('public testing API', () => {
           @Component({
             template: '',
             providers: [{provide: aTok, useValue: 'aValue'}],
+            standalone: false,
           })
           class MComp {}
 
@@ -630,6 +672,7 @@ describe('public testing API', () => {
               {provide: 'dep', useValue: 'depValue'},
               {provide: aTok, useValue: 'aValue'},
             ],
+            standalone: false,
           })
           class MyComp {}
 
@@ -648,6 +691,7 @@ describe('public testing API', () => {
           @Component({
             template: '',
             providers: [{provide: aTok, useValue: 'aValue'}],
+            standalone: false,
           })
           class MyComp {}
 
@@ -669,6 +713,7 @@ describe('public testing API', () => {
               {provide: 'dep', useValue: 'depValue'},
               {provide: aTok, useValue: 'aValue'},
             ],
+            standalone: false,
           })
           class MyComp {}
 
@@ -690,12 +735,14 @@ describe('public testing API', () => {
               {provide: aTok, useValue: 'aValue'},
               {provide: 'dep', useValue: 'depValue'},
             ],
+            standalone: false,
           })
           class MyDir {}
 
           @Component({
             template: '<div myDir></div>',
             providers: [{provide: 'dep', useValue: 'parentDepValue'}],
+            standalone: false,
           })
           class MyComp {}
 
@@ -713,17 +760,20 @@ describe('public testing API', () => {
           @Directive({
             selector: '[myDir1]',
             providers: [{provide: aTok, useValue: 'aValue1'}],
+            standalone: false,
           })
           class MyDir1 {}
 
           @Directive({
             selector: '[myDir2]',
             providers: [{provide: aTok, useValue: 'aValue2'}],
+            standalone: false,
           })
           class MyDir2 {}
 
           @Component({
             template: '<div myDir1></div><div myDir2></div>',
+            standalone: false,
           })
           class MyComp {}
 
@@ -742,6 +792,7 @@ describe('public testing API', () => {
               {provide: aTok, useFactory: () => 'aValue'},
               {provide: bTok, useFactory: () => 'bValue'},
             ],
+            standalone: false,
           })
           class MyComp {
             // Component is eager, which makes all of its deps eager
@@ -784,14 +835,21 @@ describe('public testing API', () => {
 
     describe('overrideTemplateUsingTestingModule', () => {
       it('should compile the template in the context of the testing module', () => {
-        @Component({selector: 'comp', template: 'a'})
+        @Component({
+          selector: 'comp',
+          template: 'a',
+          standalone: false,
+        })
         class MyComponent {
           prop = 'some prop';
         }
 
         let testDir: TestDir | undefined;
 
-        @Directive({selector: '[test]'})
+        @Directive({
+          selector: '[test]',
+          standalone: false,
+        })
         class TestDir {
           constructor() {
             testDir = this;
@@ -815,7 +873,11 @@ describe('public testing API', () => {
       });
 
       it('should reset overrides when the testing module is resetted', () => {
-        @Component({selector: 'comp', template: 'a'})
+        @Component({
+          selector: 'comp',
+          template: 'a',
+          standalone: false,
+        })
         class MyComponent {}
 
         TestBed.overrideTemplateUsingTestingModule(MyComponent, 'b');
@@ -838,6 +900,7 @@ describe('public testing API', () => {
           @Component({
             selector: 'comp',
             templateUrl: '/base/angular/packages/platform-browser/test/static_assets/test.html',
+            standalone: false,
           })
           class InternalCompWithUrlTemplate {}
 
@@ -849,7 +912,6 @@ describe('public testing API', () => {
             providers: [{provide: ResourceLoader, useValue: {get: resourceLoaderGet}}],
           });
 
-          TestBed.compileComponents();
           tick();
           const compFixture = TestBed.createComponent(InternalCompWithUrlTemplate);
           expect(compFixture.nativeElement).toHaveText('Hello world!');
@@ -943,6 +1005,7 @@ describe('public testing API', () => {
         @Component({
           selector: 'comp',
           templateUrl: '/base/angular/packages/platform-browser/test/static_assets/test.html',
+          standalone: false,
         })
         class InlineCompWithUrlTemplate {}
 
@@ -957,7 +1020,10 @@ Did you run and wait for 'resolveComponentResources()'?`);
     });
 
     it('should error on unknown bound properties on custom elements by default', () => {
-      @Component({template: '<div [someUnknownProp]="true"></div>'})
+      @Component({
+        template: '<div [someUnknownProp]="true"></div>',
+        standalone: false,
+      })
       class ComponentUsingInvalidProperty {}
 
       const spy = spyOn(console, 'error');
@@ -996,6 +1062,7 @@ Did you run and wait for 'resolveComponentResources()'?`);
       expect(componentFixture.nativeElement).toHaveText('MyIf()');
 
       componentFixture.componentInstance.showMore = true;
+      componentFixture.changeDetectorRef.markForCheck();
       componentFixture.detectChanges();
       expect(componentFixture.nativeElement).toHaveText('MyIf(More)');
     }));
@@ -1025,6 +1092,29 @@ Did you run and wait for 'resolveComponentResources()'?`);
       componentFixture.detectChanges();
       expect(componentFixture.nativeElement).toHaveText('injected value: mocked out value');
     }));
+
+    describe('getLastFixture', () => {
+      it('should return the last created fixture', () => {
+        const fixture = TestBed.createComponent(ChildComp);
+        expect(TestBed.getLastFixture()).toBe(fixture);
+      });
+
+      it('should throw if no fixture has been created', () => {
+        expect(() => TestBed.getLastFixture()).toThrowError('No fixture has been created yet.');
+      });
+
+      it('should return the last fixture when multiple fixtures are present', () => {
+        TestBed.createComponent(ChildComp);
+        const parentFixture = TestBed.createComponent(ParentComp);
+        expect(TestBed.getLastFixture()).toBe(parentFixture);
+      });
+
+      it('should clear the fixture after reset', () => {
+        TestBed.createComponent(ChildComp);
+        TestBed.resetTestingModule();
+        expect(() => TestBed.getLastFixture()).toThrowError('No fixture has been created yet.');
+      });
+    });
   });
   describe('using alternate components', () => {
     beforeEach(() => {
@@ -1066,7 +1156,10 @@ Did you run and wait for 'resolveComponentResources()'?`);
     });
 
     it('should throw if TestBed.overridePipe is called after TestBed initialization', () => {
-      @Pipe({name: 'myPipe'})
+      @Pipe({
+        name: 'myPipe',
+        standalone: false,
+      })
       class MyPipe {
         transform(value: any) {
           return value;
@@ -1092,7 +1185,11 @@ Did you run and wait for 'resolveComponentResources()'?`);
     });
 
     it('should throw if TestBed.overrideTemplateUsingTestingModule is called after TestBed initialization', () => {
-      @Component({selector: 'comp', template: 'a'})
+      @Component({
+        selector: 'comp',
+        template: 'a',
+        standalone: false,
+      })
       class MyComponent {}
 
       TestBed.inject(Injector);

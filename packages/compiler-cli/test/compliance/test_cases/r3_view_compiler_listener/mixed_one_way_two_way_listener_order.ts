@@ -1,20 +1,19 @@
-import {Component, Directive, Input, Output} from '@angular/core';
+import { Component, Directive, EventEmitter, Input, Output } from '@angular/core';
 
-@Directive({standalone: true, selector: '[dir]'})
+@Directive({selector: '[dir]'})
 export class Dir {
-  @Input() a: unknown;
-  @Output() aChange: unknown;
+  @Input() a: string = '';
+  @Output() aChange = new EventEmitter<string>();
 
-  @Output() b: unknown;
+  @Output() b = new EventEmitter();
 
-  @Input() c: unknown;
-  @Output() cChange: unknown;
+  @Input() c: string = '';
+  @Output() cChange = new EventEmitter<string>();
 
-  @Output() d: unknown;
+  @Output() d = new EventEmitter();
 }
 
 @Component({
-  standalone: true,
   imports: [Dir],
   template: `
     <div dir [(a)]="value" (b)="noop()" [(c)]="value" (d)="noop()"></div>

@@ -19,7 +19,7 @@ import {getFirstNativeNode} from '../render3/node_manipulation';
 import {ɵɵresolveBody} from '../render3/util/misc_utils';
 import {renderStringify} from '../render3/util/stringify_utils';
 import {getNativeByTNode, unwrapRNode} from '../render3/util/view_utils';
-import {assertDefined} from '../util/assert';
+import {assertDefined, assertEqual} from '../util/assert';
 
 import {compressNodeLocation, decompressNodeLocation} from './compression';
 import {
@@ -29,6 +29,8 @@ import {
 } from './error_handling';
 import {
   DehydratedView,
+  NODE_NAVIGATION_STEP_FIRST_CHILD,
+  NODE_NAVIGATION_STEP_NEXT_SIBLING,
   NodeNavigationStep,
   NODES,
   REFERENCE_NODE_BODY,
@@ -198,7 +200,7 @@ function stringifyNavigationInstructions(instructions: (number | NodeNavigationS
     const step = instructions[i];
     const repeat = instructions[i + 1] as number;
     for (let r = 0; r < repeat; r++) {
-      container.push(step === NodeNavigationStep.FirstChild ? 'firstChild' : 'nextSibling');
+      container.push(step === NODE_NAVIGATION_STEP_FIRST_CHILD ? 'firstChild' : 'nextSibling');
     }
   }
   return container.join('.');
@@ -218,10 +220,10 @@ function navigateToNode(from: Node, instructions: (number | NodeNavigationStep)[
         throw nodeNotFoundAtPathError(from, stringifyNavigationInstructions(instructions));
       }
       switch (step) {
-        case NodeNavigationStep.FirstChild:
+        case NODE_NAVIGATION_STEP_FIRST_CHILD:
           node = node.firstChild!;
           break;
-        case NodeNavigationStep.NextSibling:
+        case NODE_NAVIGATION_STEP_NEXT_SIBLING:
           node = node.nextSibling!;
           break;
       }
@@ -245,7 +247,7 @@ function locateRNodeByPath(path: string, lView: LView): RNode {
   } else if (referenceNode === REFERENCE_NODE_BODY) {
     ref = ɵɵresolveBody(
       lView[DECLARATION_COMPONENT_VIEW][HOST] as RElement & {ownerDocument: Document},
-    );
+    ) as Element;
   } else {
     const parentElementId = Number(referenceNode);
     ref = unwrapRNode((lView as any)[parentElementId + HEADER_OFFSET]) as Element;
@@ -279,7 +281,7 @@ export function navigateBetween(start: Node, finish: Node): NodeNavigationStep[]
       // First navigate to `finish`'s parent
       ...parentPath,
       // Then to its first child.
-      NodeNavigationStep.FirstChild,
+      NODE_NAVIGATION_STEP_FIRST_CHILD,
       // And finally from that node to `finish` (maybe a no-op if we're already there).
       ...childPath,
     ];
@@ -294,7 +296,7 @@ function navigateBetweenSiblings(start: Node, finish: Node): NodeNavigationStep[
   const nav: NodeNavigationStep[] = [];
   let node: Node | null = null;
   for (node = start; node != null && node !== finish; node = node.nextSibling) {
-    nav.push(NodeNavigationStep.NextSibling);
+    nav.push(NODE_NAVIGATION_STEP_NEXT_SIBLING);
   }
   // If the `node` becomes `null` or `undefined` at the end, that means that we
   // didn't find the `end` node, thus return `null` (which would trigger serialization
@@ -394,4 +396,40 @@ export function calcPathForNode(
     }
   }
   return path!;
+}
+
+/**
+ * Retrieves all comments nodes that contain ngh comments referring to a defer block
+ */
+export function gatherDeferBlocksCommentNodes(
+  doc: Document,
+  node: HTMLElement,
+): Map<string, Comment> {
+  const commentNodesIterator = doc.createNodeIterator(node, NodeFilter.SHOW_COMMENT, {acceptNode});
+  let currentNode: Comment;
+
+  const nodesByBlockId = new Map<string, Comment>();
+  while ((currentNode = commentNodesIterator.nextNode() as Comment)) {
+    const nghPattern = 'ngh=';
+    const content = currentNode?.textContent;
+    const nghIdx = content?.indexOf(nghPattern) ?? -1;
+    if (nghIdx > -1) {
+      const nghValue = content!.substring(nghIdx + nghPattern.length).trim();
+      // Make sure the value has an expected format.
+      ngDevMode &&
+        assertEqual(
+          nghValue.startsWith('d'),
+          true,
+          'Invalid defer block id found in a comment node.',
+        );
+      nodesByBlockId.set(nghValue, currentNode);
+    }
+  }
+  return nodesByBlockId;
+}
+
+function acceptNode(node: HTMLElement) {
+  return node.textContent?.trimStart().startsWith('ngh=')
+    ? NodeFilter.FILTER_ACCEPT
+    : NodeFilter.FILTER_REJECT;
 }

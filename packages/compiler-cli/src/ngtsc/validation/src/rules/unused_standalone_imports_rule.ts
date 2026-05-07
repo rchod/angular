@@ -6,17 +6,15 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
+import {TypeCheckingConfig} from '@angular/compiler';
 import ts from 'typescript';
 
-import {ErrorCode, makeDiagnostic, makeRelatedInformation} from '../../../diagnostics';
-import {ImportedSymbolsTracker, Reference} from '../../../imports';
-import {
-  TemplateTypeChecker,
-  TypeCheckableDirectiveMeta,
-  TypeCheckingConfig,
-} from '../../../typecheck/api';
+import {ErrorCode, makeDiagnostic} from '../../../diagnostics';
+import type {ImportedSymbolsTracker, Reference} from '../../../imports';
+import type {ClassDeclaration} from '../../../reflection';
+import type {TemplateTypeChecker, TypeCheckableDirectiveMeta} from '../../../typecheck/api';
 
-import {SourceFileValidatorRule} from './api';
+import type {SourceFileValidatorRule} from './api';
 
 /**
  * Rule that flags unused symbols inside of the `imports` array of a component.
@@ -36,7 +34,7 @@ export class UnusedStandaloneImportsRule implements SourceFileValidatorRule {
     );
   }
 
-  checkNode(node: ts.Node): ts.Diagnostic | null {
+  checkNode(node: ts.Node): ts.Diagnostic | ts.Diagnostic[] | null {
     if (!ts.isClassDeclaration(node)) {
       return null;
     }
@@ -71,33 +69,36 @@ export class UnusedStandaloneImportsRule implements SourceFileValidatorRule {
       return null;
     }
 
+    const propertyAssignment = closestNode(metadata.rawImports, ts.isPropertyAssignment);
     const category =
       this.typeCheckingConfig.unusedStandaloneImports === 'error'
         ? ts.DiagnosticCategory.Error
         : ts.DiagnosticCategory.Warning;
 
-    if (unused.length === metadata.imports.length) {
+    if (unused.length === metadata.imports.length && propertyAssignment !== null) {
       return makeDiagnostic(
         ErrorCode.UNUSED_STANDALONE_IMPORTS,
-        metadata.rawImports,
+        propertyAssignment.name,
         'All imports are unused',
         undefined,
         category,
       );
     }
 
-    return makeDiagnostic(
-      ErrorCode.UNUSED_STANDALONE_IMPORTS,
-      metadata.rawImports,
-      'Imports array contains unused imports',
-      unused.map(([ref, type, name]) =>
-        makeRelatedInformation(
-          ref.getOriginForDiagnostics(metadata.rawImports!),
-          `${type} "${name}" is not used within the template`,
-        ),
-      ),
-      category,
-    );
+    return unused.map((ref) => {
+      const diagnosticNode =
+        ref.getIdentityInExpression(metadata.rawImports!) ||
+        ref.getIdentityIn(node.getSourceFile()) ||
+        metadata.rawImports!;
+
+      return makeDiagnostic(
+        ErrorCode.UNUSED_STANDALONE_IMPORTS,
+        diagnosticNode,
+        `${ref.node.name.text} is not used within the template of ${metadata.name}`,
+        undefined,
+        category,
+      );
+    });
   }
 
   private getUnusedSymbols(
@@ -111,7 +112,7 @@ export class UnusedStandaloneImportsRule implements SourceFileValidatorRule {
       return null;
     }
 
-    let unused: [ref: Reference, type: string, name: string][] | null = null;
+    let unused: Reference<ClassDeclaration>[] | null = null;
 
     for (const current of imports) {
       const currentNode = current.node as ts.ClassDeclaration;
@@ -124,7 +125,7 @@ export class UnusedStandaloneImportsRule implements SourceFileValidatorRule {
           !this.isPotentialSharedReference(current, rawImports)
         ) {
           unused ??= [];
-          unused.push([current, dirMeta.isComponent ? 'Component' : 'Directive', dirMeta.name]);
+          unused.push(current);
         }
         continue;
       }
@@ -134,11 +135,12 @@ export class UnusedStandaloneImportsRule implements SourceFileValidatorRule {
       if (
         pipeMeta !== null &&
         pipeMeta.isStandalone &&
+        pipeMeta.name !== null &&
         !usedPipes.has(pipeMeta.name) &&
         !this.isPotentialSharedReference(current, rawImports)
       ) {
         unused ??= [];
-        unused.push([current, 'Pipe', pipeMeta.ref.node.name.text]);
+        unused.push(current);
       }
     }
 
@@ -168,11 +170,32 @@ export class UnusedStandaloneImportsRule implements SourceFileValidatorRule {
       if (ts.isVariableStatement(current)) {
         return !!current.modifiers?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword);
       }
-      current = current.parent;
+
+      // `Node.parent` can be undefined, but the TS types don't reflect it.
+      // Coerce to null so the value is consitent with the type.
+      current = current.parent ?? null;
     }
 
     // Otherwise the reference likely comes from an imported
     // symbol like an array of shared common components.
     return true;
   }
+}
+
+/** Gets the closest parent node of a certain type. */
+function closestNode<T extends ts.Node>(
+  start: ts.Node,
+  predicate: (node: ts.Node) => node is T,
+): T | null {
+  let current = start.parent;
+
+  while (current) {
+    if (predicate(current)) {
+      return current;
+    } else {
+      current = current.parent;
+    }
+  }
+
+  return null;
 }

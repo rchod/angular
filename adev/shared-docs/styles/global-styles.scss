@@ -1,5 +1,6 @@
 // TODO: Continue organizing and refactoring this file
 @use '@angular/material' as mat;
+@use '@angular/cdk';
 
 // Using disable-next-line to avoid stylelint errors - these imports are necessary
 // TODO: Is there another way to prevent these linting errors?
@@ -40,11 +41,12 @@
 @include api-item-label.api-item-label();
 @include faceted-list.faceted-list();
 
+@include mq.breakpoints-vars();
 @include mq.for-phone-only();
 @include mq.for-tablet-portrait-up();
 @include mq.for-tablet-landscape-up();
 @include mq.for-desktop-up();
-@include mq.for-big-desktop-up();
+@include mq.for-extra-large-desktop-up();
 @include mq.for-tablet-landscape-down();
 
 // temporary just to show different options of code component UI.
@@ -61,21 +63,23 @@ $theme: mat.m2-define-light-theme(
 );
 
 // Include material core styles.
-@include mat.core();
+@include cdk.a11y-visually-hidden();
 @include mat.tabs-theme($theme);
 @include mat.button-toggle-theme($theme);
+@include mat.tooltip-theme($theme);
 
 // Include custom docs styles
 @include alert.docs-alert();
 @include callout.docs-callout();
 @include card.docs-card();
+@include code.docs-theme();
 @include code.docs-code-block();
 @include code.docs-code-editor();
+@include code.docs-syntax-highlighting();
 @include decorative-header.docs-decorative-header();
 @include icon.docs-icon();
 @include pill.docs-pill();
 @include steps.docs-steps();
-@include code.docs-syntax-highlighting();
 @include table.docs-table();
 @include video.docs-video();
 
@@ -87,61 +91,5 @@ $theme: mat.m2-define-light-theme(
   ::view-transition-old(*),
   ::view-transition-new(*) {
     animation: none !important;
-  }
-}
-
-.docs-dark-mode .shiki {
-  color: var(--shiki-dark);
-  background-color: var(--shiki-dark-bg);
-
-  span {
-    color: var(--shiki-dark);
-    background-color: var(--shiki-dark-bg);
-    /* Optional, if you also want font styles */
-    font-style: var(--shiki-dark-font-style);
-    font-weight: var(--shiki-dark-font-weight);
-  }
-
-  .shiki-ln-line-highlighted,
-  button:hover {
-    span {
-      background-color: inherit;
-    }
-  }
-}
-
-.shiki {
-  padding-block: 1rem;
-
-  &.cli {
-    padding-inline-start: 1rem;
-  }
-  
-  a {
-    color: inherit;
-    &:hover {
-      text-decoration: underline;
-    }
-  }
-}
-
-.docs-light-mode .shiki {
-  color: var(--shiki-light);
-  background-color: var(--shiki-light-bg);
-
-  span {
-    color: var(--shiki-light);
-    background-color: var(--shiki-light-bg);
-    /* Optional, if you also want font styles */
-    font-style: var(--shiki-light-font-style);
-    font-weight: var(--shiki-light-font-weight);
-    text-decoration: var(--shiki-light-text-decoration);
-  }
-
-  .shiki-ln-line-highlighted,
-  button:hover {
-    span {
-      background-color: inherit;
-    }
   }
 }

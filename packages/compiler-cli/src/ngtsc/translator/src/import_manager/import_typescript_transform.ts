@@ -37,9 +37,11 @@ export function createTsTransformForImportManager(
     // doesn't drop these thinking they are unused.
     if (reusedOriginalAliasDeclarations.size > 0) {
       const referencedAliasDeclarations = loadIsReferencedAliasDeclarationPatch(ctx);
-      reusedOriginalAliasDeclarations.forEach((aliasDecl) =>
-        referencedAliasDeclarations.add(aliasDecl),
-      );
+      if (referencedAliasDeclarations !== null) {
+        reusedOriginalAliasDeclarations.forEach((aliasDecl) =>
+          referencedAliasDeclarations.add(aliasDecl),
+        );
+      }
     }
 
     // Update the set of affected files to include files that need extra statements to be inserted.
@@ -75,7 +77,7 @@ export function createTsTransformForImportManager(
 
       const newClause = ctx.factory.updateImportClause(
         clause,
-        clause.isTypeOnly,
+        clause.phaseModifier,
         clause.name,
         updatedImports.get(clause.namedBindings),
       );

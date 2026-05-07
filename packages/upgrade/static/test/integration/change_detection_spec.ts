@@ -7,6 +7,7 @@
  */
 
 import {
+  ChangeDetectionStrategy,
   Component,
   destroyPlatform,
   Directive,
@@ -15,12 +16,13 @@ import {
   Input,
   NgModule,
   NgZone,
+  provideZoneChangeDetection,
   SimpleChanges,
 } from '@angular/core';
 import {waitForAsync} from '@angular/core/testing';
 import {BrowserModule} from '@angular/platform-browser';
 import {platformBrowserDynamic} from '@angular/platform-browser-dynamic';
-import {downgradeComponent, UpgradeComponent, UpgradeModule} from '@angular/upgrade/static';
+import {downgradeComponent, UpgradeComponent, UpgradeModule} from '../../../static';
 
 import * as angular from '../../../src/common/src/angular1';
 import {html, withEachNg1Version} from '../../../src/common/test/helpers/common_test_helpers';
@@ -35,10 +37,19 @@ withEachNg1Version(() => {
     it('should not break if a $digest is already in progress', waitForAsync(() => {
       const element = html('<my-app></my-app>');
 
-      @Component({selector: 'my-app', template: ''})
+      @Component({
+        selector: 'my-app',
+        template: '',
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class AppComponent {}
 
-      @NgModule({declarations: [AppComponent], imports: [BrowserModule, UpgradeModule]})
+      @NgModule({
+        declarations: [AppComponent],
+        imports: [BrowserModule, UpgradeModule],
+        providers: [provideZoneChangeDetection()],
+      })
       class Ng2Module {
         ngDoBootstrap() {}
       }
@@ -92,14 +103,20 @@ withEachNg1Version(() => {
         return value + ';';
       };
 
-      @Directive({selector: 'ng1a'})
+      @Directive({
+        selector: 'ng1a',
+        standalone: false,
+      })
       class Ng1aComponent extends UpgradeComponent {
         constructor(elementRef: ElementRef, injector: Injector) {
           super('ng1a', elementRef, injector);
         }
       }
 
-      @Directive({selector: 'ng1b'})
+      @Directive({
+        selector: 'ng1b',
+        standalone: false,
+      })
       class Ng1bComponent extends UpgradeComponent {
         constructor(elementRef: ElementRef, injector: Injector) {
           super('ng1b', elementRef, injector);
@@ -109,6 +126,8 @@ withEachNg1Version(() => {
       @Component({
         selector: 'ng2',
         template: `{{ l('2A') }}<ng1a></ng1a>{{ l('2B') }}<ng1b></ng1b>{{ l('2C') }}`,
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class Ng2Component {
         l = l;
@@ -143,7 +162,12 @@ withEachNg1Version(() => {
       const element = html('<my-app></my-app>');
       let appComponent: AppComponent;
 
-      @Component({selector: 'my-app', template: '<my-child [value]="value"></my-child>'})
+      @Component({
+        selector: 'my-app',
+        template: '<my-child [value]="value"></my-child>',
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class AppComponent {
         value?: number;
         constructor() {
@@ -154,6 +178,8 @@ withEachNg1Version(() => {
       @Component({
         selector: 'my-child',
         template: '<div>{{ valueFromPromise }}</div>',
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class ChildComponent {
         valueFromPromise?: number;
@@ -179,6 +205,7 @@ withEachNg1Version(() => {
       @NgModule({
         declarations: [AppComponent, ChildComponent],
         imports: [BrowserModule, UpgradeModule],
+        providers: [provideZoneChangeDetection()],
       })
       class Ng2Module {
         ngDoBootstrap() {}

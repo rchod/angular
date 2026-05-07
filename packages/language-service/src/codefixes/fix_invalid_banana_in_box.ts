@@ -7,21 +7,22 @@
  */
 
 import {TmplAstBoundEvent} from '@angular/compiler';
-import {ErrorCode, ngErrorCode} from '@angular/compiler-cli/src/ngtsc/diagnostics';
-import tss from 'typescript';
+import {ErrorCode, ngErrorCode} from '@angular/compiler-cli';
+import type ts from 'typescript';
 
 import {getTargetAtPosition, TargetNodeKind} from '../template_target';
-import {getTemplateInfoAtPosition, TemplateInfo} from '../utils';
+import {getTypeCheckInfoAtPosition, TypeCheckInfo} from '../utils';
 
 import {CodeActionMeta, FixIdForCodeFixesAll} from './utils';
 
 /**
- * fix [invalid banana-in-box](https://angular.io/extended-diagnostics/NG8101)
+ * fix [invalid banana-in-box](https://angular.dev/extended-diagnostics/NG8101)
  */
 export const fixInvalidBananaInBoxMeta: CodeActionMeta = {
   errorCodes: [ngErrorCode(ErrorCode.INVALID_BANANA_IN_BOX)],
-  getCodeActions({start, fileName, templateInfo}) {
-    const boundEvent = getTheBoundEventAtPosition(templateInfo, start);
+  getCodeActions({start, fileName, typeCheckInfo}) {
+    const boundEvent =
+      typeCheckInfo === null ? null : getTheBoundEventAtPosition(typeCheckInfo, start);
     if (boundEvent === null) {
       return [];
     }
@@ -43,7 +44,7 @@ export const fixInvalidBananaInBoxMeta: CodeActionMeta = {
   },
   fixIds: [FixIdForCodeFixesAll.FIX_INVALID_BANANA_IN_BOX],
   getAllCodeActions({diagnostics, compiler}) {
-    const fileNameToTextChangesMap = new Map<string, tss.TextChange[]>();
+    const fileNameToTextChangesMap = new Map<string, ts.TextChange[]>();
     for (const diag of diagnostics) {
       const fileName = diag.file?.fileName;
       if (fileName === undefined) {
@@ -53,8 +54,8 @@ export const fixInvalidBananaInBoxMeta: CodeActionMeta = {
       if (start === undefined) {
         continue;
       }
-      const templateInfo = getTemplateInfoAtPosition(fileName, start, compiler);
-      if (templateInfo === undefined) {
+      const typeCheckInfo = getTypeCheckInfoAtPosition(fileName, start, compiler);
+      if (typeCheckInfo === undefined) {
         continue;
       }
 
@@ -63,7 +64,7 @@ export const fixInvalidBananaInBoxMeta: CodeActionMeta = {
        * parens (the BoundEvent `([thing])`) when it should be the other way around `[(thing)]` so
        * this function is trying to find the bound event in order to flip the syntax.
        */
-      const boundEvent = getTheBoundEventAtPosition(templateInfo, start);
+      const boundEvent = getTheBoundEventAtPosition(typeCheckInfo, start);
       if (boundEvent === null) {
         continue;
       }
@@ -76,7 +77,7 @@ export const fixInvalidBananaInBoxMeta: CodeActionMeta = {
       fileTextChanges.push(...textChanges);
     }
 
-    const fileTextChanges: tss.FileTextChanges[] = [];
+    const fileTextChanges: ts.FileTextChanges[] = [];
     for (const [fileName, textChanges] of fileNameToTextChangesMap) {
       fileTextChanges.push({
         fileName,
@@ -90,7 +91,7 @@ export const fixInvalidBananaInBoxMeta: CodeActionMeta = {
 };
 
 function getTheBoundEventAtPosition(
-  templateInfo: TemplateInfo,
+  typeCheckInfo: TypeCheckInfo,
   start: number,
 ): TmplAstBoundEvent | null {
   // It's safe to get the bound event at the position `start + 1` because the `start` is at the
@@ -98,7 +99,7 @@ function getTheBoundEventAtPosition(
   // the function `getTargetAtPosition`.
   // https://github.com/angular/vscode-ng-language-service/blob/8553115972ca40a55602747667c3d11d6f47a6f8/server/src/session.ts#L220
   // https://github.com/angular/angular/blob/4e10a7494130b9bb4772ee8f76b66675867b2145/packages/language-service/src/template_target.ts#L347-L356
-  const positionDetail = getTargetAtPosition(templateInfo.template, start + 1);
+  const positionDetail = getTargetAtPosition(typeCheckInfo.nodes, start + 1);
   if (positionDetail === null) {
     return null;
   }
@@ -116,7 +117,7 @@ function getTheBoundEventAtPosition(
 /**
  * Flip the invalid "box in a banana" `([thing])` to the correct "banana in a box" `[(thing)]`.
  */
-function convertBoundEventToTsTextChange(node: TmplAstBoundEvent): readonly tss.TextChange[] {
+function convertBoundEventToTsTextChange(node: TmplAstBoundEvent): readonly ts.TextChange[] {
   const name = node.name;
   const boundSyntax = node.sourceSpan.toString();
   const expectedBoundSyntax = boundSyntax.replace(`(${name})`, `[(${name.slice(1, -1)})]`);

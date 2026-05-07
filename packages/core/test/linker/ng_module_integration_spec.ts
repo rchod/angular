@@ -27,12 +27,13 @@ import {
   Provider,
   Self,
   Type,
-} from '@angular/core';
-import {ɵɵdefineInjectable} from '@angular/core/src/di/interface/defs';
-import {NgModuleType} from '@angular/core/src/render3';
-import {getNgModuleDef} from '@angular/core/src/render3/definition';
-import {ComponentFixture, inject, TestBed} from '@angular/core/testing';
+} from '../../src/core';
+import {ɵɵdefineInjectable} from '../../src/di/interface/defs';
+import {NgModuleType} from '../../src/render3';
+import {getNgModuleDef} from '../../src/render3/def_getters';
+import {ComponentFixture, inject, TestBed} from '../../testing';
 
+import {ERROR_DETAILS_PAGE_BASE_URL} from '../../src/error_details_base_url';
 import {InternalNgModuleRef, NgModuleFactory} from '../../src/linker/ng_module_factory';
 import {
   clearModulesForTest,
@@ -76,22 +77,36 @@ class NoAnnotations {
   constructor(secretDependency: any) {}
 }
 
-@Component({selector: 'comp', template: ''})
+@Component({
+  selector: 'comp',
+  template: '',
+  standalone: false,
+})
 class SomeComp {}
 
-@Directive({selector: '[someDir]'})
+@Directive({
+  selector: '[someDir]',
+  standalone: false,
+})
 class SomeDirective {
   @HostBinding('title') @Input() someDir: string | undefined;
 }
 
-@Pipe({name: 'somePipe'})
+@Pipe({
+  name: 'somePipe',
+  standalone: false,
+})
 class SomePipe {
   transform(value: string): any {
     return `transformed ${value}`;
   }
 }
 
-@Component({selector: 'comp', template: `<div  [someDir]="'someValue' | somePipe"></div>`})
+@Component({
+  selector: 'comp',
+  template: `<div [someDir]="'someValue' | somePipe"></div>`,
+  standalone: false,
+})
 class CompUsingModuleDirectiveAndPipe {}
 
 describe('NgModule', () => {
@@ -238,7 +253,10 @@ describe('NgModule', () => {
 
   describe('schemas', () => {
     it('should error on unknown bound properties on custom elements by default', () => {
-      @Component({template: '<div [someUnknownProp]="true"></div>'})
+      @Component({
+        template: '<div [someUnknownProp]="true"></div>',
+        standalone: false,
+      })
       class ComponentUsingInvalidProperty {}
 
       @NgModule({declarations: [ComponentUsingInvalidProperty]})
@@ -251,7 +269,10 @@ describe('NgModule', () => {
     });
 
     it('should not error on unknown bound properties on custom elements when using the CUSTOM_ELEMENTS_SCHEMA', () => {
-      @Component({template: '<some-element [someUnknownProp]="true"></some-element>'})
+      @Component({
+        template: '<some-element [someUnknownProp]="true"></some-element>',
+        standalone: false,
+      })
       class ComponentUsingInvalidProperty {}
 
       @NgModule({
@@ -324,16 +345,6 @@ describe('NgModule', () => {
   });
 
   describe('bootstrap components', () => {
-    it('should create ComponentFactories', () => {
-      @NgModule({declarations: [SomeComp], bootstrap: [SomeComp]})
-      class SomeModule {}
-
-      const ngModule = createModule(SomeModule);
-      expect(
-        ngModule.componentFactoryResolver.resolveComponentFactory(SomeComp).componentType,
-      ).toBe(SomeComp);
-    });
-
     it('should store the ComponentFactories in the NgModuleInjector', () => {
       @NgModule({declarations: [SomeComp], bootstrap: [SomeComp]})
       class SomeModule {}
@@ -376,6 +387,7 @@ describe('NgModule', () => {
         @Component({
           selector: 'parent',
           template: '<comp></comp>',
+          standalone: false,
         })
         class ParentCompUsingModuleDirectiveAndPipe {}
 
@@ -520,7 +532,7 @@ describe('NgModule', () => {
 
     it('should throw when no type and not @Inject (class case)', () => {
       expect(() => createInjector([NoAnnotations])).toThrowError(
-        "NG0204: Can't resolve all parameters for NoAnnotations: (?).",
+        /NG0204: Can't resolve all parameters for NoAnnotations: \(\?\)./,
       );
     });
 
@@ -602,8 +614,9 @@ describe('NgModule', () => {
     it('should throw when the aliased provider does not exist', () => {
       const injector = createInjector([{provide: 'car', useExisting: SportsCar}]);
       const errorMsg =
-        `R3InjectorError(SomeModule)[car -> ${stringify(SportsCar)}]: \n  ` +
-        `NullInjectorError: No provider for ${stringify(SportsCar)}!`;
+        'NG0201: No provider found for `SportsCar`. ' +
+        'Source: SomeModule. Path: car -> SportsCar. ' +
+        `Find more at ${ERROR_DETAILS_PAGE_BASE_URL}/NG0201`;
       expect(() => injector.get('car')).toThrowError(errorMsg);
     });
 
@@ -807,15 +820,18 @@ describe('NgModule', () => {
     it('should throw when no provider defined', () => {
       const injector = createInjector([]);
       const errorMsg =
-        `R3InjectorError(SomeModule)[NonExisting]: \n  ` +
-        'NullInjectorError: No provider for NonExisting!';
+        'NG0201: No provider found for `NonExisting`. ' +
+        'Source: SomeModule. ' +
+        `Find more at ${ERROR_DETAILS_PAGE_BASE_URL}/NG0201`;
       expect(() => injector.get('NonExisting')).toThrowError(errorMsg);
     });
 
     it('should throw when trying to instantiate a cyclic dependency', () => {
       expect(() =>
         createInjector([Car, {provide: Engine, useClass: CyclicEngine}]).get(Car),
-      ).toThrowError(/NG0200: Circular dependency in DI detected for Car/g);
+      ).toThrowError(
+        `NG0200: Circular dependency detected for \`Car\`. Source: SomeModule. Path: Car -> Engine -> Car. Find more at ${ERROR_DETAILS_PAGE_BASE_URL}/NG0200`,
+      );
     });
 
     it('should support null values', () => {

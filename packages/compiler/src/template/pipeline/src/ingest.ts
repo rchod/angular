@@ -24,18 +24,20 @@ import {
   CompilationUnit,
   ComponentCompilationJob,
   HostBindingCompilationJob,
+  TemplateCompilationMode,
   type CompilationJob,
   type ViewCompilationUnit,
 } from './compilation';
 import {BINARY_OPERATORS, namespaceForKey, prefixWithNamespace} from './conversion';
-
-const compatibilityMode = ir.CompatibilityMode.TemplateDefinitionBuilder;
 
 // Schema containing DOM elements and their properties.
 const domSchema = new DomElementSchemaRegistry();
 
 // Tag name of the `ng-template` element.
 const NG_TEMPLATE_TAG_NAME = 'ng-template';
+
+// prefix for any animation binding
+const ANIMATE_PREFIX = 'animate.';
 
 export function isI18nRootNode(meta?: i18n.I18nMeta): meta is i18n.Message {
   return meta instanceof i18n.Message;
@@ -54,19 +56,26 @@ export function ingestComponent(
   componentName: string,
   template: t.Node[],
   constantPool: ConstantPool,
+  compilationMode: TemplateCompilationMode,
   relativeContextFilePath: string,
   i18nUseExternalIds: boolean,
   deferMeta: R3ComponentDeferMetadata,
   allDeferrableDepsFn: o.ReadVarExpr | null,
+  relativeTemplatePath: string | null,
+  enableDebugLocations: boolean,
+  legacyOptionalChaining: boolean,
 ): ComponentCompilationJob {
   const job = new ComponentCompilationJob(
     componentName,
     constantPool,
-    compatibilityMode,
+    compilationMode,
     relativeContextFilePath,
     i18nUseExternalIds,
     deferMeta,
     allDeferrableDepsFn,
+    relativeTemplatePath,
+    enableDebugLocations,
+    legacyOptionalChaining,
   );
   ingestNodes(job.root, template);
   return job;
@@ -78,6 +87,7 @@ export interface HostBindingInput {
   properties: e.ParsedProperty[] | null;
   attributes: {[key: string]: o.Expression};
   events: e.ParsedEvent[] | null;
+  legacyOptionalChaining: boolean;
 }
 
 /**
@@ -89,13 +99,21 @@ export function ingestHostBinding(
   bindingParser: BindingParser,
   constantPool: ConstantPool,
 ): HostBindingCompilationJob {
-  const job = new HostBindingCompilationJob(input.componentName, constantPool, compatibilityMode);
+  const job = new HostBindingCompilationJob(
+    input.componentName,
+    constantPool,
+    TemplateCompilationMode.DomOnly,
+    input.legacyOptionalChaining,
+  );
   for (const property of input.properties ?? []) {
     let bindingKind = ir.BindingKind.Property;
     // TODO: this should really be handled in the parser.
     if (property.name.startsWith('attr.')) {
       property.name = property.name.substring('attr.'.length);
       bindingKind = ir.BindingKind.Attribute;
+    }
+    if (property.isLegacyAnimation) {
+      bindingKind = ir.BindingKind.LegacyAnimation;
     }
     if (property.isAnimation) {
       bindingKind = ir.BindingKind.Animation;
@@ -107,7 +125,7 @@ export function ingestHostBinding(
         bindingKind === ir.BindingKind.Attribute,
       )
       .filter((context) => context !== SecurityContext.NONE);
-    ingestHostProperty(job, property, bindingKind, securityContexts);
+    ingestDomProperty(job, property, bindingKind, securityContexts);
   }
   for (const [name, expr] of Object.entries(input.attributes) ?? []) {
     const securityContexts = bindingParser
@@ -123,7 +141,7 @@ export function ingestHostBinding(
 
 // TODO: We should refactor the parser to use the same types and structures for host bindings as
 // with ordinary components. This would allow us to share a lot more ingestion code.
-export function ingestHostProperty(
+export function ingestDomProperty(
   job: HostBindingCompilationJob,
   property: e.ParsedProperty,
   bindingKind: ir.BindingKind,
@@ -182,21 +200,37 @@ export function ingestHostAttribute(
 }
 
 export function ingestHostEvent(job: HostBindingCompilationJob, event: e.ParsedEvent) {
-  const [phase, target] =
-    event.type !== e.ParsedEventType.Animation
-      ? [null, event.targetOrPhase]
-      : [event.targetOrPhase, null];
-  const eventBinding = ir.createListenerOp(
-    job.root.xref,
-    new ir.SlotHandle(),
-    event.name,
-    null,
-    makeListenerHandlerOps(job.root, event.handler, event.handlerSpan),
-    phase,
-    target,
-    true,
-    event.sourceSpan,
-  );
+  let eventBinding: ir.CreateOp;
+  if (event.type === e.ParsedEventType.Animation) {
+    eventBinding = ir.createAnimationListenerOp(
+      job.root.xref,
+      new ir.SlotHandle(),
+      event.name,
+      null,
+      makeListenerHandlerOps(job.root, event.handler, event.handlerSpan),
+      event.name.endsWith('enter') ? ir.AnimationKind.ENTER : ir.AnimationKind.LEAVE,
+      event.targetOrPhase,
+      true,
+      event.sourceSpan,
+    );
+  } else {
+    const [phase, target] =
+      event.type !== e.ParsedEventType.LegacyAnimation
+        ? [null, event.targetOrPhase]
+        : [event.targetOrPhase, null];
+
+    eventBinding = ir.createListenerOp(
+      job.root.xref,
+      new ir.SlotHandle(),
+      event.name,
+      null,
+      makeListenerHandlerOps(job.root, event.handler, event.handlerSpan),
+      phase,
+      target,
+      true,
+      event.sourceSpan,
+    );
+  }
   job.root.create.push(eventBinding);
 }
 
@@ -227,6 +261,8 @@ function ingestNodes(unit: ViewCompilationUnit, template: t.Node[]): void {
       ingestForBlock(unit, node);
     } else if (node instanceof t.LetDeclaration) {
       ingestLetDeclaration(unit, node);
+    } else if (node instanceof t.Component) {
+      // TODO(crisbeto): account for selectorless nodes.
     } else {
       throw new Error(`Unsupported template node: ${node.constructor.name}`);
     }
@@ -450,16 +486,12 @@ function ingestBoundText(
 
   const textXref = unit.job.allocateXrefId();
   unit.create.push(ir.createTextOp(textXref, '', icuPlaceholder, text.sourceSpan));
-  // TemplateDefinitionBuilder does not generate source maps for sub-expressions inside an
-  // interpolation. We copy that behavior in compatibility mode.
-  // TODO: is it actually correct to generate these extra maps in modern mode?
-  const baseSourceSpan = unit.job.compatibility ? null : text.sourceSpan;
   unit.update.push(
     ir.createInterpolateTextOp(
       textXref,
       new ir.Interpolation(
         value.strings,
-        value.expressions.map((expr) => convertAst(expr, unit.job, baseSourceSpan)),
+        value.expressions.map((expr) => convertAst(expr, unit.job, null)),
         i18nPlaceholders,
       ),
       text.sourceSpan,
@@ -490,7 +522,9 @@ function ingestIfBlock(unit: ViewCompilationUnit, ifBlock: t.IfBlock): void {
       ifCaseI18nMeta = ifCase.i18n;
     }
 
-    const templateOp = ir.createTemplateOp(
+    const createOp = i === 0 ? ir.createConditionalCreateOp : ir.createConditionalBranchCreateOp;
+
+    const conditionalCreateOp = createOp(
       cView.xref,
       ir.TemplateKind.Block,
       tagName,
@@ -500,7 +534,7 @@ function ingestIfBlock(unit: ViewCompilationUnit, ifBlock: t.IfBlock): void {
       ifCase.startSourceSpan,
       ifCase.sourceSpan,
     );
-    unit.create.push(templateOp);
+    unit.create.push(conditionalCreateOp);
 
     if (firstXref === null) {
       firstXref = cView.xref;
@@ -509,8 +543,8 @@ function ingestIfBlock(unit: ViewCompilationUnit, ifBlock: t.IfBlock): void {
     const caseExpr = ifCase.expression ? convertAst(ifCase.expression, unit.job, null) : null;
     const conditionalCaseExpr = new ir.ConditionalCaseExpr(
       caseExpr,
-      templateOp.xref,
-      templateOp.handle,
+      conditionalCreateOp.xref,
+      conditionalCreateOp.handle,
       ifCase.expressionAlias,
     );
     conditions.push(conditionalCaseExpr);
@@ -524,48 +558,56 @@ function ingestIfBlock(unit: ViewCompilationUnit, ifBlock: t.IfBlock): void {
  */
 function ingestSwitchBlock(unit: ViewCompilationUnit, switchBlock: t.SwitchBlock): void {
   // Don't ingest empty switches since they won't render anything.
-  if (switchBlock.cases.length === 0) {
+  if (switchBlock.groups.length === 0) {
     return;
   }
 
   let firstXref: ir.XrefId | null = null;
   let conditions: Array<ir.ConditionalCaseExpr> = [];
-  for (const switchCase of switchBlock.cases) {
+  for (let i = 0; i < switchBlock.groups.length; i++) {
+    const switchCaseGroup = switchBlock.groups[i];
     const cView = unit.job.allocateView(unit.xref);
-    const tagName = ingestControlFlowInsertionPoint(unit, cView.xref, switchCase);
+    const tagName = ingestControlFlowInsertionPoint(unit, cView.xref, switchCaseGroup);
     let switchCaseI18nMeta: i18n.BlockPlaceholder | undefined = undefined;
-    if (switchCase.i18n !== undefined) {
-      if (!(switchCase.i18n instanceof i18n.BlockPlaceholder)) {
+    if (switchCaseGroup.i18n !== undefined) {
+      if (!(switchCaseGroup.i18n instanceof i18n.BlockPlaceholder)) {
         throw Error(
-          `Unhandled i18n metadata type for switch block: ${switchCase.i18n?.constructor.name}`,
+          `Unhandled i18n metadata type for switch block: ${switchCaseGroup.i18n?.constructor.name}`,
         );
       }
-      switchCaseI18nMeta = switchCase.i18n;
+      switchCaseI18nMeta = switchCaseGroup.i18n;
     }
-    const templateOp = ir.createTemplateOp(
+
+    const createOp = i === 0 ? ir.createConditionalCreateOp : ir.createConditionalBranchCreateOp;
+
+    const conditionalCreateOp = createOp(
       cView.xref,
       ir.TemplateKind.Block,
       tagName,
       'Case',
       ir.Namespace.HTML,
       switchCaseI18nMeta,
-      switchCase.startSourceSpan,
-      switchCase.sourceSpan,
+      switchCaseGroup.startSourceSpan,
+      switchCaseGroup.sourceSpan,
     );
-    unit.create.push(templateOp);
+    unit.create.push(conditionalCreateOp);
+
     if (firstXref === null) {
       firstXref = cView.xref;
     }
-    const caseExpr = switchCase.expression
-      ? convertAst(switchCase.expression, unit.job, switchBlock.startSourceSpan)
-      : null;
-    const conditionalCaseExpr = new ir.ConditionalCaseExpr(
-      caseExpr,
-      templateOp.xref,
-      templateOp.handle,
-    );
-    conditions.push(conditionalCaseExpr);
-    ingestNodes(cView, switchCase.children);
+
+    for (const switchCase of switchCaseGroup.cases) {
+      const caseExpr = switchCase.expression
+        ? convertAst(switchCase.expression, unit.job, switchBlock.startSourceSpan)
+        : null;
+      const conditionalCaseExpr = new ir.ConditionalCaseExpr(
+        caseExpr,
+        conditionalCreateOp.xref,
+        conditionalCreateOp.handle,
+      );
+      conditions.push(conditionalCaseExpr);
+    }
+    ingestNodes(cView, switchCaseGroup.children);
   }
   unit.update.push(
     ir.createConditionalOp(
@@ -665,6 +707,7 @@ function ingestDeferBlock(unit: ViewCompilationUnit, deferBlock: t.DeferredBlock
   deferOp.placeholderMinimumTime = deferBlock.placeholder?.minimumTime ?? null;
   deferOp.loadingMinimumTime = deferBlock.loading?.minimumTime ?? null;
   deferOp.loadingAfterTime = deferBlock.loading?.afterTime ?? null;
+  deferOp.flags = calcDeferBlockFlags(deferBlock);
   unit.create.push(deferOp);
 
   // Configure all defer `on` conditions.
@@ -710,7 +753,7 @@ function ingestDeferBlock(unit: ViewCompilationUnit, deferBlock: t.DeferredBlock
     deferOnOps.push(
       ir.createDeferOnOp(
         deferXref,
-        {kind: ir.DeferTriggerKind.Idle},
+        {kind: ir.DeferTriggerKind.Idle, timeout: null},
         ir.DeferOpModifierKind.NONE,
         null!,
       ),
@@ -719,6 +762,13 @@ function ingestDeferBlock(unit: ViewCompilationUnit, deferBlock: t.DeferredBlock
 
   unit.create.push(deferOnOps);
   unit.update.push(deferWhenOps);
+}
+
+function calcDeferBlockFlags(deferBlockDetails: t.DeferredBlock): ir.TDeferDetailsFlags | null {
+  if (Object.keys(deferBlockDetails.hydrateTriggers).length > 0) {
+    return ir.TDeferDetailsFlags.HasHydrateTriggers;
+  }
+  return null;
 }
 
 function ingestDeferTriggers(
@@ -732,7 +782,7 @@ function ingestDeferTriggers(
   if (triggers.idle !== undefined) {
     const deferOnOp = ir.createDeferOnOp(
       deferXref,
-      {kind: ir.DeferTriggerKind.Idle},
+      {kind: ir.DeferTriggerKind.Idle, timeout: triggers.idle.timeout ?? null},
       modifier,
       triggers.idle.sourceSpan,
     );
@@ -798,6 +848,9 @@ function ingestDeferTriggers(
         targetSlot: null,
         targetView: null,
         targetSlotViewSteps: null,
+        options: triggers.viewport.options
+          ? convertAst(triggers.viewport.options, unit.job, triggers.viewport.sourceSpan)
+          : null,
       },
       modifier,
       triggers.viewport.sourceSpan,
@@ -1003,30 +1056,7 @@ function convertAst(
   if (ast instanceof e.ASTWithSource) {
     return convertAst(ast.ast, job, baseSourceSpan);
   } else if (ast instanceof e.PropertyRead) {
-    const isThisReceiver = ast.receiver instanceof e.ThisReceiver;
-    // Whether this is an implicit receiver, *excluding* explicit reads of `this`.
-    const isImplicitReceiver =
-      ast.receiver instanceof e.ImplicitReceiver && !(ast.receiver instanceof e.ThisReceiver);
-    // Whether the  name of the read is a node that should be never retain its explicit this
-    // receiver.
-    const isSpecialNode = ast.name === '$any' || ast.name === '$event';
-    // TODO: The most sensible condition here would be simply `isImplicitReceiver`, to convert only
-    // actual implicit `this` reads, and not explicit ones. However, TemplateDefinitionBuilder (and
-    // the Typecheck block!) both have the same bug, in which they also consider explicit `this`
-    // reads to be implicit. This causes problems when the explicit `this` read is inside a
-    // template with a context that also provides the variable name being read:
-    // ```
-    // <ng-template let-a>{{this.a}}</ng-template>
-    // ```
-    // The whole point of the explicit `this` was to access the class property, but TDB and the
-    // current TCB treat the read as implicit, and give you the context property instead!
-    //
-    // For now, we emulate this old behavior by aggressively converting explicit reads to to
-    // implicit reads, except for the special cases that TDB and the current TCB protect. However,
-    // it would be an improvement to fix this.
-    //
-    // See also the corresponding comment for the TCB, in `type_check_block.ts`.
-    if (isImplicitReceiver || (isThisReceiver && !isSpecialNode)) {
+    if (ast.receiver instanceof e.ImplicitReceiver) {
       return new ir.LexicalReadExpr(ast.name);
     } else {
       return new o.ReadPropExpr(
@@ -1036,32 +1066,6 @@ function convertAst(
         convertSourceSpan(ast.span, baseSourceSpan),
       );
     }
-  } else if (ast instanceof e.PropertyWrite) {
-    if (ast.receiver instanceof e.ImplicitReceiver) {
-      return new o.WritePropExpr(
-        // TODO: Is it correct to always use the root context in place of the implicit receiver?
-        new ir.ContextExpr(job.root.xref),
-        ast.name,
-        convertAst(ast.value, job, baseSourceSpan),
-        null,
-        convertSourceSpan(ast.span, baseSourceSpan),
-      );
-    }
-    return new o.WritePropExpr(
-      convertAst(ast.receiver, job, baseSourceSpan),
-      ast.name,
-      convertAst(ast.value, job, baseSourceSpan),
-      undefined,
-      convertSourceSpan(ast.span, baseSourceSpan),
-    );
-  } else if (ast instanceof e.KeyedWrite) {
-    return new o.WriteKeyExpr(
-      convertAst(ast.receiver, job, baseSourceSpan),
-      convertAst(ast.key, job, baseSourceSpan),
-      convertAst(ast.value, job, baseSourceSpan),
-      undefined,
-      convertSourceSpan(ast.span, baseSourceSpan),
-    );
   } else if (ast instanceof e.Call) {
     if (ast.receiver instanceof e.ImplicitReceiver) {
       throw new Error(`Unexpected ImplicitReceiver`);
@@ -1120,10 +1124,13 @@ function convertAst(
     throw new Error(`AssertionError: Chain in unknown context`);
   } else if (ast instanceof e.LiteralMap) {
     const entries = ast.keys.map((key, idx) => {
-      const value = ast.values[idx];
+      const value = convertAst(ast.values[idx], job, baseSourceSpan);
+
       // TODO: should literals have source maps, or do we just map the whole surrounding
       // expression?
-      return new o.LiteralMapEntry(key.key, convertAst(value, job, baseSourceSpan), key.quoted);
+      return key.kind === 'spread'
+        ? new o.LiteralMapSpreadAssignment(value)
+        : new o.LiteralMapPropertyAssignment(key.key, value, key.quoted);
     });
     return new o.LiteralMapExpr(entries, undefined, convertSourceSpan(ast.span, baseSourceSpan));
   } else if (ast instanceof e.LiteralArray) {
@@ -1159,9 +1166,14 @@ function convertAst(
     return new ir.SafePropertyReadExpr(convertAst(ast.receiver, job, baseSourceSpan), ast.name);
   } else if (ast instanceof e.SafeCall) {
     // TODO: source span
-    return new ir.SafeInvokeFunctionExpr(
+    return new o.InvokeFunctionExpr(
       convertAst(ast.receiver, job, baseSourceSpan),
       ast.args.map((a) => convertAst(a, job, baseSourceSpan)),
+      null,
+      convertSourceSpan(ast.span, baseSourceSpan),
+      false,
+      [],
+      true,
     );
   } else if (ast instanceof e.EmptyExpr) {
     return new ir.EmptyExpr(convertSourceSpan(ast.span, baseSourceSpan));
@@ -1170,11 +1182,59 @@ function convertAst(
       convertAst(ast.expression, job, baseSourceSpan),
       convertSourceSpan(ast.span, baseSourceSpan),
     );
+  } else if (ast instanceof e.TypeofExpression) {
+    return o.typeofExpr(convertAst(ast.expression, job, baseSourceSpan));
+  } else if (ast instanceof e.VoidExpression) {
+    return new o.VoidExpr(
+      convertAst(ast.expression, job, baseSourceSpan),
+      undefined,
+      convertSourceSpan(ast.span, baseSourceSpan),
+    );
+  } else if (ast instanceof e.TemplateLiteral) {
+    return convertTemplateLiteral(ast, job, baseSourceSpan);
+  } else if (ast instanceof e.TaggedTemplateLiteral) {
+    return new o.TaggedTemplateLiteralExpr(
+      convertAst(ast.tag, job, baseSourceSpan),
+      convertTemplateLiteral(ast.template, job, baseSourceSpan),
+      undefined,
+      convertSourceSpan(ast.span, baseSourceSpan),
+    );
+  } else if (ast instanceof e.ParenthesizedExpression) {
+    return new o.ParenthesizedExpr(
+      convertAst(ast.expression, job, baseSourceSpan),
+      undefined,
+      convertSourceSpan(ast.span, baseSourceSpan),
+    );
+  } else if (ast instanceof e.RegularExpressionLiteral) {
+    return new o.RegularExpressionLiteralExpr(ast.body, ast.flags, baseSourceSpan);
+  } else if (ast instanceof e.SpreadElement) {
+    return new o.SpreadElementExpr(convertAst(ast.expression, job, baseSourceSpan));
+  } else if (ast instanceof e.ArrowFunction) {
+    return updateParameterReferences(
+      o.arrowFn(
+        ast.parameters.map((arg) => new o.FnParam(arg.name, o.DYNAMIC_TYPE)),
+        convertAst(ast.body, job, baseSourceSpan),
+      ),
+    );
   } else {
     throw new Error(
       `Unhandled expression type "${ast.constructor.name}" in file "${baseSourceSpan?.start.file.url}"`,
     );
   }
+}
+
+function convertTemplateLiteral(
+  ast: e.TemplateLiteral,
+  job: CompilationJob,
+  baseSourceSpan: ParseSourceSpan | null,
+) {
+  return new o.TemplateLiteralExpr(
+    ast.elements.map((el) => {
+      return new o.TemplateLiteralElementExpr(el.text, convertSourceSpan(el.span, baseSourceSpan));
+    }),
+    ast.expressions.map((expr) => convertAst(expr, job, baseSourceSpan)),
+    convertSourceSpan(ast.span, baseSourceSpan),
+  );
 }
 
 function convertAstWithInterpolation(
@@ -1205,6 +1265,7 @@ const BINDING_KINDS = new Map<e.BindingType, ir.BindingKind>([
   [e.BindingType.Attribute, ir.BindingKind.Attribute],
   [e.BindingType.Class, ir.BindingKind.ClassName],
   [e.BindingType.Style, ir.BindingKind.StyleProperty],
+  [e.BindingType.LegacyAnimation, ir.BindingKind.LegacyAnimation],
   [e.BindingType.Animation, ir.BindingKind.Animation],
 ]);
 
@@ -1252,7 +1313,6 @@ function ingestElementBindings(
   element: t.Element,
 ): void {
   let bindings = new Array<ir.BindingOp | ir.ExtractedAttributeOp | null>();
-
   let i18nAttributeBindingNames = new Set<string>();
 
   for (const attr of element.attributes) {
@@ -1308,7 +1368,7 @@ function ingestElementBindings(
   unit.update.push(bindings.filter((b): b is ir.BindingOp => b?.kind === ir.OpKind.Binding));
 
   for (const output of element.outputs) {
-    if (output.type === e.ParsedEventType.Animation && output.phase === null) {
+    if (output.type === e.ParsedEventType.LegacyAnimation && output.phase === null) {
       throw Error('Animation listener should have a phase');
     }
 
@@ -1320,6 +1380,20 @@ function ingestElementBindings(
           output.name,
           op.tag,
           makeTwoWayListenerHandlerOps(unit, output.handler, output.handlerSpan),
+          output.sourceSpan,
+        ),
+      );
+    } else if (output.type === e.ParsedEventType.Animation) {
+      unit.create.push(
+        ir.createAnimationListenerOp(
+          op.xref,
+          op.handle,
+          output.name,
+          op.tag,
+          makeListenerHandlerOps(unit, output.handler, output.handlerSpan),
+          output.name.endsWith('enter') ? ir.AnimationKind.ENTER : ir.AnimationKind.LEAVE,
+          output.target,
+          false,
           output.sourceSpan,
         ),
       );
@@ -1360,7 +1434,6 @@ function ingestTemplateBindings(
   templateKind: ir.TemplateKind | null,
 ): void {
   let bindings = new Array<ir.BindingOp | ir.ExtractedAttributeOp | null>();
-
   for (const attr of template.templateAttrs) {
     if (attr instanceof t.TextAttribute) {
       const securityContext = domSchema.securityContext(NG_TEMPLATE_TAG_NAME, attr.name, true);
@@ -1443,7 +1516,7 @@ function ingestTemplateBindings(
   unit.update.push(bindings.filter((b): b is ir.BindingOp => b?.kind === ir.OpKind.Binding));
 
   for (const output of template.outputs) {
-    if (output.type === e.ParsedEventType.Animation && output.phase === null) {
+    if (output.type === e.ParsedEventType.LegacyAnimation && output.phase === null) {
       throw Error('Animation listener should have a phase');
     }
 
@@ -1477,7 +1550,7 @@ function ingestTemplateBindings(
     }
     if (
       templateKind === ir.TemplateKind.Structural &&
-      output.type !== e.ParsedEventType.Animation
+      output.type !== e.ParsedEventType.LegacyAnimation
     ) {
       // Animation bindings are excluded from the structural template's const array.
       const securityContext = domSchema.securityContext(NG_TEMPLATE_TAG_NAME, output.name, false);
@@ -1582,7 +1655,12 @@ function createTemplateBinding(
       }
     }
 
-    if (!isTextBinding && (type === e.BindingType.Attribute || type === e.BindingType.Animation)) {
+    if (
+      !isTextBinding &&
+      (type === e.BindingType.Attribute ||
+        type === e.BindingType.LegacyAnimation ||
+        type === e.BindingType.Animation)
+    ) {
       // Again, this binding doesn't really target the ng-template; it actually targets the element
       // inside the structural template. In the case of non-text attribute or animation bindings,
       // the binding doesn't even show up on the ng-template const array, so we just skip it
@@ -1752,20 +1830,21 @@ function convertSourceSpan(
  *    workaround, because it'll include an additional text node as the first child. We can work
  *    around it here, but in a discussion it was decided not to, because the user explicitly opted
  *    into preserving the whitespace and we would have to drop it from the generated code.
- *    The diagnostic mentioned point #1 will flag such cases to users.
+ *    The diagnostic mentioned point in #1 will flag such cases to users.
  *
  * @returns Tag name to be used for the control flow template.
  */
 function ingestControlFlowInsertionPoint(
   unit: ViewCompilationUnit,
   xref: ir.XrefId,
-  node: t.IfBlockBranch | t.SwitchBlockCase | t.ForLoopBlock | t.ForLoopBlockEmpty,
+  node: t.IfBlockBranch | t.SwitchBlockCaseGroup | t.ForLoopBlock | t.ForLoopBlockEmpty,
 ): string | null {
   let root: t.Element | t.Template | null = null;
 
   for (const child of node.children) {
-    // Skip over comment nodes.
-    if (child instanceof t.Comment) {
+    // Skip over comment nodes and @let declarations since
+    // it doesn't matter where they end up in the DOM.
+    if (child instanceof t.Comment || child instanceof t.LetDeclaration) {
       continue;
     }
 
@@ -1777,6 +1856,8 @@ function ingestControlFlowInsertionPoint(
     // Root nodes can only elements or templates with a tag name (e.g. `<div *foo></div>`).
     if (child instanceof t.Element || (child instanceof t.Template && child.tagName !== null)) {
       root = child;
+    } else {
+      return null;
     }
   }
 
@@ -1785,29 +1866,35 @@ function ingestControlFlowInsertionPoint(
   if (root !== null) {
     // Collect the static attributes for content projection purposes.
     for (const attr of root.attributes) {
-      const securityContext = domSchema.securityContext(NG_TEMPLATE_TAG_NAME, attr.name, true);
-      unit.update.push(
-        ir.createBindingOp(
-          xref,
-          ir.BindingKind.Attribute,
-          attr.name,
-          o.literal(attr.value),
-          null,
-          securityContext,
-          true,
-          false,
-          null,
-          asMessage(attr.i18n),
-          attr.sourceSpan,
-        ),
-      );
+      if (!attr.name.startsWith(ANIMATE_PREFIX)) {
+        const securityContext = domSchema.securityContext(NG_TEMPLATE_TAG_NAME, attr.name, true);
+        unit.update.push(
+          ir.createBindingOp(
+            xref,
+            ir.BindingKind.Attribute,
+            attr.name,
+            o.literal(attr.value),
+            null,
+            securityContext,
+            true,
+            false,
+            null,
+            asMessage(attr.i18n),
+            attr.sourceSpan,
+          ),
+        );
+      }
     }
 
     // Also collect the inputs since they participate in content projection as well.
     // Note that TDB used to collect the outputs as well, but it wasn't passing them into
     // the template instruction. Here we just don't collect them.
     for (const attr of root.inputs) {
-      if (attr.type !== e.BindingType.Animation && attr.type !== e.BindingType.Attribute) {
+      if (
+        attr.type !== e.BindingType.LegacyAnimation &&
+        attr.type !== e.BindingType.Animation &&
+        attr.type !== e.BindingType.Attribute
+      ) {
         const securityContext = domSchema.securityContext(NG_TEMPLATE_TAG_NAME, attr.name, true);
         unit.create.push(
           ir.createExtractedAttributeOp(
@@ -1831,4 +1918,30 @@ function ingestControlFlowInsertionPoint(
   }
 
   return null;
+}
+
+/**
+ * When an arrow function in the expression AST is converted into the output AST, all of its
+ * top-level reads become `LexicalReadExpr` because the output AST doesn't have a concept of a
+ * variable read. This function corrects the ones that point to parameters.
+ *
+ * @param root Root arrow function.
+ */
+function updateParameterReferences(root: o.ArrowFunctionExpr): o.ArrowFunctionExpr {
+  const parameterNames = new Set(root.params.map((param) => param.name));
+
+  return ir.transformExpressionsInExpression(
+    root,
+    (expr) => {
+      if (expr instanceof o.ArrowFunctionExpr) {
+        for (const param of expr.params) {
+          parameterNames.add(param.name);
+        }
+      } else if (expr instanceof ir.LexicalReadExpr && parameterNames.has(expr.name)) {
+        return o.variable(expr.name);
+      }
+      return expr;
+    },
+    ir.VisitorContextFlag.None,
+  ) as o.ArrowFunctionExpr;
 }

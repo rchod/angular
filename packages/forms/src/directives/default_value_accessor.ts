@@ -46,7 +46,7 @@ function _isAndroid(): boolean {
  * @publicApi
  */
 export const COMPOSITION_BUFFER_MODE = new InjectionToken<boolean>(
-  ngDevMode ? 'CompositionEventMode' : '',
+  typeof ngDevMode !== 'undefined' && ngDevMode ? 'CompositionEventMode' : '',
 );
 
 /**
@@ -66,7 +66,7 @@ export const COMPOSITION_BUFFER_MODE = new InjectionToken<boolean>(
  * const firstNameControl = new FormControl();
  * ```
  *
- * ```
+ * ```html
  * <input type="text" [formControl]="firstNameControl">
  * ```
  *
@@ -75,7 +75,7 @@ export const COMPOSITION_BUFFER_MODE = new InjectionToken<boolean>(
  * processing. In order to attach the default value accessor to a custom element, add the
  * `ngDefaultControl` attribute as shown below.
  *
- * ```
+ * ```html
  * <custom-input-component ngDefaultControl [(ngModel)]="value"></custom-input-component>
  * ```
  *
@@ -85,17 +85,18 @@ export const COMPOSITION_BUFFER_MODE = new InjectionToken<boolean>(
  */
 @Directive({
   selector:
-    'input:not([type=checkbox])[formControlName],textarea[formControlName],input:not([type=checkbox])[formControl],textarea[formControl],input:not([type=checkbox])[ngModel],textarea[ngModel],[ngDefaultControl]',
+    'input:not([type=checkbox]):not([ngNoCva])[formControlName],textarea:not([ngNoCva])[formControlName],input:not([type=checkbox]):not([ngNoCva])[formControl],textarea:not([ngNoCva])[formControl],input:not([type=checkbox]):not([ngNoCva])[ngModel],textarea:not([ngNoCva])[ngModel],[ngDefaultControl]',
   // TODO: vsavkin replace the above selector with the one below it once
   // https://github.com/angular/angular/issues/3011 is implemented
   // selector: '[ngModel],[formControl],[formControlName]',
   host: {
-    '(input)': '$any(this)._handleInput($event.target.value)',
+    '(input)': '_handleInput($any($event.target).value)',
     '(blur)': 'onTouched()',
-    '(compositionstart)': '$any(this)._compositionStart()',
-    '(compositionend)': '$any(this)._compositionEnd($event.target.value)',
+    '(compositionstart)': '_compositionStart()',
+    '(compositionend)': '_compositionEnd($any($event.target).value)',
   },
   providers: [DEFAULT_VALUE_ACCESSOR],
+  standalone: false,
 })
 export class DefaultValueAccessor extends BaseControlValueAccessor implements ControlValueAccessor {
   /** Whether the user is creating a composition string (IME events). */
@@ -114,7 +115,7 @@ export class DefaultValueAccessor extends BaseControlValueAccessor implements Co
 
   /**
    * Sets the "value" property on the input element.
-   * @nodoc
+   * @docs-private
    */
   writeValue(value: any): void {
     const normalizedValue = value == null ? '' : value;

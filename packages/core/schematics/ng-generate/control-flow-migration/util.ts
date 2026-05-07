@@ -6,7 +6,7 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
-import {Attribute, Element, HtmlParser, Node, ParseTreeResult, visitAll} from '@angular/compiler';
+import {Attribute, Element, Node, ParseTreeResult, visitAll} from '@angular/compiler';
 import {dirname, join} from 'path';
 import ts from 'typescript';
 
@@ -20,19 +20,24 @@ import {
   i18nCollector,
   importRemovals,
   importWithCommonRemovals,
-  MigrateError,
-  ParseResult,
   startI18nMarker,
   startMarker,
   Template,
   TemplateCollector,
 } from './types';
+import {MigrateError, parseTemplate} from '../../utils/parse_html';
 
 const startMarkerRegex = new RegExp(startMarker, 'gm');
 const endMarkerRegex = new RegExp(endMarker, 'gm');
 const startI18nMarkerRegex = new RegExp(startI18nMarker, 'gm');
 const endI18nMarkerRegex = new RegExp(endI18nMarker, 'gm');
 const replaceMarkerRegex = new RegExp(`${startMarker}|${endMarker}`, 'gm');
+const PRIORITY_WEIGHT_TEMPLATE_REFERENCE_BY_OUTLET = 2;
+
+interface TemplateUsageResult {
+  isReferencedInTemplateOutlet: boolean;
+  totalCount: number;
+}
 
 /**
  * Analyzes a source file to find file that need to be migrated and the text ranges within them.
@@ -265,36 +270,6 @@ function getNestedCount(etm: ElementToMigrate, aggregator: number[]) {
   }
 }
 
-/**
- * parses the template string into the Html AST
- */
-export function parseTemplate(template: string): ParseResult {
-  let parsed: ParseTreeResult;
-  try {
-    // Note: we use the HtmlParser here, instead of the `parseTemplate` function, because the
-    // latter returns an Ivy AST, not an HTML AST. The HTML AST has the advantage of preserving
-    // interpolated text as text nodes containing a mixture of interpolation tokens and text tokens,
-    // rather than turning them into `BoundText` nodes like the Ivy AST does. This allows us to
-    // easily get the text-only ranges without having to reconstruct the original text.
-    parsed = new HtmlParser().parse(template, '', {
-      // Allows for ICUs to be parsed.
-      tokenizeExpansionForms: true,
-      // Explicitly disable blocks so that their characters are treated as plain text.
-      tokenizeBlocks: true,
-      preserveLineEndings: true,
-    });
-
-    // Don't migrate invalid templates.
-    if (parsed.errors && parsed.errors.length > 0) {
-      const errors = parsed.errors.map((e) => ({type: 'parse', error: e}));
-      return {tree: undefined, errors};
-    }
-  } catch (e: any) {
-    return {tree: undefined, errors: [{type: 'parse', error: e}]};
-  }
-  return {tree: parsed, errors: []};
-}
-
 export function validateMigratedTemplate(migrated: string, fileName: string): MigrateError[] {
   const parsed = parseTemplate(migrated);
   let errors: MigrateError[] = [];
@@ -385,10 +360,6 @@ export function calculateNesting(
   }
 }
 
-function escapeRegExp(val: string) {
-  return val.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // $& means the whole matched string
-}
-
 /**
  * determines if a given template string contains line breaks
  */
@@ -425,15 +396,10 @@ export function getTemplates(template: string): Map<string, Template> {
     const visitor = new TemplateCollector();
     visitAll(visitor, parsed.tree.rootNodes);
 
-    // count usages of each ng-template
     for (let [key, tmpl] of visitor.templates) {
-      const escapeKey = escapeRegExp(key.slice(1));
-      const regex = new RegExp(`[^a-zA-Z0-9-<(\']${escapeKey}\\W`, 'gm');
-      const matches = template.match(regex);
-      tmpl.count = matches?.length ?? 0;
+      tmpl.count = countTemplateUsage(parsed.tree.rootNodes, key);
       tmpl.generateContents(template);
     }
-
     return visitor.templates;
   }
   return new Map<string, Template>();
@@ -466,15 +432,22 @@ function generatei18nContainer(
 /**
  * Counts, replaces, and removes any necessary ng-templates post control flow migration
  */
-export function processNgTemplates(template: string): {migrated: string; err: Error | undefined} {
+export function processNgTemplates(
+  template: string,
+  sourceFile: ts.SourceFile,
+): {migrated: string; err: Error | undefined} {
   // count usage
   try {
     const templates = getTemplates(template);
 
     // swap placeholders and remove
-    for (const [name, t] of templates) {
-      const replaceRegex = new RegExp(getPlaceholder(name.slice(1)), 'g');
-      const forRegex = new RegExp(getPlaceholder(name.slice(1), PlaceholderKind.Alternate), 'g');
+    for (const [nameWithHash, t] of templates) {
+      const name = nameWithHash.slice(1);
+      const replaceRegex = new RegExp(getPlaceholder(name), 'g');
+      const forRegex = new RegExp(
+        getPlaceholder(nameWithHash.slice(1), PlaceholderKind.Alternate),
+        'g',
+      );
       const forMatches = [...template.matchAll(forRegex)];
       const matches = [...forMatches, ...template.matchAll(replaceRegex)];
       let safeToRemove = true;
@@ -494,9 +467,31 @@ export function processNgTemplates(template: string): {migrated: string; err: Er
         } else {
           template = template.replace(replaceRegex, t.children);
         }
-        // the +1 accounts for the t.count's counting of the original template
-        if (t.count === matches.length + 1 && safeToRemove) {
-          template = template.replace(t.contents, `${startMarker}${endMarker}`);
+
+        const dist = matches.filter(
+          (obj, index, self) => index === self.findIndex((t) => t.input === obj.input),
+        );
+
+        // Check if template is used by ngTemplateOutlet in addition to control flow
+        const hasTemplateOutletUsage = checkForTemplateOutletUsage(template, nameWithHash.slice(1));
+
+        // Only remove template if it's safe to do so AND not used by ngTemplateOutlet
+        if (
+          (t.count === dist.length || t.count - matches.length === 1) &&
+          safeToRemove &&
+          !hasTemplateOutletUsage
+        ) {
+          const refsInComponentFile = getViewChildOrViewChildrenNames(sourceFile);
+          if (refsInComponentFile?.length > 0) {
+            const templateRefs = getTemplateReferences(template);
+            for (const ref of refsInComponentFile) {
+              if (!templateRefs.includes(ref)) {
+                template = template.replace(t.contents, `${startMarker}${endMarker}`);
+              }
+            }
+          } else {
+            template = template.replace(t.contents, `${startMarker}${endMarker}`);
+          }
         }
         // templates may have changed structure from nested replaced templates
         // so we need to reprocess them before the next loop.
@@ -512,6 +507,118 @@ export function processNgTemplates(template: string): {migrated: string; err: Er
   } catch (err) {
     return {migrated: template, err: err as Error};
   }
+}
+
+function analyzeTemplateUsage(nodes: any[], templateName: string): TemplateUsageResult {
+  let count = 0;
+  let isReferencedInTemplateOutlet = false;
+  const templateNameWithHash = `#${templateName}`;
+
+  function traverseNodes(nodeList: any[]): void {
+    for (const node of nodeList) {
+      if (node.attrs) {
+        for (const attr of node.attrs) {
+          if (
+            (attr.name === '*ngTemplateOutlet' || attr.name === '[ngTemplateOutlet]') &&
+            attr.value?.split(';')[0]?.trim() === templateName
+          ) {
+            isReferencedInTemplateOutlet = true;
+          }
+
+          if (attr.name.trim() === templateNameWithHash) {
+            count++;
+          }
+        }
+      }
+
+      if (node.children) {
+        if (node.name === 'for') {
+          for (const child of node.children) {
+            if (child.value?.includes(templateName)) {
+              count++;
+            }
+          }
+        }
+
+        traverseNodes(node.children);
+      }
+    }
+  }
+
+  traverseNodes(nodes);
+
+  return {
+    isReferencedInTemplateOutlet,
+    totalCount: isReferencedInTemplateOutlet
+      ? count + PRIORITY_WEIGHT_TEMPLATE_REFERENCE_BY_OUTLET
+      : count,
+  };
+}
+
+/**
+ * Checks if a template is used by ngTemplateOutlet directive
+ */
+function checkForTemplateOutletUsage(template: string, templateName: string): boolean {
+  const parsed = parseTemplate(template);
+  if (parsed.tree === undefined) {
+    return false;
+  }
+
+  const result = analyzeTemplateUsage(parsed.tree.rootNodes, templateName);
+  return result.isReferencedInTemplateOutlet;
+}
+
+function countTemplateUsage(nodes: any[], templateNameWithHash: string): number {
+  const templateName = templateNameWithHash.slice(1);
+  const result = analyzeTemplateUsage(nodes, templateName);
+  return result.totalCount;
+}
+
+function getViewChildOrViewChildrenNames(sourceFile: ts.SourceFile): Array<string> {
+  const names: Array<string> = [];
+
+  function visit(node: ts.Node) {
+    if (ts.isDecorator(node) && ts.isCallExpression(node.expression)) {
+      const expr = node.expression;
+      if (
+        ts.isIdentifier(expr.expression) &&
+        (expr.expression.text === 'ViewChild' || expr.expression.text === 'ViewChildren')
+      ) {
+        const firstArg = expr.arguments[0];
+        if (firstArg && ts.isStringLiteral(firstArg)) {
+          names.push(firstArg.text);
+        }
+        return;
+      }
+    }
+    ts.forEachChild(node, visit);
+  }
+
+  visit(sourceFile);
+  return names;
+}
+
+function getTemplateReferences(template: string): string[] {
+  const parsed = parseTemplate(template);
+  if (parsed.tree === undefined) {
+    return [];
+  }
+
+  const templateNameRefWithoutHash: string[] = [];
+
+  function visitNodes(nodes: any) {
+    for (const node of nodes) {
+      if (node?.name === 'ng-template') {
+        templateNameRefWithoutHash.push(...node.attrs?.map((ref: any) => ref?.name?.slice(1)));
+      }
+      if (node.children) {
+        visitNodes(node.children);
+      }
+    }
+  }
+
+  visitNodes(parsed.tree.rootNodes);
+  return templateNameRefWithoutHash;
 }
 
 function replaceRemainingPlaceholders(template: string): string {

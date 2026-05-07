@@ -19,10 +19,9 @@ import {getRootComponents} from './discovery_utils';
  * Marks a component for check (in case of OnPush components) and synchronously
  * performs change detection on the application this component belongs to.
  *
- * @param component Component to {@link ChangeDetectorRef#markForCheck mark for check}.
+ * @param component Component to {@link /api/core/ChangeDetectorRef#markForCheck mark for check}
  *
  * @publicApi
- * @globalApi ng
  */
 export function applyChanges(component: {}): void {
   ngDevMode && assertDefined(component, 'component');

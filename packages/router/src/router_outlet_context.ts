@@ -8,9 +8,8 @@
 
 import {ComponentRef, EnvironmentInjector, Injectable} from '@angular/core';
 
-import {RouterOutletContract} from './directives/router_outlet';
+import type {RouterOutletContract} from './directives/router_outlet';
 import {ActivatedRoute} from './router_state';
-import {getClosestRouteInjector} from './utils/config';
 
 /**
  * Store contextual information about a `RouterOutlet`
@@ -20,15 +19,15 @@ import {getClosestRouteInjector} from './utils/config';
 export class OutletContext {
   outlet: RouterOutletContract | null = null;
   route: ActivatedRoute | null = null;
-  children = new ChildrenOutletContexts(this.rootInjector);
+  children: ChildrenOutletContexts;
   attachRef: ComponentRef<any> | null = null;
   get injector(): EnvironmentInjector {
-    return getClosestRouteInjector(this.route?.snapshot) ?? this.rootInjector;
+    return this.route?.snapshot._environmentInjector ?? this.rootInjector;
   }
-  // TODO(atscott): Only here to avoid a "breaking" change in a patch/minor. Remove in v19.
-  set injector(_: EnvironmentInjector) {}
 
-  constructor(private readonly rootInjector: EnvironmentInjector) {}
+  constructor(private readonly rootInjector: EnvironmentInjector) {
+    this.children = new ChildrenOutletContexts(this.rootInjector);
+  }
 }
 
 /**
@@ -41,7 +40,7 @@ export class ChildrenOutletContexts {
   // contexts for child outlets, by name.
   private contexts = new Map<string, OutletContext>();
 
-  /** @nodoc */
+  /** @docs-private */
   constructor(private rootInjector: EnvironmentInjector) {}
 
   /** Called when a `RouterOutlet` directive is instantiated */
@@ -74,7 +73,7 @@ export class ChildrenOutletContexts {
     return contexts;
   }
 
-  onOutletReAttached(contexts: Map<string, OutletContext>) {
+  onOutletReAttached(contexts: Map<string, OutletContext>): void {
     this.contexts = contexts;
   }
 

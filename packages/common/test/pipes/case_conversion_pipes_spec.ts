@@ -6,7 +6,7 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
-import {LowerCasePipe, TitleCasePipe, UpperCasePipe} from '@angular/common';
+import {LowerCasePipe, TitleCasePipe, UpperCasePipe} from '../../index';
 import {Component} from '@angular/core';
 import {TestBed} from '@angular/core/testing';
 
@@ -45,7 +45,6 @@ describe('LowerCasePipe', () => {
       selector: 'test-component',
       imports: [LowerCasePipe],
       template: '{{ value | lowercase }}',
-      standalone: true,
     })
     class TestComponent {
       value = 'FOO';
@@ -137,7 +136,6 @@ describe('TitleCasePipe', () => {
       selector: 'test-component',
       imports: [TitleCasePipe],
       template: '{{ value | titlecase }}',
-      standalone: true,
     })
     class TestComponent {
       value = 'foo';
@@ -186,7 +184,6 @@ describe('UpperCasePipe', () => {
       selector: 'test-component',
       imports: [UpperCasePipe],
       template: '{{ value | uppercase }}',
-      standalone: true,
     })
     class TestComponent {
       value = 'foo';

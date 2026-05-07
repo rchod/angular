@@ -15,8 +15,10 @@ import {RouterConfigLoader} from '../src/router_config_loader';
 import {ActivatedRouteSnapshot, RouterStateSnapshot} from '../src/router_state';
 import {Params, PRIMARY_OUTLET} from '../src/shared';
 import {DefaultUrlSerializer, UrlTree} from '../src/url_tree';
+import {useAutoTick} from '@angular/private/testing';
 
-describe('recognize', async () => {
+describe('recognize', () => {
+  useAutoTick();
   it('should work', async () => {
     const s = await recognize([{path: 'a', component: ComponentA}], 'a');
     checkActivatedRoute(s.root, '', {}, RootComponent);
@@ -158,6 +160,7 @@ describe('recognize', async () => {
         {path: 'c', component: ComponentC, outlet: 'left'},
       ],
       'a;a1=11;a2=22/b;b1=111;b2=222(left:c;c1=1111;c2=2222)',
+      'emptyOnly',
     );
     const c = s.root.children;
     checkActivatedRoute(c[0], 'a', {a1: '11', a2: '22'}, ComponentA);
@@ -165,7 +168,7 @@ describe('recognize', async () => {
     checkActivatedRoute(c[1], 'c', {c1: '1111', c2: '2222'}, ComponentC, 'left');
   });
 
-  describe('data', async () => {
+  describe('data', () => {
     it('should set static data', async () => {
       const s = await recognize([{path: 'a', data: {one: 1}, component: ComponentA}], 'a');
       const r: ActivatedRouteSnapshot = s.root.firstChild!;
@@ -187,7 +190,7 @@ describe('recognize', async () => {
       expect(r.data).toEqual({one: 1, two: 2});
     });
 
-    it("should not inherit route's data if it has component", async () => {
+    it("should inherit route's data if it has component by default (paramsInheritanceStrategy is always)", async () => {
       const s = await recognize(
         [
           {
@@ -200,10 +203,10 @@ describe('recognize', async () => {
         'a/b',
       );
       const r: ActivatedRouteSnapshot = s.root.firstChild!.firstChild!;
-      expect(r.data).toEqual({two: 2});
+      expect(r.data).toEqual({one: 1, two: 2});
     });
 
-    it("should not inherit route's data if it has loadComponent", async () => {
+    it("should not inherit route's data if it has loadComponent with emptyOnly strategy", async () => {
       const s = await recognize(
         [
           {
@@ -214,6 +217,7 @@ describe('recognize', async () => {
           },
         ],
         'a/b',
+        'emptyOnly',
       );
       const r: ActivatedRouteSnapshot = s.root.firstChild!.firstChild!;
       expect(r.data).toEqual({two: 2});
@@ -246,8 +250,8 @@ describe('recognize', async () => {
     });
   });
 
-  describe('empty path', async () => {
-    describe('root', async () => {
+  describe('empty path', () => {
+    describe('root', () => {
       it('should work', async () => {
         const s = await recognize([{path: '', component: ComponentA}], '');
         checkActivatedRoute(s.root.firstChild!, '', {}, ComponentA);
@@ -286,7 +290,7 @@ describe('recognize', async () => {
       });
     });
 
-    describe('aux split is in the middle', async () => {
+    describe('aux split is in the middle', () => {
       it('should match (non-terminal)', async () => {
         const s = await recognize(
           [
@@ -363,7 +367,7 @@ describe('recognize', async () => {
       });
     });
 
-    describe('aux split at the end (no right child)', async () => {
+    describe('aux split at the end (no right child)', () => {
       it('should match (non-terminal)', async () => {
         const s = await recognize(
           [
@@ -445,7 +449,7 @@ describe('recognize', async () => {
       });
     });
 
-    describe('split at the end (right child)', async () => {
+    describe('split at the end (right child)', () => {
       it('should match (non-terminal)', async () => {
         const s = await recognize(
           [
@@ -475,7 +479,7 @@ describe('recognize', async () => {
       });
     });
 
-    describe('with outlets', async () => {
+    describe('with outlets', () => {
       it('should work when outlet is a child of empty path parent', async () => {
         const s = await recognize(
           [
@@ -571,22 +575,311 @@ describe('recognize', async () => {
           tree('/b'),
           'emptyOnly',
           new DefaultUrlSerializer(),
-        )
-          .recognize()
-          .toPromise();
+          new AbortController().signal,
+        ).recognize();
         await expectAsync(recognizePromise).toBeRejected();
+      });
+    });
+
+    describe('nested empty paths with outlets (issue 67708)', () => {
+      it('should match nested primary child regardless of named outlet empty path sibling', async () => {
+        const config = [
+          {
+            path: '',
+            component: ComponentA,
+            children: [
+              {
+                path: '',
+                component: ComponentB,
+                children: [{path: 'component', component: ComponentC}],
+              },
+              {
+                path: '',
+                outlet: 'secondary',
+                component: ComponentD,
+                children: [{path: 'component-copy', component: ComponentE}],
+              },
+            ],
+          },
+        ];
+
+        const s = await recognize(config, 'component');
+        checkActivatedRoute(s.root.firstChild!, '', {}, ComponentA);
+        const c = s.root.firstChild!.children;
+        // Should find primary child
+        checkActivatedRoute(c[0], '', {}, ComponentB, PRIMARY_OUTLET);
+        checkActivatedRoute(c[0].firstChild!, 'component', {}, ComponentC);
+      });
+
+      it('should match named outlet child when navigating to it via secondary URL', async () => {
+        const config = [
+          {
+            path: '',
+            component: ComponentA,
+            children: [
+              {
+                path: '',
+                component: ComponentB,
+                children: [{path: 'component', component: ComponentC}],
+              },
+              {
+                path: '',
+                outlet: 'secondary',
+                component: ComponentD,
+                children: [{path: 'component-copy', component: ComponentA}],
+              },
+            ],
+          },
+        ];
+
+        const s = await recognize(config, '(secondary:component-copy)');
+        checkActivatedRoute(s.root.firstChild!, '', {}, ComponentA);
+        const c = s.root.firstChild!.children;
+        const primaryRoute = c.find((r: any) => r.outlet === PRIMARY_OUTLET);
+        expect(primaryRoute).toBeDefined();
+        checkActivatedRoute(primaryRoute!, '', {}, ComponentB, PRIMARY_OUTLET);
+
+        const secondaryRoute = c.find((r: any) => r.outlet === 'secondary');
+        expect(secondaryRoute).toBeDefined();
+        checkActivatedRoute(secondaryRoute!, '', {}, ComponentD, 'secondary');
+        checkActivatedRoute(secondaryRoute!.firstChild!, 'component-copy', {}, ComponentA);
       });
     });
   });
 
-  describe('wildcards', async () => {
+  describe('wildcards', () => {
     it('should support simple wildcards', async () => {
       const s = await recognize([{path: '**', component: ComponentA}], 'a/b/c/d;a1=11');
       checkActivatedRoute(s.root.firstChild!, 'a/b/c/d', {a1: '11'}, ComponentA);
     });
+
+    it(`should match '**' with pathMatch: 'full' to a non-empty path`, async () => {
+      const s = await recognize([{path: '**', pathMatch: 'full', component: ComponentA}], 'a/b/c');
+      checkActivatedRoute(s.root.firstChild!, 'a/b/c', {}, ComponentA);
+    });
+
+    it(`should match '**' with pathMatch: 'full' to an empty path`, async () => {
+      const s = await recognize([{path: '**', pathMatch: 'full', component: ComponentA}], '');
+      checkActivatedRoute(s.root.firstChild!, '', {}, ComponentA);
+    });
+
+    // Note that we do not support named children under a wildcard, though we _could_ potentially do this
+    // as long as the children are all named outlets (non-primary). The primary outlet would be consumed by the wildcard.
+    // This test is to ensure we do not break the matcher completely when there are children under a wildcard.
+    it(`should match '**' with pathMatch: 'full' even when there are named outlets`, async () => {
+      const s = await recognize(
+        [{path: '**', pathMatch: 'full', component: ComponentA}],
+        'a/(aux:c)',
+      );
+      checkActivatedRoute(s.root.firstChild!, 'a', {}, ComponentA);
+    });
+
+    it('should support segments after a wildcard', async () => {
+      const s = await recognize(
+        [
+          {
+            path: 'a',
+            component: ComponentA,
+            children: [
+              {
+                path: '**/b',
+                component: ComponentB,
+              },
+            ],
+          },
+        ],
+        'a/1/2/b',
+      );
+      const a = s.root.firstChild!;
+      checkActivatedRoute(a, 'a', {}, ComponentA);
+
+      const wildcard = a.firstChild!;
+      checkActivatedRoute(wildcard, '1/2/b', {}, ComponentB);
+    });
+
+    describe('with segments after', () => {
+      const recognizer = (url: string) => {
+        const config = [
+          {
+            path: 'foo/**/bar',
+            component: ComponentA,
+          },
+        ];
+        return recognize(config, url);
+      };
+
+      it('matches a url with one segment for the wildcard', async () => {
+        const s = await recognizer('foo/a/bar');
+        checkActivatedRoute(s.root.firstChild!, 'foo/a/bar', {}, ComponentA);
+      });
+
+      it('matches a url with multiple segments for the wildcard', async () => {
+        const s = await recognizer('foo/a/b/c/bar');
+        checkActivatedRoute(s.root.firstChild!, 'foo/a/b/c/bar', {}, ComponentA);
+      });
+      it('matches a url with no segments for the wildcard', async () => {
+        const s = await recognizer('foo/bar');
+        checkActivatedRoute(s.root.firstChild!, 'foo/bar', {}, ComponentA);
+      });
+
+      it('does not match a url with a wrong suffix', async () => {
+        await expectAsync(recognizer('foo/a/b/baz')).toBeRejected();
+      });
+    });
+
+    describe('with prefix', () => {
+      const recognizer = (url: string) => {
+        const config = [{path: 'foo/**', component: ComponentA}];
+        return recognize(config, url);
+      };
+
+      it('matches a url with segments after the prefix', async () => {
+        const s = await recognizer('foo/a/b');
+        checkActivatedRoute(s.root.firstChild!, 'foo/a/b', {}, ComponentA);
+      });
+
+      it('matches a url with no segments after the prefix', async () => {
+        const s = await recognizer('foo');
+        checkActivatedRoute(s.root.firstChild!, 'foo', {}, ComponentA);
+      });
+    });
+
+    describe('with suffix', () => {
+      const recognizer = (url: string) => {
+        const config = [{path: '**/bar', component: ComponentA}];
+        return recognize(config, url);
+      };
+
+      it('matches a url with segments before the suffix', async () => {
+        const s = await recognizer('a/b/bar');
+        checkActivatedRoute(s.root.firstChild!, 'a/b/bar', {}, ComponentA);
+      });
+
+      it('matches a url with no segments before the suffix', async () => {
+        const s = await recognizer('bar');
+        checkActivatedRoute(s.root.firstChild!, 'bar', {}, ComponentA);
+      });
+    });
+
+    describe('with wildcard and parameters', () => {
+      it('should support path parameter after a wildcard', async () => {
+        const s = await recognize(
+          [
+            {
+              path: 'a',
+              component: ComponentA,
+              children: [
+                {
+                  path: '**/b/:id',
+                  component: ComponentB,
+                },
+              ],
+            },
+          ],
+          'a/1/2/b/3',
+        );
+        const a = s.root.firstChild!;
+        checkActivatedRoute(a, 'a', {}, ComponentA);
+
+        const wildcard = a.firstChild!;
+        checkActivatedRoute(wildcard, '1/2/b/3', {id: '3'}, ComponentB);
+      });
+
+      it('should support path parameter directly after a wildcard', async () => {
+        const s = await recognize(
+          [
+            {
+              path: 'a',
+              component: ComponentA,
+              children: [
+                {
+                  path: '**/:id',
+                  component: ComponentB,
+                },
+              ],
+            },
+          ],
+          'a/1/2/3',
+        );
+        const a = s.root.firstChild!;
+        checkActivatedRoute(a, 'a', {}, ComponentA);
+
+        const wildcard = a.firstChild!;
+        checkActivatedRoute(wildcard, '1/2/3', {id: '3'}, ComponentB);
+      });
+
+      it('should support multiple path parameters after a wildcard', async () => {
+        const s = await recognize(
+          [
+            {
+              path: 'a',
+              component: ComponentA,
+              children: [
+                {
+                  path: '**/:id1/:id2',
+                  component: ComponentB,
+                },
+              ],
+            },
+          ],
+          'a/1/2/3/4',
+        );
+        const a = s.root.firstChild!;
+        checkActivatedRoute(a, 'a', {}, ComponentA);
+
+        const wildcard = a.firstChild!;
+        checkActivatedRoute(wildcard, '1/2/3/4', {id1: '3', id2: '4'}, ComponentB);
+      });
+
+      it('should support path parameter before a wildcard', async () => {
+        const s = await recognize(
+          [
+            {
+              path: 'a',
+              component: ComponentA,
+              children: [
+                {
+                  path: ':id/**',
+                  component: ComponentB,
+                },
+              ],
+            },
+          ],
+          'a/1/2/3',
+        );
+        const a = s.root.firstChild!;
+        checkActivatedRoute(a, 'a', {}, ComponentA);
+
+        const wildcard = a.firstChild!;
+        checkActivatedRoute(wildcard, '1/2/3', {id: '1'}, ComponentB);
+      });
+
+      it('should support multiple path parameters before a wildcard', async () => {
+        const s = await recognize(
+          [
+            {
+              path: 'a',
+              component: ComponentA,
+              children: [
+                {
+                  path: ':id1/:id2/**',
+                  component: ComponentB,
+                },
+              ],
+            },
+          ],
+          'a/1/2/3/4',
+        );
+        const a = s.root.firstChild!;
+        checkActivatedRoute(a, 'a', {}, ComponentA);
+
+        const wildcard = a.firstChild!;
+        checkActivatedRoute(wildcard, '1/2/3/4', {id1: '1', id2: '2'}, ComponentB);
+      });
+    });
   });
 
-  describe('componentless routes', async () => {
+  describe('componentless routes', () => {
     it('should work', async () => {
       const s = await recognize(
         [
@@ -628,6 +921,7 @@ describe('recognize', async () => {
           },
         ],
         'p/11/a/victor/b/c',
+        'emptyOnly',
       );
       const p = s.root.firstChild!;
       checkActivatedRoute(p, 'p/11', {id: '11'}, null);
@@ -669,7 +963,7 @@ describe('recognize', async () => {
     });
   });
 
-  describe('empty URL leftovers', async () => {
+  describe('empty URL leftovers', () => {
     it('should not throw when no children matching', async () => {
       const s = await recognize(
         [{path: 'a', component: ComponentA, children: [{path: 'b', component: ComponentB}]}],
@@ -699,7 +993,7 @@ describe('recognize', async () => {
     });
   });
 
-  describe('custom path matchers', async () => {
+  describe('custom path matchers', () => {
     it('should run once', async () => {
       let calls = 0;
       const matcher: UrlMatcher = (s) => {
@@ -739,6 +1033,7 @@ describe('recognize', async () => {
           },
         ] as any,
         '/a/1;p=99/b',
+        'emptyOnly',
       );
       const a = s.root.firstChild!;
       checkActivatedRoute(a, 'a/1', {id: '1', p: '99'}, ComponentA);
@@ -765,7 +1060,7 @@ describe('recognize', async () => {
     });
   });
 
-  describe('query parameters', async () => {
+  describe('query parameters', () => {
     it('should support query params', async () => {
       const config = [{path: 'a', component: ComponentA}];
       const s = await recognize(config, 'a?q=11');
@@ -785,7 +1080,7 @@ describe('recognize', async () => {
     });
   });
 
-  describe('fragment', async () => {
+  describe('fragment', () => {
     it('should support fragment', async () => {
       const config = [{path: 'a', component: ComponentA}];
       const s = await recognize(config, 'a#f1');
@@ -803,12 +1098,58 @@ describe('recognize', async () => {
       expect(s.root.firstChild!.data['id']).toEqual('b');
     });
   });
+
+  describe('with required param before wildcard', () => {
+    const recognizer = (url: string) => {
+      const config = [
+        {
+          path: 'foo/:anyRequired/**/bar',
+          component: ComponentA,
+        },
+      ];
+      return recognize(config, url);
+    };
+
+    it('matches with one segment for wildcard', async () => {
+      const s = await recognizer('foo/required/a/bar');
+      checkActivatedRoute(
+        s.root.firstChild!,
+        'foo/required/a/bar',
+        {anyRequired: 'required'},
+        ComponentA,
+      );
+    });
+
+    it('matches with multiple segments for wildcard', async () => {
+      const s = await recognizer('foo/required/a/b/c/bar');
+      checkActivatedRoute(
+        s.root.firstChild!,
+        'foo/required/a/b/c/bar',
+        {anyRequired: 'required'},
+        ComponentA,
+      );
+    });
+
+    it('matches with no segments for wildcard', async () => {
+      const s = await recognizer('foo/required/bar');
+      checkActivatedRoute(
+        s.root.firstChild!,
+        'foo/required/bar',
+        {anyRequired: 'required'},
+        ComponentA,
+      );
+    });
+
+    it('does not match without the required segment', async () => {
+      await expectAsync(recognizer('foo/bar')).toBeRejected();
+    });
+  });
 });
 
 async function recognize(
   config: Routes,
   url: string,
-  paramsInheritanceStrategy: 'emptyOnly' | 'always' = 'emptyOnly',
+  paramsInheritanceStrategy: 'emptyOnly' | 'always' = 'always',
 ): Promise<RouterStateSnapshot> {
   const serializer = new DefaultUrlSerializer();
   const result = await new Recognizer(
@@ -819,9 +1160,8 @@ async function recognize(
     tree(url),
     paramsInheritanceStrategy,
     serializer,
-  )
-    .recognize()
-    .toPromise();
+    new AbortController().signal,
+  ).recognize();
   return result!.state;
 }
 

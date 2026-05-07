@@ -6,7 +6,7 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
-import {AbsoluteSourceSpan} from '@angular/compiler';
+import {AbsoluteSourceSpan} from '../../index';
 
 import {humanizeExpressionSource} from './util/expression';
 import {parseR3 as parse} from './view/util';
@@ -462,7 +462,7 @@ describe('expression AST absolute source spans', () => {
       expect(spans).toContain(['item.placeholder', new AbsoluteSourceSpan(40, 56)]);
     });
 
-    it('is correct for variables and placeholders', () => {
+    it('is correct for variables and placeholders in nested ICUs', () => {
       const spans = humanizeExpressionSource(
         parse(
           '<span i18n>{item.var, plural, other { {{item.placeholder}} {nestedVar, plural, other { {{nestedPlaceholder}} }}} }</span>',

@@ -6,10 +6,10 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
-import {unwrapExpression} from '@angular/compiler-cli/src/ngtsc/annotations/common';
 import assert from 'assert';
 import ts from 'typescript';
-import {ClassIncompatibilityReason} from '../../input_detection/incompatibility';
+import {unwrapExpression} from '@angular/compiler-cli/private/migrations';
+import {ClassIncompatibilityReason} from './incompatibility';
 import {SpyOnFieldPattern} from '../../pattern_advisors/spy_on_pattern';
 import {getMemberName} from '../../utils/class_member_names';
 import {GroupedTsAstVisitor} from '../../utils/grouped_ts_ast_visitor';
@@ -112,7 +112,7 @@ export function checkIncompatiblePatterns<D extends ClassFieldDescriptor>(
 
         fields.markClassIncompatible(
           inputClassSymbolsToClass.get(newTarget)!,
-          ClassIncompatibilityReason.InputOwningClassReferencedInClassProperty,
+          ClassIncompatibilityReason.OwningClassReferencedInClassProperty,
         );
       }
     }

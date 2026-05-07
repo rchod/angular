@@ -17,13 +17,14 @@ interface Update {
  * Instances are immutable. Modifying methods return a cloned
  * instance with the change. The original object is never changed.
  *
+ * @see [Setting request headers](guide/http/making-requests#setting-request-headers)
+ *
  * @publicApi
  */
 export class HttpHeaders {
   /**
    * Internal map of lowercase header names to values.
    */
-  // TODO(issue/24571): remove '!'.
   private headers!: Map<string, string[]>;
 
   /**

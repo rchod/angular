@@ -17,14 +17,10 @@ import {
   APP_BOOTSTRAP_LISTENER,
   ComponentRef,
   inject,
-  Inject,
   InjectionToken,
   ModuleWithProviders,
   NgModule,
-  NgZone,
-  Optional,
   Provider,
-  SkipSelf,
   ɵRuntimeError as RuntimeError,
 } from '@angular/core';
 
@@ -34,11 +30,10 @@ import {RouterLinkActive} from './directives/router_link_active';
 import {RouterOutlet} from './directives/router_outlet';
 import {RuntimeErrorCode} from './errors';
 import {Routes} from './models';
-import {NAVIGATION_ERROR_HANDLER, NavigationTransitions} from './navigation_transition';
+import {NAVIGATION_ERROR_HANDLER} from './navigation_transition';
 import {
   getBootstrapListener,
   rootRoute,
-  ROUTER_IS_PROVIDED,
   withComponentInputBinding,
   withDebugTracing,
   withDisabledInitialNavigation,
@@ -63,9 +58,7 @@ const ROUTER_DIRECTIVES = [RouterOutlet, RouterLink, RouterLinkActive, EmptyOutl
  * @docsNotRequired
  */
 export const ROUTER_FORROOT_GUARD = new InjectionToken<void>(
-  typeof ngDevMode === 'undefined' || ngDevMode
-    ? 'router duplicate forRoot guard'
-    : 'ROUTER_FORROOT_GUARD',
+  typeof ngDevMode === 'undefined' || ngDevMode ? 'router duplicate forRoot guard' : '',
 );
 
 // TODO(atscott): All of these except `ActivatedRoute` are `providedIn: 'root'`. They are only kept
@@ -77,13 +70,8 @@ export const ROUTER_PROVIDERS: Provider[] = [
   {provide: UrlSerializer, useClass: DefaultUrlSerializer},
   Router,
   ChildrenOutletContexts,
-  {provide: ActivatedRoute, useFactory: rootRoute, deps: [Router]},
+  {provide: ActivatedRoute, useFactory: rootRoute},
   RouterConfigLoader,
-  // Only used to warn when `provideRoutes` is used without `RouterModule` or `provideRouter`. Can
-  // be removed when `provideRoutes` is removed.
-  typeof ngDevMode === 'undefined' || ngDevMode
-    ? {provide: ROUTER_IS_PROVIDED, useValue: true}
-    : [],
 ];
 
 /**
@@ -112,7 +100,11 @@ export const ROUTER_PROVIDERS: Provider[] = [
   exports: ROUTER_DIRECTIVES,
 })
 export class RouterModule {
-  constructor(@Optional() @Inject(ROUTER_FORROOT_GUARD) guard: any) {}
+  constructor() {
+    if (typeof ngDevMode === 'undefined' || ngDevMode) {
+      inject(ROUTER_FORROOT_GUARD, {optional: true});
+    }
+  }
 
   /**
    * Creates and configures a module with all the router providers and directives.
@@ -120,7 +112,7 @@ export class RouterModule {
    *
    * When registering the NgModule at the root, import as follows:
    *
-   * ```
+   * ```ts
    * @NgModule({
    *   imports: [RouterModule.forRoot(ROUTES)]
    * })
@@ -143,11 +135,12 @@ export class RouterModule {
             : []
           : [],
         {provide: ROUTES, multi: true, useValue: routes},
-        {
-          provide: ROUTER_FORROOT_GUARD,
-          useFactory: provideForRootGuard,
-          deps: [[Router, new Optional(), new SkipSelf()]],
-        },
+        typeof ngDevMode === 'undefined' || ngDevMode
+          ? {
+              provide: ROUTER_FORROOT_GUARD,
+              useFactory: provideForRootGuard,
+            }
+          : [],
         config?.errorHandler
           ? {
               provide: NAVIGATION_ERROR_HANDLER,
@@ -159,7 +152,11 @@ export class RouterModule {
         provideRouterScroller(),
         config?.preloadingStrategy ? withPreloading(config.preloadingStrategy).ɵproviders : [],
         config?.initialNavigation ? provideInitialNavigation(config) : [],
-        config?.bindToComponentInputs ? withComponentInputBinding().ɵproviders : [],
+        config?.bindToComponentInputs
+          ? withComponentInputBinding(
+              typeof config.bindToComponentInputs === 'object' ? config.bindToComponentInputs : {},
+            ).ɵproviders
+          : [],
         config?.enableViewTransitions ? withViewTransitions().ɵproviders : [],
         provideRouterInitializer(),
       ],
@@ -171,7 +168,7 @@ export class RouterModule {
    * without creating a new Router service.
    * When registering for submodules and lazy-loaded submodules, create the NgModule as follows:
    *
-   * ```
+   * ```ts
    * @NgModule({
    *   imports: [RouterModule.forChild(ROUTES)]
    * })
@@ -199,14 +196,11 @@ export function provideRouterScroller(): Provider {
     provide: ROUTER_SCROLLER,
     useFactory: () => {
       const viewportScroller = inject(ViewportScroller);
-      const zone = inject(NgZone);
       const config: ExtraOptions = inject(ROUTER_CONFIGURATION);
-      const transitions = inject(NavigationTransitions);
-      const urlSerializer = inject(UrlSerializer);
       if (config.scrollOffset) {
         viewportScroller.setOffset(config.scrollOffset);
       }
-      return new RouterScroller(urlSerializer, transitions, viewportScroller, zone, config);
+      return new RouterScroller(config);
     },
   };
 }
@@ -223,8 +217,10 @@ function providePathLocationStrategy(): Provider {
   return {provide: LocationStrategy, useClass: PathLocationStrategy};
 }
 
-export function provideForRootGuard(router: Router): any {
-  if ((typeof ngDevMode === 'undefined' || ngDevMode) && router) {
+export function provideForRootGuard(): any {
+  const router = inject(Router, {optional: true, skipSelf: true});
+
+  if (router) {
     throw new RuntimeError(
       RuntimeErrorCode.FOR_ROOT_CALLED_TWICE,
       `The Router was provided more than once. This can happen if 'forRoot' is used outside of the root injector.` +

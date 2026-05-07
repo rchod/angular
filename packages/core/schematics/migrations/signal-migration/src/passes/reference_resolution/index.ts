@@ -6,11 +6,13 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
-import {ResourceLoader} from '@angular/compiler-cli/src/ngtsc/annotations';
-import {PartialEvaluator} from '@angular/compiler-cli/src/ngtsc/partial_evaluator';
-import {ReflectionHost} from '@angular/compiler-cli/src/ngtsc/reflection';
-import {TemplateTypeChecker} from '@angular/compiler-cli/src/ngtsc/typecheck/api';
 import ts from 'typescript';
+import {
+  ResourceLoader,
+  ReflectionHost,
+  PartialEvaluator,
+  TemplateTypeChecker,
+} from '@angular/compiler-cli/private/migrations';
 import {ProgramInfo, projectFile} from '../../../../../utils/tsurge';
 import {isInputContainerNode} from '../../input_detection/input_node';
 import {DebugElementComponentInstance} from '../../pattern_advisors/debug_element_component_instance';
@@ -40,9 +42,9 @@ export function createFindAllSourceFileReferencesVisitor<D extends ClassFieldDes
   programInfo: ProgramInfo,
   checker: ts.TypeChecker,
   reflector: ReflectionHost,
-  resourceLoader: ResourceLoader,
+  resourceLoader: ResourceLoader | null,
   evaluator: PartialEvaluator,
-  templateTypeChecker: TemplateTypeChecker,
+  templateTypeChecker: TemplateTypeChecker | null,
   knownFields: KnownFields<D>,
   fieldNamesToConsiderForReferenceLookup: Set<string> | null,
   result: ReferenceResult<D>,
@@ -67,7 +69,9 @@ export function createFindAllSourceFileReferencesVisitor<D extends ClassFieldDes
   const visitor = (node: ts.Node) => {
     let lastTime = currentTimeInMs();
 
-    if (ts.isClassDeclaration(node)) {
+    // Note: If there is no template type checker and resource loader, we aren't processing
+    // an Angular program, and can skip template detection.
+    if (ts.isClassDeclaration(node) && templateTypeChecker !== null && resourceLoader !== null) {
       identifyTemplateReferences(
         programInfo,
         node,
@@ -79,11 +83,20 @@ export function createFindAllSourceFileReferencesVisitor<D extends ClassFieldDes
         programInfo.userOptions,
         result,
         knownFields,
+        fieldNamesToConsiderForReferenceLookup,
       );
       perfCounters.template += (currentTimeInMs() - lastTime) / 1000;
       lastTime = currentTimeInMs();
 
-      identifyHostBindingReferences(node, programInfo, checker, reflector, result, knownFields);
+      identifyHostBindingReferences(
+        node,
+        programInfo,
+        checker,
+        reflector,
+        result,
+        knownFields,
+        fieldNamesToConsiderForReferenceLookup,
+      );
 
       perfCounters.hostBindings += (currentTimeInMs() - lastTime) / 1000;
       lastTime = currentTimeInMs();

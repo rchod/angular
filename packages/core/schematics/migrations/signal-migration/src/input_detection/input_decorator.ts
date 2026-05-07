@@ -8,33 +8,34 @@
 
 import ts from 'typescript';
 
-import {getAngularDecorators} from '@angular/compiler-cli/src/ngtsc/annotations';
-import {parseDecoratorInputTransformFunction} from '@angular/compiler-cli/src/ngtsc/annotations/directive';
-import {FatalDiagnosticError} from '@angular/compiler-cli/src/ngtsc/diagnostics';
-import {Reference, ReferenceEmitter} from '@angular/compiler-cli/src/ngtsc/imports';
-import {
-  DecoratorInputTransform,
-  DtsMetadataReader,
-  InputMapping,
-} from '@angular/compiler-cli/src/ngtsc/metadata';
-import {
-  DynamicValue,
-  PartialEvaluator,
-  ResolvedValueMap,
-} from '@angular/compiler-cli/src/ngtsc/partial_evaluator';
 import {
   ClassDeclaration,
+  CompilationMode,
   Decorator,
+  DecoratorInputTransform,
+  DirectiveMeta,
+  DtsMetadataReader,
+  DynamicValue,
+  FatalDiagnosticError,
+  getAngularDecorators,
+  InputMapping,
+  parseDecoratorInputTransformFunction,
+  PartialEvaluator,
+  Reference,
+  ReferenceEmitKind,
+  ReferenceEmitter,
   ReflectionHost,
-} from '@angular/compiler-cli/src/ngtsc/reflection';
-import {CompilationMode} from '@angular/compiler-cli/src/ngtsc/transform';
-import {MigrationHost} from '../migration_host';
+  ResolvedValueMap,
+} from '@angular/compiler-cli/private/migrations';
+import {NULL_EXPR} from '../../../../../../compiler/src/output/output_ast';
 import {InputNode, isInputContainerNode} from '../input_detection/input_node';
+import {MigrationHost} from '../migration_host';
 
 /** Metadata extracted of an input declaration (in `.ts` or `.d.ts` files). */
 export interface ExtractedInput extends InputMapping {
   inSourceFile: boolean;
   inputDecorator: Decorator | null;
+  fieldDecorators: Decorator[];
 }
 
 /** Attempts to extract metadata of a potential TypeScript `@Input()` declaration. */
@@ -44,10 +45,9 @@ export function extractDecoratorInput(
   reflector: ReflectionHost,
   metadataReader: DtsMetadataReader,
   evaluator: PartialEvaluator,
-  refEmitter: ReferenceEmitter,
 ): ExtractedInput | null {
   return (
-    extractSourceCodeInput(node, host, reflector, evaluator, refEmitter) ??
+    extractSourceCodeInput(node, host, reflector, evaluator) ??
     extractDtsInput(node, metadataReader)
   );
 }
@@ -73,9 +73,20 @@ function extractDtsInput(node: ts.Node, metadataReader: DtsMetadataReader): Extr
     return null;
   }
 
-  const directiveMetadata = metadataReader.getDirectiveMetadata(
-    new Reference(node.parent as ClassDeclaration),
-  );
+  let directiveMetadata: DirectiveMeta | null = null;
+
+  // Getting directive metadata can throw errors when e.g. types referenced
+  // in the `.d.ts` aren't resolvable. This seems to be unexpected and shouldn't
+  // result in the entire migration to be failing.
+  try {
+    directiveMetadata = metadataReader.getDirectiveMetadata(
+      new Reference(node.parent as ClassDeclaration),
+    );
+  } catch (e) {
+    console.error('Unexpected error. Gracefully ignoring.');
+    console.error('Could not parse directive metadata:', e);
+    return null;
+  }
   const inputMapping = directiveMetadata?.inputs.getByClassPropertyName(node.name.text);
 
   // Signal inputs are never tracked and migrated.
@@ -89,6 +100,8 @@ function extractDtsInput(node: ts.Node, metadataReader: DtsMetadataReader): Extr
         ...inputMapping,
         inputDecorator: null,
         inSourceFile: false,
+        // Inputs from `.d.ts` cannot have any field decorators applied.
+        fieldDecorators: [],
       };
 }
 
@@ -101,7 +114,6 @@ function extractSourceCodeInput(
   host: MigrationHost,
   reflector: ReflectionHost,
   evaluator: PartialEvaluator,
-  refEmitter: ReferenceEmitter,
 ): ExtractedInput | null {
   if (
     !isInputContainerNode(node) ||
@@ -140,7 +152,14 @@ function extractSourceCodeInput(
         isRequired = !!evaluatedInputOpts.get('required');
       }
       if (evaluatedInputOpts.has('transform') && evaluatedInputOpts.get('transform') != null) {
-        transformResult = parseTransformOfInput(evaluatedInputOpts, node, reflector, refEmitter);
+        const result = parseTransformOfInput(evaluatedInputOpts, node, reflector);
+        if (result === 'parsingError') {
+          if (!host.config.bestEffortMode) {
+            return null;
+          }
+        } else {
+          transformResult = result;
+        }
       }
     }
   }
@@ -153,6 +172,7 @@ function extractSourceCodeInput(
     inSourceFile: true,
     transform: transformResult,
     inputDecorator,
+    fieldDecorators: decorators,
   };
 }
 
@@ -164,12 +184,24 @@ function parseTransformOfInput(
   evaluatedInputOpts: ResolvedValueMap,
   node: InputNode,
   reflector: ReflectionHost,
-  refEmitter: ReferenceEmitter,
-): DecoratorInputTransform | null {
+): DecoratorInputTransform | 'parsingError' | null {
   const transformValue = evaluatedInputOpts.get('transform');
   if (!(transformValue instanceof DynamicValue) && !(transformValue instanceof Reference)) {
     return null;
   }
+
+  // For parsing the transform, we don't need a real reference emitter, as
+  // the emitter is only used for verifying that the transform type could be
+  // copied into e.g. an `ngInputAccept` class member.
+  const noopRefEmitter = new ReferenceEmitter([
+    {
+      emit: () => ({
+        kind: ReferenceEmitKind.Success as const,
+        expression: NULL_EXPR,
+        importedFile: null,
+      }),
+    },
+  ]);
 
   try {
     return parseDecoratorInputTransformFunction(
@@ -177,8 +209,9 @@ function parseTransformOfInput(
       node.name.text,
       transformValue,
       reflector,
-      refEmitter,
+      noopRefEmitter,
       CompilationMode.FULL,
+      /* emitDeclarationOnly */ false,
     );
   } catch (e: unknown) {
     if (!(e instanceof FatalDiagnosticError)) {
@@ -188,6 +221,6 @@ function parseTransformOfInput(
     // TODO: implement error handling.
     // See failing case: e.g. inherit_definition_feature_spec.ts
     console.error(`${e.node.getSourceFile().fileName}: ${e.toString()}`);
-    return null;
+    return 'parsingError';
   }
 }

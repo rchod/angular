@@ -9,10 +9,15 @@
 // #docregion HowTo
 import {AfterViewInit, Component, Directive, QueryList, ViewChildren} from '@angular/core';
 
-@Directive({selector: 'child-directive'})
+@Directive({
+  selector: 'child-directive',
+})
 class ChildDirective {}
 
-@Component({selector: 'someCmp', templateUrl: 'someCmp.html'})
+@Component({
+  selector: 'someCmp',
+  templateUrl: 'someCmp.html',
+})
 class SomeCmp implements AfterViewInit {
   @ViewChildren(ChildDirective) viewChildren!: QueryList<ChildDirective>;
 

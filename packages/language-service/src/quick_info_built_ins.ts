@@ -11,7 +11,6 @@ import {
   ImplicitReceiver,
   ParseSourceSpan,
   PropertyRead,
-  ThisReceiver,
   TmplAstBlockNode,
   TmplAstDeferredBlock,
   TmplAstDeferredBlockError,
@@ -22,7 +21,7 @@ import {
   TmplAstForLoopBlockEmpty,
   TmplAstNode,
 } from '@angular/compiler';
-import ts from 'typescript';
+import type ts from 'typescript';
 
 import {DisplayInfoKind, SYMBOL_TEXT} from './utils/display_parts';
 import {createQuickInfo, getTextSpanOfNode, isWithin, toTextSpan} from './utils';
@@ -32,7 +31,6 @@ export function isDollarAny(node: TmplAstNode | AST): node is Call {
     node instanceof Call &&
     node.receiver instanceof PropertyRead &&
     node.receiver.receiver instanceof ImplicitReceiver &&
-    !(node.receiver.receiver instanceof ThisReceiver) &&
     node.receiver.name === '$any' &&
     node.args.length === 1
   );
@@ -49,6 +47,32 @@ export function createDollarAnyQuickInfo(node: Call): ts.QuickInfo {
       {
         kind: SYMBOL_TEXT,
         text: 'function to cast an expression to the `any` type',
+      },
+    ],
+  );
+}
+
+export function isDollarSafeNavigationMigration(node: TmplAstNode | AST): node is Call {
+  return (
+    node instanceof Call &&
+    node.receiver instanceof PropertyRead &&
+    node.receiver.receiver instanceof ImplicitReceiver &&
+    node.receiver.name === '$safeNavigationMigration' &&
+    node.args.length === 1
+  );
+}
+
+export function createDollarSafeNavigationMigration(node: Call): ts.QuickInfo {
+  return createQuickInfo(
+    '$safeNavigationMigration',
+    DisplayInfoKind.METHOD,
+    getTextSpanOfNode(node.receiver),
+    /** containerName */ undefined,
+    'null',
+    [
+      {
+        kind: SYMBOL_TEXT,
+        text: 'function to use legacy optional chaining behavior, where ?. yields `null` rather than `undefined`',
       },
     ],
   );
@@ -139,89 +163,91 @@ const BUILT_IN_NAMES_TO_DOC_MAP: {
 } = {
   '@defer': {
     docString: `A type of block that can be used to defer load the JavaScript for components, directives and pipes used inside a component template.`,
-    links: ['[Reference](https://angular.dev/guide/defer#defer)'],
+    links: ['[Reference](https://angular.dev/guide/templates/defer#defer)'],
     displayInfoKind: DisplayInfoKind.BLOCK,
   },
   '@placeholder': {
     docString: `A block for content shown prior to defer loading (Optional)`,
-    links: ['[Reference](https://angular.dev/guide/defer#placeholder)'],
+    links: ['[Reference](https://angular.dev/guide/templates/defer#placeholder)'],
     displayInfoKind: DisplayInfoKind.BLOCK,
   },
   '@error': {
     docString: `A block for content shown when defer loading errors occur (Optional)`,
-    links: ['[Reference](https://angular.dev/guide/defer#error)'],
+    links: ['[Reference](https://angular.dev/guide/templates/defer#error)'],
     displayInfoKind: DisplayInfoKind.BLOCK,
   },
   '@loading': {
     docString: `A block for content shown during defer loading (Optional)`,
-    links: ['[Reference](https://angular.dev/guide/defer#loading)'],
+    links: ['[Reference](https://angular.dev/guide/templates/defer#loading)'],
     displayInfoKind: DisplayInfoKind.BLOCK,
   },
   '@empty': {
     docString: `A block to display when the for loop variable is empty.`,
-    links: ['[Reference](https://angular.dev/guide/templates/control-flow#for-block---repeaters)'],
+    links: [
+      '[Reference](https://angular.dev/guide/templates/control-flow#providing-a-fallback-for-for-blocks-with-the-empty-block)',
+    ],
     displayInfoKind: DisplayInfoKind.BLOCK,
   },
   'track': {
     docString: `Keyword to control how the for loop compares items in the list to compute updates.`,
     links: [
-      '[Reference](https://angular.dev/guide/templates/control-flow#track-for-calculating-difference-of-two-collections)',
+      '[Reference](https://angular.dev/guide/templates/control-flow#why-is-track-in-for-blocks-important)',
     ],
     displayInfoKind: DisplayInfoKind.KEYWORD,
   },
   'idle': {
-    docString: triggerDescriptionPreamble + `the browser reports idle state (default).`,
-    links: ['[Reference](https://angular.dev/guide/defer#on-idle)'],
+    docString:
+      triggerDescriptionPreamble + `the browser reports idle state. Accepts an optional timeout.`,
+    links: ['[Reference](https://angular.dev/guide/templates/defer#on-idle)'],
     displayInfoKind: DisplayInfoKind.TRIGGER,
   },
   'immediate': {
     docString: triggerDescriptionPreamble + `the page finishes rendering.`,
-    links: ['[Reference](https://angular.dev/guide/defer#on-immediate)'],
+    links: ['[Reference](https://angular.dev/guide/templates/defer#on-immediate)'],
     displayInfoKind: DisplayInfoKind.TRIGGER,
   },
   'hover': {
     docString: triggerDescriptionPreamble + `the element has been hovered.`,
-    links: ['[Reference](https://angular.dev/guide/defer#on-hover)'],
+    links: ['[Reference](https://angular.dev/guide/templates/defer#on-hover)'],
     displayInfoKind: DisplayInfoKind.TRIGGER,
   },
   'timer': {
     docString: triggerDescriptionPreamble + `a specific timeout.`,
-    links: ['[Reference](https://angular.dev/guide/defer#on-timer)'],
+    links: ['[Reference](https://angular.dev/guide/templates/defer#on-timer)'],
     displayInfoKind: DisplayInfoKind.TRIGGER,
   },
   'interaction': {
     docString: triggerDescriptionPreamble + `the element is clicked, touched, or focused.`,
-    links: ['[Reference](https://angular.dev/guide/defer#on-interaction)'],
+    links: ['[Reference](https://angular.dev/guide/templates/defer#on-interaction)'],
     displayInfoKind: DisplayInfoKind.TRIGGER,
   },
   'viewport': {
     docString: triggerDescriptionPreamble + `the element enters the viewport.`,
-    links: ['[Reference](https://angular.dev/guide/defer#on-viewport)'],
+    links: ['[Reference](https://angular.dev/guide/templates/defer#on-viewport)'],
     displayInfoKind: DisplayInfoKind.TRIGGER,
   },
   'prefetch': {
     docString:
       'Keyword that indicates that the trigger configures when prefetching the defer block contents should start. You can use `on` and `when` conditions as prefetch triggers.',
-    links: ['[Reference](https://angular.dev/guide/defer#prefetching)'],
+    links: ['[Reference](https://angular.dev/guide/templates/defer#prefetching)'],
     displayInfoKind: DisplayInfoKind.KEYWORD,
   },
   'hydrate': {
     docString:
       "Keyword that indicates when the block's content will be hydrated. You can use `on` and `when` conditions as hydration triggers, or `hydrate never` to disable hydration for this block.",
-    // TODO(crisbeto): add link to partial hydration guide
-    links: [],
+    links: ['[Reference](https://angular.dev/guide/incremental-hydration)'],
     displayInfoKind: DisplayInfoKind.KEYWORD,
   },
   'when': {
     docString:
       'Keyword that starts the expression-based trigger section. Should be followed by an expression that returns a boolean.',
-    links: ['[Reference](https://angular.dev/guide/defer#triggers)'],
+    links: ['[Reference](https://angular.dev/guide/templates/defer#triggers)'],
     displayInfoKind: DisplayInfoKind.KEYWORD,
   },
   'on': {
     docString:
       'Keyword that starts the event-based trigger section. Should be followed by one of the built-in triggers.',
-    links: ['[Reference](https://angular.dev/guide/defer#triggers)'],
+    links: ['[Reference](https://angular.dev/guide/templates/defer#triggers)'],
     displayInfoKind: DisplayInfoKind.KEYWORD,
   },
 };

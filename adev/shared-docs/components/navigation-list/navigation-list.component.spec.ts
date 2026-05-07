@@ -8,12 +8,12 @@
 
 import {ComponentFixture, TestBed} from '@angular/core/testing';
 
-import {NavigationList} from './navigation-list.component';
+import {signal} from '@angular/core';
 import {By} from '@angular/platform-browser';
+import {provideRouter} from '@angular/router';
 import {NavigationItem} from '../../interfaces';
-import {RouterTestingModule} from '@angular/router/testing';
-import {provideExperimentalZonelessChangeDetection, signal} from '@angular/core';
 import {NavigationState} from '../../services';
+import {NavigationList} from './navigation-list.component';
 
 const navigationItems: NavigationItem[] = [
   {
@@ -37,19 +37,19 @@ describe('NavigationList', () => {
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [NavigationList, RouterTestingModule],
-      providers: [
-        {provide: NavigationState, useClass: FakeNavigationListState},
-        provideExperimentalZonelessChangeDetection(),
-      ],
-    }).compileComponents();
+      imports: [NavigationList],
+      providers: [provideRouter([]), {provide: NavigationState, useClass: FakeNavigationListState}],
+    });
     fixture = TestBed.createComponent(NavigationList);
+    fixture.componentRef.setInput('navigationItems', []);
+    fixture.componentRef.setInput('preserveOtherCategoryOrder', false);
+
     component = fixture.componentInstance;
   });
 
-  it('should display provided navigation structure', () => {
-    component.navigationItems = [...navigationItems];
-    fixture.detectChanges();
+  it('should display provided navigation structure', async () => {
+    fixture.componentRef.setInput('navigationItems', [...navigationItems]);
+    await fixture.whenStable();
 
     const links = fixture.debugElement.queryAll(By.css('a'));
     const nonClickableItem = fixture.debugElement.queryAll(By.css('.docs-secondary-nav-header'));
@@ -58,28 +58,28 @@ describe('NavigationList', () => {
     expect(nonClickableItem.length).toBe(1);
   });
 
-  it('should append `docs-navigation-list-dropdown` when isDropdownView is true', () => {
-    component.isDropdownView = true;
-    fixture.detectChanges();
+  it('should append `docs-navigation-list-dropdown` when isDropdownView is true', async () => {
+    fixture.componentRef.setInput('isDropdownView', true);
+    await fixture.whenStable();
 
     const ulElement = fixture.debugElement.query(By.css('ul.docs-navigation-list-dropdown'));
 
     expect(ulElement).toBeTruthy();
   });
 
-  it('should not append `docs-navigation-list-dropdown` when isDropdownView is false', () => {
-    component.isDropdownView = false;
-    fixture.detectChanges();
+  it('should not append `docs-navigation-list-dropdown` when isDropdownView is false', async () => {
+    fixture.componentRef.setInput('isDropdownView', false);
+    await fixture.whenStable();
 
     const ulElement = fixture.debugElement.query(By.css('ul.docs-navigation-list-dropdown'));
 
     expect(ulElement).toBeFalsy();
   });
 
-  it('should emit linkClicked when user clicked on link', () => {
+  it('should emit linkClicked when user clicked on link', async () => {
     const emitClickOnLinkSpy = spyOn(component, 'emitClickOnLink');
-    component.navigationItems = [...navigationItems];
-    fixture.detectChanges(true);
+    fixture.componentRef.setInput('navigationItems', [...navigationItems]);
+    await fixture.whenStable();
 
     const guideLink = fixture.debugElement.query(By.css('a[href="/guide"]'));
     guideLink.nativeElement.click();
@@ -102,7 +102,7 @@ describe('NavigationList', () => {
     const toggleItemSpy = spyOn(navigationState, 'toggleItem');
     const itemToToggle = navigationItems[1];
 
-    component.expandableLevel = 1;
+    fixture.componentRef.setInput('expandableLevel', 1);
     component.toggle(itemToToggle);
 
     expect(toggleItemSpy).toHaveBeenCalledOnceWith(itemToToggle);
@@ -113,35 +113,46 @@ describe('NavigationList', () => {
     const toggleItemSpy = spyOn(navigationState, 'toggleItem');
     const itemToToggle = navigationItems[1].children![1];
 
-    component.collapsableLevel = 2;
+    fixture.componentRef.setInput('collapsableLevel', 2);
     component.toggle(itemToToggle);
 
     expect(toggleItemSpy).toHaveBeenCalledOnceWith(itemToToggle);
   });
 
-  it('should display items to provided level', () => {
-    component.navigationItems = [...navigationItems];
-    component.displayItemsToLevel = 1;
-    fixture.detectChanges(true);
+  it('should display only items to provided level (Level 1)', async () => {
+    fixture.componentRef.setInput('navigationItems', [...navigationItems]);
+    fixture.componentRef.setInput('displayItemsToLevel', 1);
+    await fixture.whenStable();
 
-    const visibleItems = fixture.debugElement.queryAll(
-      By.css('li.docs-faceted-list-item:not(.docs-navigation-link-hidden)'),
-    );
-    const hiddenItems = fixture.debugElement.queryAll(
-      By.css('li.docs-faceted-list-item.docs-navigation-link-hidden'),
-    );
+    const items = fixture.debugElement.queryAll(By.css('li.docs-faceted-list-item'));
 
-    expect(visibleItems.length).toBe(2);
-    expect(visibleItems[0].nativeElement.innerText).toBe(navigationItems[0].label);
-    expect(visibleItems[1].nativeElement.innerText).toBe(navigationItems[1].label);
-    expect(hiddenItems.length).toBe(2);
-    expect(hiddenItems[0].nativeElement.innerText).toBe(navigationItems[1].children![0].label);
-    expect(hiddenItems[1].nativeElement.innerText).toBe(navigationItems[1].children![1].label);
+    expect(items.length).toBe(2);
+    expect(items[0].nativeElement.innerText).toBe(navigationItems[0].label);
+    expect(items[1].nativeElement.innerText).toBe(navigationItems[1].label);
+  });
+
+  it('should display all items (Level 2)', async () => {
+    fixture.componentRef.setInput('navigationItems', [...navigationItems]);
+    fixture.componentRef.setInput('displayItemsToLevel', 2);
+    await fixture.whenStable();
+
+    const items = fixture.debugElement.queryAll(By.css('li.docs-faceted-list-item'));
+
+    expect(items.length).toBe(4);
+
+    expect(items[0].nativeElement.innerText).toBe(navigationItems[0].label);
+    expect(items[1].nativeElement.innerText.startsWith(navigationItems[1].label)).toBeTrue();
+
+    const secondItemChildren = navigationItems[1].children || [];
+
+    expect(items[2].nativeElement.innerText).toBe(secondItemChildren[0].label);
+    expect(items[3].nativeElement.innerText).toBe(secondItemChildren[1].label);
   });
 });
 
 class FakeNavigationListState {
   isOpened = signal(true);
   activeNavigationItem = signal(navigationItems.at(1));
+  crossCategoryOrigin = signal<NavigationItem | undefined>(undefined);
   toggleItem(item: NavigationItem) {}
 }

@@ -4,7 +4,7 @@
 
 ```ts
 
-import { ApplicationConfig as ApplicationConfig_2 } from '@angular/core';
+import { ApplicationConfig } from '@angular/core';
 import { ApplicationRef } from '@angular/core';
 import { ComponentRef } from '@angular/core';
 import { DebugElement } from '@angular/core';
@@ -14,7 +14,7 @@ import { HttpTransferCacheOptions } from '@angular/common/http';
 import * as i0 from '@angular/core';
 import * as i1 from '@angular/common';
 import { InjectionToken } from '@angular/core';
-import { ModuleWithProviders } from '@angular/core';
+import { ListenerOptions } from '@angular/core';
 import { NgZone } from '@angular/core';
 import { PlatformRef } from '@angular/core';
 import { Predicate } from '@angular/core';
@@ -25,21 +25,19 @@ import { StaticProvider } from '@angular/core';
 import { Type } from '@angular/core';
 import { Version } from '@angular/core';
 
-// @public @deprecated
-export type ApplicationConfig = ApplicationConfig_2;
+// @public
+export function bootstrapApplication(rootComponent: Type<unknown>, options?: ApplicationConfig, context?: BootstrapContext): Promise<ApplicationRef>;
 
 // @public
-export function bootstrapApplication(rootComponent: Type<unknown>, options?: ApplicationConfig): Promise<ApplicationRef>;
+export interface BootstrapContext {
+    platformRef: PlatformRef;
+}
 
 // @public
 export class BrowserModule {
-    constructor(providersAlreadyPresent: boolean | null);
-    // @deprecated
-    static withServerTransition(params: {
-        appId: string;
-    }): ModuleWithProviders<BrowserModule>;
+    constructor();
     // (undocumented)
-    static ɵfac: i0.ɵɵFactoryDeclaration<BrowserModule, [{ optional: true; skipSelf: true; }]>;
+    static ɵfac: i0.ɵɵFactoryDeclaration<BrowserModule, never>;
     // (undocumented)
     static ɵinj: i0.ɵɵInjectorDeclaration<BrowserModule>;
     // (undocumented)
@@ -54,7 +52,7 @@ export class By {
 }
 
 // @public
-export function createApplication(options?: ApplicationConfig): Promise<ApplicationRef>;
+export function createApplication(options?: ApplicationConfig, context?: BootstrapContext): Promise<ApplicationRef>;
 
 // @public
 export function disableDebugTools(): void;
@@ -82,7 +80,7 @@ export const EVENT_MANAGER_PLUGINS: InjectionToken<EventManagerPlugin[]>;
 // @public
 export class EventManager {
     constructor(plugins: EventManagerPlugin[], _zone: NgZone);
-    addEventListener(element: HTMLElement, eventName: string, handler: Function): Function;
+    addEventListener(element: HTMLElement, eventName: string, handler: Function, options?: ListenerOptions): Function;
     getZone(): NgZone;
     // (undocumented)
     static ɵfac: i0.ɵɵFactoryDeclaration<EventManager, never>;
@@ -93,52 +91,10 @@ export class EventManager {
 // @public
 export abstract class EventManagerPlugin {
     constructor(_doc: any);
-    abstract addEventListener(element: HTMLElement, eventName: string, handler: Function): Function;
+    abstract addEventListener(element: HTMLElement, eventName: string, handler: Function, options?: ListenerOptions): Function;
     // (undocumented)
     manager: EventManager;
     abstract supports(eventName: string): boolean;
-}
-
-// @public
-export const HAMMER_GESTURE_CONFIG: InjectionToken<HammerGestureConfig>;
-
-// @public
-export const HAMMER_LOADER: InjectionToken<HammerLoader>;
-
-// @public
-export class HammerGestureConfig {
-    buildHammer(element: HTMLElement): HammerInstance;
-    events: string[];
-    options?: {
-        cssProps?: any;
-        domEvents?: boolean;
-        enable?: boolean | ((manager: any) => boolean);
-        preset?: any[];
-        touchAction?: string;
-        recognizers?: any[];
-        inputClass?: any;
-        inputTarget?: EventTarget;
-    };
-    overrides: {
-        [key: string]: Object;
-    };
-    // (undocumented)
-    static ɵfac: i0.ɵɵFactoryDeclaration<HammerGestureConfig, never>;
-    // (undocumented)
-    static ɵprov: i0.ɵɵInjectableDeclaration<HammerGestureConfig>;
-}
-
-// @public
-export type HammerLoader = () => Promise<void>;
-
-// @public
-export class HammerModule {
-    // (undocumented)
-    static ɵfac: i0.ɵɵFactoryDeclaration<HammerModule, never>;
-    // (undocumented)
-    static ɵinj: i0.ɵɵInjectorDeclaration<HammerModule>;
-    // (undocumented)
-    static ɵmod: i0.ɵɵNgModuleDeclaration<HammerModule, never, never, never>;
 }
 
 // @public
@@ -158,7 +114,11 @@ export enum HydrationFeatureKind {
     // (undocumented)
     I18nSupport = 2,
     // (undocumented)
-    NoHttpTransferCache = 0
+    IncrementalHydration = 4,
+    // (undocumented)
+    NoHttpTransferCache = 0,
+    // (undocumented)
+    NoIncrementalHydration = 5
 }
 
 // @public
@@ -199,7 +159,9 @@ export const platformBrowser: (extraProviders?: StaticProvider[]) => PlatformRef
 export function provideClientHydration(...features: HydrationFeature<HydrationFeatureKind>[]): EnvironmentProviders;
 
 // @public
-export function provideProtractorTestingSupport(): Provider[];
+export function provideProtractorTestingSupport(options?: {
+    usePendingTasksForStability?: boolean;
+}): Provider[];
 
 // @public
 export const REMOVE_STYLES_ON_COMPONENT_DESTROY: InjectionToken<boolean>;
@@ -251,8 +213,14 @@ export function withHttpTransferCacheOptions(options: HttpTransferCacheOptions):
 // @public
 export function withI18nSupport(): HydrationFeature<HydrationFeatureKind.I18nSupport>;
 
+// @public @deprecated
+export function withIncrementalHydration(): HydrationFeature<HydrationFeatureKind.IncrementalHydration>;
+
 // @public
 export function withNoHttpTransferCache(): HydrationFeature<HydrationFeatureKind.NoHttpTransferCache>;
+
+// @public
+export function withNoIncrementalHydration(): HydrationFeature<HydrationFeatureKind.NoIncrementalHydration>;
 
 // (No @packageDocumentation comment for this package)
 

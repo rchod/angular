@@ -12,6 +12,7 @@ import {
   ASTWithSource,
   BindingType,
   BoundElementProperty,
+  LiteralMap,
   ParsedEvent,
   ParsedEventType,
 } from '../expression_parser/ast';
@@ -133,7 +134,7 @@ export class BoundEvent implements Node {
     const target: string | null =
       event.type === ParsedEventType.Regular ? event.targetOrPhase : null;
     const phase: string | null =
-      event.type === ParsedEventType.Animation ? event.targetOrPhase : null;
+      event.type === ParsedEventType.LegacyAnimation ? event.targetOrPhase : null;
     if (event.keySpan === undefined) {
       throw new Error(
         `Unexpected state: keySpan must be defined for bound event but was not for ${event.name}: ${event.sourceSpan}`,
@@ -162,11 +163,14 @@ export class Element implements Node {
     public attributes: TextAttribute[],
     public inputs: BoundAttribute[],
     public outputs: BoundEvent[],
+    public directives: Directive[],
     public children: Node[],
     public references: Reference[],
+    public isSelfClosing: boolean,
     public sourceSpan: ParseSourceSpan,
     public startSourceSpan: ParseSourceSpan,
     public endSourceSpan: ParseSourceSpan | null,
+    readonly isVoid: boolean,
     public i18n?: I18nMeta,
   ) {}
   visit<Result>(visitor: Visitor<Result>): Result {
@@ -204,7 +208,18 @@ export class BoundDeferredTrigger extends DeferredTrigger {
 
 export class NeverDeferredTrigger extends DeferredTrigger {}
 
-export class IdleDeferredTrigger extends DeferredTrigger {}
+export class IdleDeferredTrigger extends DeferredTrigger {
+  constructor(
+    nameSpan: ParseSourceSpan,
+    sourceSpan: ParseSourceSpan,
+    prefetchSpan: ParseSourceSpan | null,
+    onSourceSpan: ParseSourceSpan | null,
+    hydrateSpan: ParseSourceSpan | null,
+    public timeout: number | null,
+  ) {
+    super(nameSpan, sourceSpan, prefetchSpan, onSourceSpan, hydrateSpan);
+  }
+}
 
 export class ImmediateDeferredTrigger extends DeferredTrigger {}
 
@@ -249,7 +264,8 @@ export class InteractionDeferredTrigger extends DeferredTrigger {
 
 export class ViewportDeferredTrigger extends DeferredTrigger {
   constructor(
-    public reference: string | null,
+    readonly reference: string | null,
+    readonly options: LiteralMap | null,
     nameSpan: ParseSourceSpan,
     sourceSpan: ParseSourceSpan,
     prefetchSpan: ParseSourceSpan | null,
@@ -399,12 +415,13 @@ export class DeferredBlock extends BlockNode implements Node {
 export class SwitchBlock extends BlockNode implements Node {
   constructor(
     public expression: AST,
-    public cases: SwitchBlockCase[],
+    public groups: SwitchBlockCaseGroup[],
     /**
      * These blocks are only captured to allow for autocompletion in the language service. They
      * aren't meant to be processed in any other way.
      */
     public unknownBlocks: UnknownBlock[],
+    public exhaustiveCheck: SwitchExhaustiveCheck | null,
     sourceSpan: ParseSourceSpan,
     startSourceSpan: ParseSourceSpan,
     endSourceSpan: ParseSourceSpan | null,
@@ -421,6 +438,22 @@ export class SwitchBlock extends BlockNode implements Node {
 export class SwitchBlockCase extends BlockNode implements Node {
   constructor(
     public expression: AST | null,
+    sourceSpan: ParseSourceSpan,
+    startSourceSpan: ParseSourceSpan,
+    endSourceSpan: ParseSourceSpan | null,
+    nameSpan: ParseSourceSpan,
+  ) {
+    super(nameSpan, sourceSpan, startSourceSpan, endSourceSpan);
+  }
+
+  visit<Result>(visitor: Visitor<Result>): Result {
+    return visitor.visitSwitchBlockCase(this);
+  }
+}
+
+export class SwitchBlockCaseGroup extends BlockNode implements Node {
+  constructor(
+    public cases: SwitchBlockCase[],
     public children: Node[],
     sourceSpan: ParseSourceSpan,
     startSourceSpan: ParseSourceSpan,
@@ -432,7 +465,23 @@ export class SwitchBlockCase extends BlockNode implements Node {
   }
 
   visit<Result>(visitor: Visitor<Result>): Result {
-    return visitor.visitSwitchBlockCase(this);
+    return visitor.visitSwitchBlockCaseGroup(this);
+  }
+}
+
+export class SwitchExhaustiveCheck extends BlockNode implements Node {
+  constructor(
+    public expression: AST | null,
+    sourceSpan: ParseSourceSpan,
+    startSourceSpan: ParseSourceSpan,
+    endSourceSpan: ParseSourceSpan | null,
+    nameSpan: ParseSourceSpan,
+  ) {
+    super(nameSpan, sourceSpan, startSourceSpan, endSourceSpan);
+  }
+
+  visit<Result>(visitor: Visitor<Result>): Result {
+    return visitor.visitSwitchExhaustiveCheck(this);
   }
 }
 
@@ -538,6 +587,45 @@ export class LetDeclaration implements Node {
   }
 }
 
+export class Component implements Node {
+  constructor(
+    public componentName: string,
+    public tagName: string | null,
+    public fullName: string,
+    public attributes: TextAttribute[],
+    public inputs: BoundAttribute[],
+    public outputs: BoundEvent[],
+    public directives: Directive[],
+    public children: Node[],
+    public references: Reference[],
+    public isSelfClosing: boolean,
+    public sourceSpan: ParseSourceSpan,
+    public startSourceSpan: ParseSourceSpan,
+    public endSourceSpan: ParseSourceSpan | null,
+    public i18n?: I18nMeta,
+  ) {}
+  visit<Result>(visitor: Visitor<Result>): Result {
+    return visitor.visitComponent(this);
+  }
+}
+
+export class Directive implements Node {
+  constructor(
+    public name: string,
+    public attributes: TextAttribute[],
+    public inputs: BoundAttribute[],
+    public outputs: BoundEvent[],
+    public references: Reference[],
+    public sourceSpan: ParseSourceSpan,
+    public startSourceSpan: ParseSourceSpan,
+    public endSourceSpan: ParseSourceSpan | null,
+    public i18n?: I18nMeta,
+  ) {}
+  visit<Result>(visitor: Visitor<Result>): Result {
+    return visitor.visitDirective(this);
+  }
+}
+
 export class Template implements Node {
   constructor(
     // tagName is the name of the container element, if applicable.
@@ -548,10 +636,12 @@ export class Template implements Node {
     public attributes: TextAttribute[],
     public inputs: BoundAttribute[],
     public outputs: BoundEvent[],
+    public directives: Directive[],
     public templateAttrs: (BoundAttribute | TextAttribute)[],
     public children: Node[],
     public references: Reference[],
     public variables: Variable[],
+    public isSelfClosing: boolean,
     public sourceSpan: ParseSourceSpan,
     public startSourceSpan: ParseSourceSpan,
     public endSourceSpan: ParseSourceSpan | null,
@@ -569,7 +659,10 @@ export class Content implements Node {
     public selector: string,
     public attributes: TextAttribute[],
     public children: Node[],
+    public isSelfClosing: boolean,
     public sourceSpan: ParseSourceSpan,
+    public startSourceSpan: ParseSourceSpan,
+    public endSourceSpan: ParseSourceSpan | null,
     public i18n?: I18nMeta,
   ) {}
   visit<Result>(visitor: Visitor<Result>): Result {
@@ -615,6 +708,27 @@ export class Icu implements Node {
   }
 }
 
+/**
+ * AST node that represents the host element of a directive.
+ * This node is used only for type checking purposes and cannot be produced from a user's template.
+ */
+export class HostElement implements Node {
+  constructor(
+    readonly tagNames: string[],
+    readonly bindings: BoundAttribute[],
+    readonly listeners: BoundEvent[],
+    readonly sourceSpan: ParseSourceSpan,
+  ) {
+    if (tagNames.length === 0) {
+      throw new Error('HostElement must have at least one tag name.');
+    }
+  }
+
+  visit<Result>(): Result {
+    throw new Error(`HostElement cannot be visited`);
+  }
+}
+
 export interface Visitor<Result = any> {
   // Returning a truthy value from `visit()` will prevent `visitAll()` from the call to the typed
   // method and result returned will become the result included in `visitAll()`s result array.
@@ -638,12 +752,16 @@ export interface Visitor<Result = any> {
   visitDeferredTrigger(trigger: DeferredTrigger): Result;
   visitSwitchBlock(block: SwitchBlock): Result;
   visitSwitchBlockCase(block: SwitchBlockCase): Result;
+  visitSwitchBlockCaseGroup(block: SwitchBlockCaseGroup): Result;
+  visitSwitchExhaustiveCheck(block: SwitchExhaustiveCheck): Result;
   visitForLoopBlock(block: ForLoopBlock): Result;
   visitForLoopBlockEmpty(block: ForLoopBlockEmpty): Result;
   visitIfBlock(block: IfBlock): Result;
   visitIfBlockBranch(block: IfBlockBranch): Result;
   visitUnknownBlock(block: UnknownBlock): Result;
   visitLetDeclaration(decl: LetDeclaration): Result;
+  visitComponent(component: Component): Result;
+  visitDirective(directive: Directive): Result;
 }
 
 export class RecursiveVisitor implements Visitor<void> {
@@ -651,6 +769,7 @@ export class RecursiveVisitor implements Visitor<void> {
     visitAll(this, element.attributes);
     visitAll(this, element.inputs);
     visitAll(this, element.outputs);
+    visitAll(this, element.directives);
     visitAll(this, element.children);
     visitAll(this, element.references);
   }
@@ -658,6 +777,7 @@ export class RecursiveVisitor implements Visitor<void> {
     visitAll(this, template.attributes);
     visitAll(this, template.inputs);
     visitAll(this, template.outputs);
+    visitAll(this, template.directives);
     visitAll(this, template.children);
     visitAll(this, template.references);
     visitAll(this, template.variables);
@@ -675,11 +795,14 @@ export class RecursiveVisitor implements Visitor<void> {
     visitAll(this, block.children);
   }
   visitSwitchBlock(block: SwitchBlock): void {
-    visitAll(this, block.cases);
+    visitAll(this, block.groups);
   }
-  visitSwitchBlockCase(block: SwitchBlockCase): void {
+  visitSwitchBlockCase(block: SwitchBlockCase): void {}
+  visitSwitchBlockCaseGroup(block: SwitchBlockCaseGroup): void {
+    visitAll(this, block.cases);
     visitAll(this, block.children);
   }
+  visitSwitchExhaustiveCheck(block: SwitchExhaustiveCheck): void {}
   visitForLoopBlock(block: ForLoopBlock): void {
     const blockItems = [block.item, ...block.contextVariables, ...block.children];
     block.empty && blockItems.push(block.empty);
@@ -692,12 +815,25 @@ export class RecursiveVisitor implements Visitor<void> {
     visitAll(this, block.branches);
   }
   visitIfBlockBranch(block: IfBlockBranch): void {
-    const blockItems = block.children;
-    block.expressionAlias && blockItems.push(block.expressionAlias);
-    visitAll(this, blockItems);
+    visitAll(this, block.children);
+    block.expressionAlias?.visit(this);
   }
   visitContent(content: Content): void {
     visitAll(this, content.children);
+  }
+  visitComponent(component: Component): void {
+    visitAll(this, component.attributes);
+    visitAll(this, component.inputs);
+    visitAll(this, component.outputs);
+    visitAll(this, component.directives);
+    visitAll(this, component.children);
+    visitAll(this, component.references);
+  }
+  visitDirective(directive: Directive): void {
+    visitAll(this, directive.attributes);
+    visitAll(this, directive.inputs);
+    visitAll(this, directive.outputs);
+    visitAll(this, directive.references);
   }
   visitVariable(variable: Variable): void {}
   visitReference(reference: Reference): void {}
@@ -716,7 +852,7 @@ export function visitAll<Result>(visitor: Visitor<Result>, nodes: Node[]): Resul
   const result: Result[] = [];
   if (visitor.visit) {
     for (const node of nodes) {
-      visitor.visit(node) || node.visit(visitor);
+      visitor.visit(node);
     }
   } else {
     for (const node of nodes) {

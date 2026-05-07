@@ -7,9 +7,13 @@
  */
 
 import {TsurgeBaseMigration} from './base_migration';
-import {Serializable} from './helpers/serializable';
 import {ProgramInfo} from './program_info';
 import {Replacement} from './replacement';
+
+/** Type describing the result of a Tsurge `migrate` stage. */
+interface MigrateResult {
+  replacements: Replacement[];
+}
 
 /**
  * A Tsurge migration is split into three stages:
@@ -33,11 +37,11 @@ import {Replacement} from './replacement';
  *   - {@link TsurgeFunnelMigration}
  *   - {@link TsurgeComplexMigration}
  *
- *  TODO: Link design doc
+ *  http://go/tsurge-design
  */
-export type TsurgeMigration<UnitAnalysisMetadata, CombinedGlobalMetadata> =
-  | TsurgeComplexMigration<UnitAnalysisMetadata, CombinedGlobalMetadata>
-  | TsurgeFunnelMigration<UnitAnalysisMetadata, CombinedGlobalMetadata>;
+export type TsurgeMigration<UnitAnalysisMetadata, CombinedGlobalMetadata, Stats> =
+  | TsurgeComplexMigration<UnitAnalysisMetadata, CombinedGlobalMetadata, Stats>
+  | TsurgeFunnelMigration<UnitAnalysisMetadata, CombinedGlobalMetadata, Stats>;
 
 /**
  * A simpler variant of a {@link TsurgeComplexMigration} that does not
@@ -54,7 +58,8 @@ export type TsurgeMigration<UnitAnalysisMetadata, CombinedGlobalMetadata> =
 export abstract class TsurgeFunnelMigration<
   UnitAnalysisMetadata,
   CombinedGlobalMetadata,
-> extends TsurgeBaseMigration<UnitAnalysisMetadata, CombinedGlobalMetadata> {
+  Stats = unknown,
+> extends TsurgeBaseMigration<UnitAnalysisMetadata, CombinedGlobalMetadata, Stats> {
   /**
    * Finalizes the migration result.
    *
@@ -64,7 +69,7 @@ export abstract class TsurgeFunnelMigration<
    *
    * @returns All replacements for the whole project.
    */
-  abstract migrate(globalData: CombinedGlobalMetadata): Promise<Replacement[]>;
+  abstract migrate(globalData: CombinedGlobalMetadata): Promise<MigrateResult>;
 }
 
 /**
@@ -79,7 +84,8 @@ export abstract class TsurgeFunnelMigration<
 export abstract class TsurgeComplexMigration<
   UnitAnalysisMetadata,
   CombinedGlobalMetadata,
-> extends TsurgeBaseMigration<UnitAnalysisMetadata, CombinedGlobalMetadata> {
+  Stats = unknown,
+> extends TsurgeBaseMigration<UnitAnalysisMetadata, CombinedGlobalMetadata, Stats> {
   /**
    * Migration phase. Workers will be started for every compilation unit again,
    * instantiating a new program for every unit to compute the final migration
@@ -90,5 +96,5 @@ export abstract class TsurgeComplexMigration<
   abstract migrate(
     globalMetadata: CombinedGlobalMetadata,
     info: ProgramInfo,
-  ): Promise<Replacement[]>;
+  ): Promise<MigrateResult>;
 }

@@ -34,22 +34,17 @@ runInEachFileSystem(() => {
         `
         import {Directive, Component} from '@angular/core';
 
-        @Directive({
-          selector: '[dir-a]',
-          standalone: true
-        })
+        @Directive({selector: '[dir-a]'})
         export class DirectiveA {}
 
-        @Directive({
-          selector: '[dir-b]',
-          standalone: true
-        })
+        @Directive({selector: '[dir-b]'})
         export class DirectiveB {}
 
         @Component({
           selector: 'my-comp',
           template: '',
-          hostDirectives: [DirectiveA, DirectiveB]
+          hostDirectives: [DirectiveA, DirectiveB],
+          standalone: false,
         })
         export class MyComp {}
       `,
@@ -78,10 +73,7 @@ runInEachFileSystem(() => {
         `
         import {Directive, Component, Input, Output, EventEmitter} from '@angular/core';
 
-        @Directive({
-          selector: '[dir-a]',
-          standalone: true
-        })
+        @Directive({selector: '[dir-a]'})
         export class HostDir {
           @Input() value: number;
           @Input() color: string;
@@ -97,6 +89,7 @@ runInEachFileSystem(() => {
             inputs: ['value', 'color: colorAlias'],
             outputs: ['opened', 'closed: closedAlias'],
           }],
+          standalone: false,
         })
         export class MyComp {}
       `,
@@ -127,10 +120,7 @@ runInEachFileSystem(() => {
         `
         import {Directive, Component, Input, Output, EventEmitter} from '@angular/core';
 
-        @Directive({
-          selector: '[dir-a]',
-          standalone: true
-        })
+        @Directive({selector: '[dir-a]'})
         export class HostDir {
           @Input('valueAlias') value: number;
           @Input('colorAlias') color: string;
@@ -146,6 +136,7 @@ runInEachFileSystem(() => {
             inputs: ['valueAlias', 'colorAlias: customColorAlias'],
             outputs: ['openedAlias', 'closedAlias: customClosedAlias'],
           }],
+          standalone: false,
         })
         export class MyComp {}
       `,
@@ -180,17 +171,11 @@ runInEachFileSystem(() => {
         export class DirectiveA {
         }
 
-        @Directive({
-          standalone: true,
-          hostDirectives: [DirectiveA],
-        })
+        @Directive({hostDirectives: [DirectiveA]})
         export class DirectiveB {
         }
 
-        @Directive({
-          standalone: true,
-          hostDirectives: [DirectiveB],
-        })
+        @Directive({hostDirectives: [DirectiveB]})
         export class DirectiveC {
         }
 
@@ -198,6 +183,7 @@ runInEachFileSystem(() => {
           selector: 'my-comp',
           template: '',
           hostDirectives: [DirectiveC],
+          standalone: false,
         })
         export class MyComp {
         }
@@ -209,17 +195,17 @@ runInEachFileSystem(() => {
       const jsContents = env.getContents('test.js');
       const dtsContents = env.getContents('test.d.ts');
 
-      expect(jsContents).toContain('ɵɵdefineDirective({ type: DirectiveA, standalone: true });');
+      expect(jsContents).toContain('ɵɵdefineDirective({ type: DirectiveA });');
       expect(jsContents).toContain(
-        'ɵɵdefineDirective({ type: DirectiveB, standalone: true, ' +
+        'ɵɵdefineDirective({ type: DirectiveB, ' +
           'features: [i0.ɵɵHostDirectivesFeature([DirectiveA])] });',
       );
       expect(jsContents).toContain(
-        'ɵɵdefineDirective({ type: DirectiveC, standalone: true, ' +
+        'ɵɵdefineDirective({ type: DirectiveC, ' +
           'features: [i0.ɵɵHostDirectivesFeature([DirectiveB])] });',
       );
       expect(jsContents).toContain(
-        'ɵɵdefineComponent({ type: MyComp, selectors: [["my-comp"]],' +
+        'ɵɵdefineComponent({ type: MyComp, selectors: [["my-comp"]], standalone: false,' +
           ' features: [i0.ɵɵHostDirectivesFeature([DirectiveC])]',
       );
 
@@ -252,19 +238,19 @@ runInEachFileSystem(() => {
         @Component({
           selector: 'my-component',
           template: '',
-          hostDirectives: [forwardRef(() => DirectiveB)]
+          hostDirectives: [forwardRef(() => DirectiveB)],
+          standalone: false,
         })
         export class MyComponent {
         }
 
         @Directive({
-          standalone: true,
           hostDirectives: [{directive: forwardRef(() => DirectiveA), inputs: ['value']}],
         })
         export class DirectiveB {
         }
 
-        @Directive({standalone: true})
+        @Directive({})
         export class DirectiveA {
           @Input() value: any;
         }
@@ -283,8 +269,7 @@ runInEachFileSystem(() => {
         'features: [i0.ɵɵHostDirectivesFeature(function () { return [{ directive: DirectiveA, inputs: ["value", "value"] }]; })]',
       );
       expect(jsContents).toContain(
-        'ɵɵdefineDirective({ type: DirectiveA, ' +
-          'inputs: { value: "value" }, standalone: true });',
+        'ɵɵdefineDirective({ type: DirectiveA, ' + 'inputs: { value: "value" } });',
       );
 
       expect(dtsContents).toContain(
@@ -311,10 +296,7 @@ runInEachFileSystem(() => {
         `
         import {Directive} from '@angular/core';
 
-        @Directive({
-          selector: '[dir-a]',
-          standalone: true
-        })
+        @Directive({selector: '[dir-a]'})
         export class DirectiveA {}
       `,
       );
@@ -324,10 +306,7 @@ runInEachFileSystem(() => {
         `
         import {Directive, Input, Output, EventEmitter} from '@angular/core';
 
-        @Directive({
-          selector: '[dir-b]',
-          standalone: true
-        })
+        @Directive({selector: '[dir-b]'})
         export class DirectiveB {
           @Input() input: any;
           @Output() output = new EventEmitter<any>();
@@ -352,7 +331,8 @@ runInEachFileSystem(() => {
               inputs: ['input: inputAlias'],
               outputs: ['output: outputAlias']
             }
-          ]
+          ],
+          standalone: false,
         })
         export class MyComp {}
       `,
@@ -402,7 +382,8 @@ runInEachFileSystem(() => {
 
         @Component({
           template: '',
-          hostDirectives: [{directive: ExternalDir, inputs: ['input: inputAlias'], outputs: ['output: outputAlias']}]
+          hostDirectives: [{directive: ExternalDir, inputs: ['input: inputAlias'], outputs: ['output: outputAlias']}],
+          standalone: false,
         })
         export class MyComp {}
       `,
@@ -452,7 +433,8 @@ runInEachFileSystem(() => {
 
         @Component({
           template: '',
-          hostDirectives: [ExternalDir]
+          hostDirectives: [ExternalDir],
+          standalone: false,
         })
         export class MyComp {}
       `,
@@ -486,14 +468,12 @@ runInEachFileSystem(() => {
 
             @Directive({
               selector: '[dir]',
-              hostDirectives: [{directive: HostDir, inputs: ['inputAlias: customAlias']}],
-              standalone: true
+              hostDirectives: [{directive: HostDir, inputs: ['inputAlias: customAlias']}]
             })
             export class Dir {}
 
             @Component({
               template: '<div dir></div>',
-              standalone: true,
               imports: [Dir]
             })
             class App {}
@@ -521,14 +501,12 @@ runInEachFileSystem(() => {
 
             @Directive({
               selector: '[dir]',
-              hostDirectives: [{directive: HostDir, inputs: ['inputAlias: customAlias']}],
-              standalone: true
+              hostDirectives: [{directive: HostDir, inputs: ['inputAlias: customAlias']}]
             })
             export class Dir {}
 
             @Component({
               template: '<div dir [customAlias]="value"></div>',
-              standalone: true,
               imports: [Dir]
             })
             class App {
@@ -541,6 +519,266 @@ runInEachFileSystem(() => {
       expect(messages).toEqual([]);
     });
 
+    describe('de-duplication', () => {
+      it('should expose original inputs if a directive matches both as a host directive and through the template', () => {
+        env.write(
+          'test.ts',
+          `
+            import {Directive, Component, Input} from '@angular/core';
+
+            @Directive({selector: '[dir]'})
+            export class HostDir {
+              @Input() value = 0;
+              @Input({alias: 'otherAlias'}) other = false;
+            }
+
+            @Directive({
+              selector: '[dir]',
+              hostDirectives: [{directive: HostDir, inputs: ['value: valueAlias']}]
+            })
+            export class Dir {}
+
+            @Component({
+              selector: 'my-comp',
+              template: '<div dir [value]="greeting" [valueAlias]="greeting" [otherAlias]="greeting"></div>',
+              imports: [HostDir, Dir]
+            })
+            export class App {
+              greeting = 'hi';
+            }
+          `,
+        );
+
+        // First diagnostic checks that the input is available under the original name.
+        // Second diagnostic checks that an input that would otherwise be hidden by a host directive is available.
+        // Third diagnostic checks that the host directive alias does not apply.
+        const diags = env.driveDiagnostics();
+        expect(diags.length).toBe(3);
+        expect(diags[0].messageText).toBe(`Type 'string' is not assignable to type 'number'.`);
+        expect(diags[1].messageText).toBe(`Type 'string' is not assignable to type 'boolean'.`);
+        expect(diags[2].messageText).toBe(
+          `Can't bind to 'valueAlias' since it isn't a known property of 'div'.`,
+        );
+      });
+
+      it('should expose original outputs if a directive matches both as a host directive and through the template', () => {
+        env.write(
+          'test.ts',
+          `
+            import {Directive, Component, Output, EventEmitter} from '@angular/core';
+
+            @Directive({selector: '[dir]'})
+            export class HostDir {
+              @Output() eventOne = new EventEmitter<number>();
+              @Output('twoAlias') eventTwo = new EventEmitter<boolean>();
+            }
+
+            @Directive({
+              selector: '[dir]',
+              hostDirectives: [{directive: HostDir, outputs: ['eventOne: oneAlias']}]
+            })
+            export class Dir {}
+
+            @Component({
+              selector: 'my-comp',
+              template: '<div dir (eventOne)="expectsString($event)" (oneAlias)="expectsString($event)" (twoAlias)="expectsString($event)"></div>',
+              imports: [HostDir, Dir]
+            })
+            export class App {
+              expectsString(value: string) {}
+            }
+          `,
+        );
+
+        // First diagnostic checks that the output is available under the original name.
+        // Second diagnostic checks that an output that would otherwise be hidden by a host directive is available.
+        // Third diagnostic checks that the host directive alias does not apply.
+        const diags = env.driveDiagnostics();
+        expect(diags.length).toBe(3);
+        expect(diags[0].messageText).toBe(
+          `Argument of type 'number' is not assignable to parameter of type 'string'.`,
+        );
+        expect(diags[1].messageText).toBe(
+          `Argument of type 'boolean' is not assignable to parameter of type 'string'.`,
+        );
+        expect(diags[2].messageText).toBe(
+          `Argument of type 'Event' is not assignable to parameter of type 'string'.`,
+        );
+      });
+
+      it('should combine inputs configuration if host directive is exposed multiple times with non-conflicting configurations', () => {
+        env.write(
+          'test.ts',
+          `
+            import {Directive, Component, Input} from '@angular/core';
+
+            @Directive()
+            export class HostDir {
+              @Input() value = 0;
+              @Input({alias: 'otherInput'}) other = false;
+            }
+
+            @Directive({
+              selector: '[dir]',
+              hostDirectives: [{directive: HostDir, inputs: ['value']}]
+            })
+            export class DirOne {}
+
+            @Directive({
+              selector: '[dir]',
+              hostDirectives: [{directive: HostDir, inputs: ['otherInput: otherAlias']}]
+            })
+            export class DirTwo {}
+
+            @Component({
+              selector: 'my-comp',
+              template: '<div dir [value]="greeting" [otherAlias]="greeting"></div>',
+              imports: [DirOne, DirTwo]
+            })
+            export class App {
+              greeting = 'hi';
+            }
+          `,
+        );
+
+        const diagnostics = env.driveDiagnostics();
+        expect(diagnostics.length).toBe(2);
+        expect(diagnostics[0].messageText).toBe(
+          `Type 'string' is not assignable to type 'number'.`,
+        );
+        expect(diagnostics[1].messageText).toBe(
+          `Type 'string' is not assignable to type 'boolean'.`,
+        );
+      });
+
+      it('should combine inputs configuration if host directive is exposed multiple times with identical configurations', () => {
+        env.write(
+          'test.ts',
+          `
+            import {Directive, Component, Input} from '@angular/core';
+
+            @Directive()
+            export class HostDir {
+              @Input() value = 0;
+            }
+
+            @Directive({
+              selector: '[dir]',
+              hostDirectives: [{directive: HostDir, inputs: ['value']}]
+            })
+            export class DirOne {}
+
+            @Directive({
+              selector: '[dir]',
+              hostDirectives: [{directive: HostDir, inputs: ['value']}]
+            })
+            export class DirTwo {}
+
+            @Component({
+              selector: 'my-comp',
+              template: '<div dir [value]="greeting"></div>',
+              imports: [DirOne, DirTwo]
+            })
+            export class App {
+              greeting = 'hi';
+            }
+          `,
+        );
+
+        const diagnostics = env.driveDiagnostics();
+        expect(diagnostics.length).toBe(1);
+        expect(diagnostics[0].messageText).toBe(
+          `Type 'string' is not assignable to type 'number'.`,
+        );
+      });
+
+      it('should combine output configuration if host directive is exposed multiple times with non-conflicting configurations', () => {
+        env.write(
+          'test.ts',
+          `
+            import {Directive, Component, Output, EventEmitter} from '@angular/core';
+
+            @Directive()
+            export class HostDir {
+              @Output() myEvent = new EventEmitter<number>();
+              @Output('otherOutput') myOtherEvent = new EventEmitter<boolean>();
+            }
+
+            @Directive({
+              selector: '[dir]',
+              hostDirectives: [{directive: HostDir, outputs: ['myEvent']}]
+            })
+            export class DirOne {}
+
+            @Directive({
+              selector: '[dir]',
+              hostDirectives: [{directive: HostDir, outputs: ['otherOutput: otherAlias']}]
+            })
+            export class DirTwo {}
+
+            @Component({
+              selector: 'my-comp',
+              template: '<div dir (myEvent)="expectsString($event)" (otherAlias)="expectsString($event)"></div>',
+              imports: [DirOne, DirTwo]
+            })
+            export class App {
+              expectsString(value: string) {}
+            }
+          `,
+        );
+
+        const diagnostics = env.driveDiagnostics();
+        expect(diagnostics.length).toBe(2);
+        expect(diagnostics[0].messageText).toBe(
+          `Argument of type 'number' is not assignable to parameter of type 'string'.`,
+        );
+        expect(diagnostics[1].messageText).toBe(
+          `Argument of type 'boolean' is not assignable to parameter of type 'string'.`,
+        );
+      });
+
+      it('should combine outputs configuration if host directive is exposed multiple times with identical configurations', () => {
+        env.write(
+          'test.ts',
+          `
+            import {Directive, Component, Output, EventEmitter} from '@angular/core';
+
+            @Directive()
+            export class HostDir {
+              @Output() myEvent = new EventEmitter<number>();
+            }
+
+            @Directive({
+              selector: '[dir]',
+              hostDirectives: [{directive: HostDir, outputs: ['myEvent']}]
+            })
+            export class DirOne {}
+
+            @Directive({
+              selector: '[dir]',
+              hostDirectives: [{directive: HostDir, outputs: ['myEvent']}]
+            })
+            export class DirTwo {}
+
+            @Component({
+              selector: 'my-comp',
+              template: '<div dir (myEvent)="expectsString($event)"></div>',
+              imports: [DirOne, DirTwo]
+            })
+            export class App {
+              expectsString(value: string) {}
+            }
+          `,
+        );
+
+        const diagnostics = env.driveDiagnostics();
+        expect(diagnostics.length).toBe(1);
+        expect(diagnostics[0].messageText).toBe(
+          `Argument of type 'number' is not assignable to parameter of type 'string'.`,
+        );
+      });
+    });
+
     describe('validations', () => {
       it('should produce a diagnostic if a host directive is not standalone', () => {
         env.write(
@@ -548,11 +786,14 @@ runInEachFileSystem(() => {
           `
           import {Directive, Component, NgModule} from '@angular/core';
 
-          @Directive()
+          @Directive({
+            standalone: false
+          })
           export class HostDir {}
 
           @Directive({
             hostDirectives: [HostDir],
+            standalone: false,
           })
           export class Dir {}
         `,
@@ -590,10 +831,7 @@ runInEachFileSystem(() => {
           `
           import {Directive, Component, NgModule} from '@angular/core';
 
-          @Component({
-            template: '',
-            standalone: true,
-          })
+          @Component({template: ''})
           export class HostComp {}
 
           @Directive({
@@ -675,12 +913,12 @@ runInEachFileSystem(() => {
 
           @Directive({
             selector: '[dir-b]',
+            standalone: false,
           })
           export class HostDirB {}
 
           @Directive({
             selector: '[dir-a]',
-            standalone: true,
             hostDirectives: [HostDirB]
           })
           export class HostDirA {}
@@ -689,6 +927,7 @@ runInEachFileSystem(() => {
             selector: '[dir]',
             template: '',
             hostDirectives: [HostDirA],
+            standalone: false,
           })
           export class Host {}
         `,
@@ -717,7 +956,8 @@ runInEachFileSystem(() => {
             hostDirectives: [{
               directive: HostDir,
               outputs: ['doesNotExist'],
-            }]
+            }],
+            standalone: false,
           })
           class Dir {}
         `,
@@ -745,7 +985,8 @@ runInEachFileSystem(() => {
             hostDirectives: [{
               directive: HostDir,
               outputs: ['foo'],
-            }]
+            }],
+            standalone: false,
           })
           class Dir {}
         `,
@@ -773,7 +1014,8 @@ runInEachFileSystem(() => {
             hostDirectives: [{
               directive: HostDir,
               inputs: ['doesNotExist'],
-            }]
+            }],
+            standalone: false,
           })
           class Dir {}
         `,
@@ -799,6 +1041,7 @@ runInEachFileSystem(() => {
           @Directive({
             selector: '[dir]',
             hostDirectives: [{directive: HostDir, inputs: ['foo']}],
+            standalone: false,
           })
           class Dir {}
         `,
@@ -816,7 +1059,7 @@ runInEachFileSystem(() => {
           `
           import {Directive, Input} from '@angular/core';
 
-          @Directive({selector: '[host-dir]', standalone: true})
+          @Directive({selector: '[host-dir]'})
           class HostDir {
             @Input('colorAlias') color?: string;
             @Input() buttonColor?: string;
@@ -824,7 +1067,8 @@ runInEachFileSystem(() => {
 
           @Directive({
             selector: '[dir]',
-            hostDirectives: [{directive: HostDir, inputs: ['colorAlias: buttonColor']}]
+            hostDirectives: [{directive: HostDir, inputs: ['colorAlias: buttonColor']}],
+            standalone: false,
           })
           class Dir {}
         `,
@@ -843,7 +1087,7 @@ runInEachFileSystem(() => {
           `
             import {Directive, Input} from '@angular/core';
 
-            @Directive({selector: '[host-dir]', standalone: true})
+            @Directive({selector: '[host-dir]'})
             class HostDir {
               @Input('colorAlias') color?: string;
               @Input('buttonColorAlias') buttonColor?: string;
@@ -870,7 +1114,7 @@ runInEachFileSystem(() => {
           `
           import {Directive, Input} from '@angular/core';
 
-          @Directive({selector: '[host-dir]', standalone: true})
+          @Directive({selector: '[host-dir]'})
           class HostDir {
             @Input('color') color?: string;
           }
@@ -893,7 +1137,7 @@ runInEachFileSystem(() => {
           `
           import {Directive, Output, EventEmitter} from '@angular/core';
 
-          @Directive({selector: '[host-dir]', standalone: true})
+          @Directive({selector: '[host-dir]'})
           class HostDir {
             @Output('clickedAlias') clicked = new EventEmitter();
             @Output('tappedAlias') tapped = new EventEmitter();
@@ -920,7 +1164,7 @@ runInEachFileSystem(() => {
           `
           import {Directive, Output, EventEmitter} from '@angular/core';
 
-          @Directive({selector: '[host-dir]', standalone: true})
+          @Directive({selector: '[host-dir]'})
           class HostDir {
             @Output('clicked') clicked = new EventEmitter();
           }
@@ -943,10 +1187,7 @@ runInEachFileSystem(() => {
           `
           import {Directive, Component, Input} from '@angular/core';
 
-          @Directive({
-            selector: '[dir-a]',
-            standalone: true
-          })
+          @Directive({selector: '[dir-a]'})
           export class HostDir {
             @Input({required: true}) input: any;
           }
@@ -973,10 +1214,7 @@ runInEachFileSystem(() => {
           `
               import {Directive, Component, Input} from '@angular/core';
 
-              @Directive({
-                selector: '[dir-a]',
-                standalone: true
-              })
+              @Directive({selector: '[dir-a]'})
               export class HostDir {
                 @Input({required: true, alias: 'inputAlias'}) input: any;
               }
@@ -1003,10 +1241,7 @@ runInEachFileSystem(() => {
           `
           import {Directive, Component, Input} from '@angular/core';
 
-          @Directive({
-            selector: '[dir-a]',
-            standalone: true
-          })
+          @Directive({selector: '[dir-a]'})
           export class HostDir {
             @Input({required: true, alias: 'inputAlias'}) input: any;
           }
@@ -1031,10 +1266,7 @@ runInEachFileSystem(() => {
           `
               import {Directive, Component, Input} from '@angular/core';
 
-              @Directive({
-                selector: '[dir-a]',
-                standalone: true
-              })
+              @Directive({selector: '[dir-a]'})
               export class HostDir {
                 @Input({required: true, alias: 'inputAlias'}) input: any;
               }
@@ -1062,14 +1294,12 @@ runInEachFileSystem(() => {
           @Directive({
             outputs: ['opened: triggerOpened'],
             selector: '[trigger]',
-            standalone: true,
           })
           export class Trigger {
             opened = new EventEmitter();
           }
 
           @Directive({
-            standalone: true,
             selector: '[host]',
             hostDirectives: [{directive: Trigger, outputs: ['triggerOpened']}]
           })
@@ -1095,12 +1325,10 @@ runInEachFileSystem(() => {
           @Directive({
             outputs: ['opened: triggerOpened'],
             selector: '[trigger]',
-            standalone: true,
           })
           export class Trigger extends Base {}
 
           @Directive({
-            standalone: true,
             selector: '[host]',
             hostDirectives: [{directive: Trigger, outputs: ['triggerOpened: hostOpened']}]
           })
@@ -1110,6 +1338,149 @@ runInEachFileSystem(() => {
 
         const diags = env.driveDiagnostics();
         expect(diags.length).toBe(0);
+      });
+
+      it('should produce a diagnostic if an input is exposed under multiple names in a chain of host directives', () => {
+        env.write(
+          'test.ts',
+          `
+          import {Directive, Component, Input} from '@angular/core';
+
+          @Directive()
+          class DuplicateHostDir {
+            @Input() inp: any;
+          }
+
+          @Directive({hostDirectives: [{directive: DuplicateHostDir, inputs: ['inp: alias']}]})
+          class HostOne {}
+
+          @Directive({hostDirectives: [HostOne, {directive: DuplicateHostDir, inputs: ['inp']}]})
+          class HostTwo {}
+
+          @Directive({
+            selector: '[dir]',
+            hostDirectives: [HostTwo, {directive: DuplicateHostDir, inputs: ['inp: alias2']}],
+          })
+          class Dir {}
+
+          @Component({
+            template: '<div dir></div>',
+            imports: [Dir],
+          })
+          class App {}
+        `,
+        );
+
+        const diags = env.driveDiagnostics();
+        expect(diags.length).toBe(1);
+        expect(diags[0].messageText).toContain(
+          'Input declared in DuplicateHostDir.inp is exposed under the following conflicting names: "alias", "inp", "alias2"',
+        );
+      });
+
+      it('should produce a diagnostic if an aliased input is exposed under multiple names in a chain of host directives', () => {
+        env.write(
+          'test.ts',
+          `
+          import {Directive, Component, Input} from '@angular/core';
+
+          @Directive()
+          class DuplicateHostDir {
+            @Input({alias: 'foo'}) inp: any;
+          }
+
+          @Directive({hostDirectives: [{directive: DuplicateHostDir, inputs: ['foo']}]})
+          class HostDir {}
+
+          @Directive({
+            selector: '[dir]',
+            hostDirectives: [HostDir, {directive: DuplicateHostDir, inputs: ['foo: alias']}],
+          })
+          class Dir {}
+
+          @Component({
+            template: '<div dir></div>',
+            imports: [Dir],
+          })
+          class App {}
+        `,
+        );
+
+        const diags = env.driveDiagnostics();
+        expect(diags.length).toBe(1);
+        expect(diags[0].messageText).toContain(
+          'Input declared in DuplicateHostDir.inp is exposed under the following conflicting names: "foo", "alias"',
+        );
+      });
+
+      it('should produce a diagnostic if an output is exposed under multiple names in a chain of host directives', () => {
+        env.write(
+          'test.ts',
+          `
+          import {Directive, Component, Output, EventEmitter} from '@angular/core';
+
+          @Directive()
+          class DuplicateHostDir {
+            @Output() myEvent = new EventEmitter<void>();
+          }
+
+          @Directive({hostDirectives: [{directive: DuplicateHostDir, outputs: ['myEvent']}]})
+          class HostDir {}
+
+          @Directive({
+            selector: '[dir]',
+            hostDirectives: [HostDir, {directive: DuplicateHostDir, outputs: ['myEvent: alias']}],
+          })
+          class Dir {}
+
+          @Component({
+            template: '<div dir></div>',
+            imports: [Dir],
+          })
+          class App {}
+        `,
+        );
+
+        const diags = env.driveDiagnostics();
+        expect(diags.length).toBe(1);
+        expect(diags[0].messageText).toContain(
+          'Output declared in DuplicateHostDir.myEvent is exposed under the following conflicting names: "myEvent", "alias"',
+        );
+      });
+
+      it('should produce a diagnostic if an aliased output is exposed under multiple names in a chain of host directives', () => {
+        env.write(
+          'test.ts',
+          `
+          import {Directive, Component, Output, EventEmitter} from '@angular/core';
+
+          @Directive()
+          class DuplicateHostDir {
+            @Output('foo') myEvent = new EventEmitter<void>();
+          }
+
+          @Directive({hostDirectives: [{directive: DuplicateHostDir, outputs: ['foo']}]})
+          class HostDir {}
+
+          @Directive({
+            selector: '[dir]',
+            hostDirectives: [HostDir, {directive: DuplicateHostDir, outputs: ['foo: alias']}],
+          })
+          class Dir {}
+
+          @Component({
+            template: '<div dir></div>',
+            imports: [Dir],
+          })
+          class App {}
+        `,
+        );
+
+        const diags = env.driveDiagnostics();
+        expect(diags.length).toBe(1);
+        expect(diags[0].messageText).toContain(
+          'Output declared in DuplicateHostDir.myEvent is exposed under the following conflicting names: "foo", "alias"',
+        );
       });
     });
   });

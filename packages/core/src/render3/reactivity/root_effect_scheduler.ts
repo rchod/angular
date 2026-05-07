@@ -7,8 +7,6 @@
  */
 
 import {ɵɵdefineInjectable} from '../../di/interface/defs';
-import {PendingTasksInternal} from '../../pending_tasks';
-import {inject} from '../../di/injector_compatibility';
 
 /**
  * Abstraction that encompasses any kind of effect that can be scheduled.
@@ -18,12 +16,15 @@ export interface SchedulableEffect {
   zone: {
     run<T>(fn: () => T): T;
   } | null;
+  dirty: boolean;
 }
 
 /**
  * A scheduler which manages the execution of effects.
  */
 export abstract class EffectScheduler {
+  abstract add(e: SchedulableEffect): void;
+
   /**
    * Schedule the given effect to be executed at a later time.
    *
@@ -36,8 +37,11 @@ export abstract class EffectScheduler {
    */
   abstract flush(): void;
 
+  /** Remove a scheduled effect */
+  abstract remove(e: SchedulableEffect): void;
+
   /** @nocollapse */
-  static ɵprov = /** @pureOrBreakMyCode */ ɵɵdefineInjectable({
+  static ɵprov = /** @pureOrBreakMyCode */ /* @__PURE__ */ ɵɵdefineInjectable({
     token: EffectScheduler,
     providedIn: 'root',
     factory: () => new ZoneAwareEffectScheduler(),
@@ -49,16 +53,31 @@ export abstract class EffectScheduler {
  * when.
  */
 export class ZoneAwareEffectScheduler implements EffectScheduler {
-  private queuedEffectCount = 0;
+  private dirtyEffectCount = 0;
   private queues = new Map<Zone | null, Set<SchedulableEffect>>();
-  private readonly pendingTasks = inject(PendingTasksInternal);
-  protected taskId: number | null = null;
+
+  add(handle: SchedulableEffect): void {
+    this.enqueue(handle);
+    this.schedule(handle);
+  }
 
   schedule(handle: SchedulableEffect): void {
-    this.enqueue(handle);
+    if (!handle.dirty) {
+      return;
+    }
+    this.dirtyEffectCount++;
+  }
 
-    if (this.taskId === null) {
-      this.taskId = this.pendingTasks.add();
+  remove(handle: SchedulableEffect): void {
+    const zone = handle.zone as Zone | null;
+    const queue = this.queues.get(zone)!;
+    if (!queue.has(handle)) {
+      return;
+    }
+
+    queue.delete(handle);
+    if (handle.dirty) {
+      this.dirtyEffectCount--;
     }
   }
 
@@ -72,7 +91,6 @@ export class ZoneAwareEffectScheduler implements EffectScheduler {
     if (queue.has(handle)) {
       return;
     }
-    this.queuedEffectCount++;
     queue.add(handle);
   }
 
@@ -83,30 +101,37 @@ export class ZoneAwareEffectScheduler implements EffectScheduler {
    * ordering guarantee between effects scheduled in different zones.
    */
   flush(): void {
-    while (this.queuedEffectCount > 0) {
+    while (this.dirtyEffectCount > 0) {
+      let ranOneEffect = false;
       for (const [zone, queue] of this.queues) {
         // `zone` here must be defined.
         if (zone === null) {
-          this.flushQueue(queue);
+          ranOneEffect ||= this.flushQueue(queue);
         } else {
-          zone.run(() => this.flushQueue(queue));
+          ranOneEffect ||= zone.run(() => this.flushQueue(queue));
         }
       }
-    }
 
-    if (this.taskId !== null) {
-      this.pendingTasks.remove(this.taskId);
-      this.taskId = null;
+      // Safeguard against infinite looping if somehow our dirty effect count gets out of sync with
+      // the dirty flag across all the effects.
+      if (!ranOneEffect) {
+        this.dirtyEffectCount = 0;
+      }
     }
   }
 
-  private flushQueue(queue: Set<SchedulableEffect>): void {
+  private flushQueue(queue: Set<SchedulableEffect>): boolean {
+    let ranOneEffect = false;
     for (const handle of queue) {
-      queue.delete(handle);
-      this.queuedEffectCount--;
+      if (!handle.dirty) {
+        continue;
+      }
+      this.dirtyEffectCount--;
+      ranOneEffect = true;
 
       // TODO: what happens if this throws an error?
       handle.run();
     }
+    return ranOneEffect;
   }
 }

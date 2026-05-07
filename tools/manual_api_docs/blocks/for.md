@@ -4,9 +4,9 @@ The `@for` block repeatedly renders content of a block for each item in a collec
 
 ```angular-html
 @for (item of items; track item.name) {
-<li>{{ item.name }}</li>
+  <li>{{ item.name }}</li>
 } @empty {
-<li>There are no items.</li>
+  <li>There are no items.</li>
 }
 ```
 
@@ -18,6 +18,8 @@ but there are performance advantages of using a regular `Array`.
 
 You can optionally include an `@empty` section immediately after the `@for` block content. The
 content of the `@empty` block displays when there are no items.
+
+Angular's `@for` block does not support flow-modifying statements like JavaScript's `continue` or `break`.
 
 ### `track` and objects identity
 
@@ -33,12 +35,14 @@ For collections that remain static , `track $index` provides a straightforward t
 collections experiencing additions, deletions, or reordering, opt for a
 unique property of each item as the tracking key.
 
+Track expressions can only reference `$index`, the item, and properties and methods of the component class. If the `let` segment of the `@for` block introduced an alias for `$index`, that alias may also be referenced.
+
 ### `$index` and other contextual variables
 
 Inside `@for` contents, several implicit variables are always available:
 
 | Variable | Meaning                                       |
-|----------|-----------------------------------------------|
+| -------- | --------------------------------------------- |
 | `$count` | Number of items in a collection iterated over |
 | `$index` | Index of the current row                      |
 | `$first` | Whether the current row is the first row      |
@@ -50,7 +54,7 @@ These variables are always available with these names, but can be aliased via a 
 
 ```angular-html
 @for (item of items; track item.id; let idx = $index, e = $even) {
-Item #{{ idx }}: {{ item.name }}
+  Item #{{ idx }}: {{ item.name }}
 }
 ```
 

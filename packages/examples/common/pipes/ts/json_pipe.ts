@@ -6,11 +6,13 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
+import {JsonPipe} from '@angular/common';
 import {Component} from '@angular/core';
 
 // #docregion JsonPipe
 @Component({
   selector: 'json-pipe',
+  imports: [JsonPipe],
   template: `<div>
     <p>Without JSON pipe:</p>
     <pre>{{ object }}</pre>

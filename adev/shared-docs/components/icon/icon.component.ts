@@ -7,36 +7,24 @@
  */
 
 import {DOCUMENT} from '@angular/common';
-import {
-  ChangeDetectionStrategy,
-  Component,
-  afterNextRender,
-  computed,
-  inject,
-  signal,
-} from '@angular/core';
+import {Component, afterNextRender, computed, inject, signal} from '@angular/core';
 
 @Component({
   selector: 'docs-icon',
-  standalone: true,
-  templateUrl: './icon.component.html',
-  styleUrl: './icon.component.scss',
   host: {
-    '[class]': 'MATERIAL_SYMBOLS_OUTLINED',
+    'class': 'material-symbols-outlined',
     '[style.font-size.px]': 'fontSize()',
     'aria-hidden': 'true',
     'translate': 'no',
   },
-  changeDetection: ChangeDetectionStrategy.OnPush,
+  template: '<ng-content />',
+  styleUrl: './icon.component.scss',
 })
 export class IconComponent {
-  fontSize = computed(() => {
-    return IconComponent.isFontLoaded() ? null : 0;
-  });
-
-  protected readonly MATERIAL_SYMBOLS_OUTLINED = 'material-symbols-outlined';
-
   private static isFontLoaded = signal(false);
+
+  protected readonly fontSize = computed(() => (IconComponent.isFontLoaded() ? null : 0));
+
   /** Share the same promise across different instances of the component */
   private static whenFontLoad?: Promise<FontFace[]> | undefined;
 

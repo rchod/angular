@@ -7,7 +7,11 @@
  */
 
 import {HttpClient} from '@angular/common/http';
-import {Component} from '@angular/core';
+import {ChangeDetectionStrategy, Component} from '@angular/core';
+
+interface Person {
+  name: string;
+}
 
 @Component({
   selector: 'jsonp-app',
@@ -17,10 +21,15 @@ import {Component} from '@angular/core';
       <li *ngFor="let person of people">hello, {{ person.name }}</li>
     </ul>
   `,
+  standalone: false,
+  changeDetection: ChangeDetectionStrategy.Eager,
 })
 export class JsonpCmp {
-  people: Object;
+  people: Person[] = [];
+
   constructor(http: HttpClient) {
-    http.jsonp<Object>('./people.json', 'callback').subscribe((res: Object) => (this.people = res));
+    http.jsonp('./people.json', 'callback').subscribe((res: unknown) => {
+      this.people = res as Person[];
+    });
   }
 }

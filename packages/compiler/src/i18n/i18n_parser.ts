@@ -8,10 +8,16 @@
 
 import {Lexer as ExpressionLexer} from '../expression_parser/lexer';
 import {Parser as ExpressionParser} from '../expression_parser/parser';
+import {serialize as serializeExpression} from '../expression_parser/serializer';
 import * as html from '../ml_parser/ast';
-import {InterpolationConfig} from '../ml_parser/defaults';
 import {getHtmlTagDefinition} from '../ml_parser/html_tags';
-import {InterpolatedAttributeToken, InterpolatedTextToken, TokenType} from '../ml_parser/tokens';
+import {
+  AttributeValueInterpolationToken,
+  InterpolatedAttributeToken,
+  InterpolatedTextToken,
+  InterpolationToken,
+  TokenType,
+} from '../ml_parser/tokens';
 import {ParseSourceSpan} from '../parse_util';
 
 import * as i18n from './i18n_ast';
@@ -32,19 +38,13 @@ export interface I18nMessageFactory {
 }
 
 /**
- * Returns a function converting html nodes to an i18n Message given an interpolationConfig
+ * Returns a function converting html nodes to an i18n Message
  */
 export function createI18nMessageFactory(
-  interpolationConfig: InterpolationConfig,
-  containerBlocks: Set<string>,
   retainEmptyTokens: boolean,
+  preserveExpressionWhitespace: boolean,
 ): I18nMessageFactory {
-  const visitor = new _I18nVisitor(
-    _expParser,
-    interpolationConfig,
-    containerBlocks,
-    retainEmptyTokens,
-  );
+  const visitor = new _I18nVisitor(_expParser, retainEmptyTokens, preserveExpressionWhitespace);
   return (nodes, meaning, description, customId, visitNodeFn) =>
     visitor.toI18nMessage(nodes, meaning, description, customId, visitNodeFn);
 }
@@ -65,9 +65,8 @@ function noopVisitNodeFn(_html: html.Node, i18n: i18n.Node): i18n.Node {
 class _I18nVisitor implements html.Visitor {
   constructor(
     private _expressionParser: ExpressionParser,
-    private _interpolationConfig: InterpolationConfig,
-    private _containerBlocks: Set<string>,
     private readonly _retainEmptyTokens: boolean,
+    private readonly _preserveExpressionWhitespace: boolean,
   ) {}
 
   public toI18nMessage(
@@ -99,46 +98,15 @@ class _I18nVisitor implements html.Visitor {
   }
 
   visitElement(el: html.Element, context: I18nMessageVisitorContext): i18n.Node {
-    const children = html.visitAll(this, el.children, context);
-    const attrs: {[k: string]: string} = {};
-    el.attrs.forEach((attr) => {
-      // Do not visit the attributes, translatable ones are top-level ASTs
-      attrs[attr.name] = attr.value;
-    });
+    return this._visitElementLike(el, context);
+  }
 
-    const isVoid: boolean = getHtmlTagDefinition(el.name).isVoid;
-    const startPhName = context.placeholderRegistry.getStartTagPlaceholderName(
-      el.name,
-      attrs,
-      isVoid,
-    );
-    context.placeholderToContent[startPhName] = {
-      text: el.startSourceSpan.toString(),
-      sourceSpan: el.startSourceSpan,
-    };
+  visitComponent(component: html.Component, context: I18nMessageVisitorContext) {
+    return this._visitElementLike(component, context);
+  }
 
-    let closePhName = '';
-
-    if (!isVoid) {
-      closePhName = context.placeholderRegistry.getCloseTagPlaceholderName(el.name);
-      context.placeholderToContent[closePhName] = {
-        text: `</${el.name}>`,
-        sourceSpan: el.endSourceSpan ?? el.sourceSpan,
-      };
-    }
-
-    const node = new i18n.TagPlaceholder(
-      el.name,
-      attrs,
-      startPhName,
-      closePhName,
-      children,
-      isVoid,
-      el.sourceSpan,
-      el.startSourceSpan,
-      el.endSourceSpan,
-    );
-    return context.visitNodeFn(el, node);
+  visitDirective(directive: html.Directive, context: any) {
+    throw new Error('Unreachable code');
   }
 
   visitAttribute(attribute: html.Attribute, context: I18nMessageVisitorContext): i18n.Node {
@@ -208,7 +176,7 @@ class _I18nVisitor implements html.Visitor {
   visitBlock(block: html.Block, context: I18nMessageVisitorContext) {
     const children = html.visitAll(this, block.children, context);
 
-    if (this._containerBlocks.has(block.name)) {
+    if (block.name === 'switch') {
       return new i18n.Container(children, block.sourceSpan);
     }
 
@@ -250,6 +218,65 @@ class _I18nVisitor implements html.Visitor {
     return null;
   }
 
+  private _visitElementLike(
+    node: html.Element | html.Component,
+    context: I18nMessageVisitorContext,
+  ): i18n.Node {
+    const children = html.visitAll(this, node.children, context);
+    const attrs: {[k: string]: string} = {};
+    const visitAttribute = (attr: html.Attribute) => {
+      // Do not visit the attributes, translatable ones are top-level ASTs
+      attrs[attr.name] = attr.value;
+    };
+
+    let nodeName: string;
+    let isVoid: boolean;
+
+    if (node instanceof html.Element) {
+      nodeName = node.name;
+      isVoid = getHtmlTagDefinition(node.name).isVoid;
+    } else {
+      nodeName = node.fullName;
+      isVoid = node.tagName ? getHtmlTagDefinition(node.tagName).isVoid : false;
+    }
+
+    node.attrs.forEach(visitAttribute);
+    node.directives.forEach((dir) => dir.attrs.forEach(visitAttribute));
+
+    const startPhName = context.placeholderRegistry.getStartTagPlaceholderName(
+      nodeName,
+      attrs,
+      isVoid,
+    );
+    context.placeholderToContent[startPhName] = {
+      text: node.startSourceSpan.toString(),
+      sourceSpan: node.startSourceSpan,
+    };
+
+    let closePhName = '';
+
+    if (!isVoid) {
+      closePhName = context.placeholderRegistry.getCloseTagPlaceholderName(nodeName);
+      context.placeholderToContent[closePhName] = {
+        text: `</${nodeName}>`,
+        sourceSpan: node.endSourceSpan ?? node.sourceSpan,
+      };
+    }
+
+    const i18nNode = new i18n.TagPlaceholder(
+      nodeName,
+      attrs,
+      startPhName,
+      closePhName,
+      children,
+      isVoid,
+      node.sourceSpan,
+      node.startSourceSpan,
+      node.endSourceSpan,
+    );
+    return context.visitNodeFn(node, i18nNode);
+  }
+
   /**
    * Convert, text and interpolated tokens up into text and placeholder pieces.
    *
@@ -274,14 +301,24 @@ class _I18nVisitor implements html.Visitor {
         case TokenType.INTERPOLATION:
         case TokenType.ATTR_VALUE_INTERPOLATION:
           hasInterpolation = true;
-          const expression = token.parts[1];
+          const [startMarker, expression, endMarker] = token.parts;
           const baseName = extractPlaceholderName(expression) || 'INTERPOLATION';
           const phName = context.placeholderRegistry.getPlaceholderName(baseName, expression);
-          context.placeholderToContent[phName] = {
-            text: token.parts.join(''),
-            sourceSpan: token.sourceSpan,
-          };
-          nodes.push(new i18n.Placeholder(expression, phName, token.sourceSpan));
+
+          if (this._preserveExpressionWhitespace) {
+            context.placeholderToContent[phName] = {
+              text: token.parts.join(''),
+              sourceSpan: token.sourceSpan,
+            };
+            nodes.push(new i18n.Placeholder(expression, phName, token.sourceSpan));
+          } else {
+            const normalized = this.normalizeExpression(token);
+            context.placeholderToContent[phName] = {
+              text: `${startMarker}${normalized}${endMarker}`,
+              sourceSpan: token.sourceSpan,
+            };
+            nodes.push(new i18n.Placeholder(normalized, phName, token.sourceSpan));
+          }
           break;
         default:
           // Try to merge text tokens with previous tokens. We do this even for all tokens
@@ -331,6 +368,18 @@ class _I18nVisitor implements html.Visitor {
     } else {
       return nodes[0];
     }
+  }
+
+  // Normalize expression whitespace by parsing and re-serializing it. This makes
+  // message IDs more durable to insignificant whitespace changes.
+  normalizeExpression(token: InterpolationToken | AttributeValueInterpolationToken): string {
+    const expression = token.parts[1];
+    const expr = this._expressionParser.parseBinding(
+      expression,
+      /* location */ token.sourceSpan,
+      /* absoluteOffset */ token.sourceSpan.start.offset,
+    );
+    return serializeExpression(expr);
   }
 }
 

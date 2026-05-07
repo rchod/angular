@@ -7,8 +7,7 @@
  */
 
 import {animate, state, style, transition, trigger} from '@angular/animations';
-import {Component, NgModule} from '@angular/core';
-import {BrowserAnimationsModule} from '@angular/platform-browser/animations';
+import {Component} from '@angular/core';
 
 @Component({
   selector: 'example-app',
@@ -41,7 +40,6 @@ import {BrowserAnimationsModule} from '@angular/platform-browser/animations';
   `,
 })
 export class MyExpandoCmp {
-  // TODO(issue/24571): remove '!'.
   stateExpression!: string;
   constructor() {
     this.collapse();
@@ -53,10 +51,3 @@ export class MyExpandoCmp {
     this.stateExpression = 'collapsed';
   }
 }
-
-@NgModule({
-  imports: [BrowserAnimationsModule],
-  declarations: [MyExpandoCmp],
-  bootstrap: [MyExpandoCmp],
-})
-export class AppModule {}

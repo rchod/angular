@@ -6,11 +6,11 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
-import {Injectable, signal} from '@angular/core';
-import {isFirefox, isIos} from '@angular/docs';
+import {signal, Service} from '@angular/core';
+import {isIos} from '@angular/docs';
 
 import {LoadingStep} from './enums/loading-steps';
-import {OUT_OF_MEMORY_MSG} from './node-runtime-sandbox.service';
+import {OUT_OF_MEMORY_MSG} from './node-runtime-errors';
 
 export const MAX_RECOMMENDED_WEBCONTAINERS_INSTANCES = 3;
 export const WEBCONTAINERS_COUNTER_KEY = 'numberOfWebcontainers';
@@ -27,7 +27,7 @@ export enum ErrorType {
   UNSUPPORTED_BROWSER_ENVIRONMENT,
 }
 
-@Injectable({providedIn: 'root'})
+@Service()
 export class NodeRuntimeState {
   private readonly _loadingStep = signal<number>(LoadingStep.NOT_STARTED);
   loadingStep = this._loadingStep.asReadonly();
@@ -35,7 +35,7 @@ export class NodeRuntimeState {
   private readonly _isResetting = signal(false);
   readonly isResetting = this._isResetting.asReadonly();
 
-  readonly _error = signal<NodeRuntimeError | undefined>(undefined);
+  private readonly _error = signal<NodeRuntimeError | undefined>(undefined);
   readonly error = this._error.asReadonly();
 
   constructor() {

@@ -5,14 +5,17 @@
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.dev/license
  */
+import {ChangeDetectionStrategy} from '@angular/compiler';
 import {Component, Renderer2, ViewEncapsulation} from '@angular/core';
 import {ComponentFixture, TestBed} from '@angular/core/testing';
-import {By} from '@angular/platform-browser/src/dom/debug/by';
+import {isNode} from '@angular/private/testing';
+import {expect} from '@angular/private/testing/matchers';
+import {By} from '../../src/dom/debug/by';
 import {
+  addBaseHrefToCssSourceMap,
   NAMESPACE_URIS,
   REMOVE_STYLES_ON_COMPONENT_DESTROY,
-} from '@angular/platform-browser/src/dom/dom_renderer';
-import {expect} from '@angular/platform-browser/testing/src/matchers';
+} from '../../src/dom/dom_renderer';
 
 describe('DefaultDomRendererV2', () => {
   if (isNode) {
@@ -28,10 +31,12 @@ describe('DefaultDomRendererV2', () => {
       declarations: [
         TestCmp,
         SomeApp,
+        IsolatedShadowComponentParentApp,
         SomeAppForCleanUp,
         CmpEncapsulationEmulated,
         CmpEncapsulationNone,
         CmpEncapsulationShadow,
+        CmpEncapsulationIsolatedShadowWithChildren,
       ],
     });
     renderer = TestBed.createComponent(TestCmp).componentInstance.renderer;
@@ -107,20 +112,63 @@ describe('DefaultDomRendererV2', () => {
     });
   });
 
-  it('should allow to style components with emulated encapsulation and no encapsulation inside of components with shadow DOM', () => {
+  it('should style non-descendant components correctly with different types of encapsulation', () => {
     const fixture = TestBed.createComponent(SomeApp);
     fixture.detectChanges();
 
     const cmp = fixture.debugElement.query(By.css('cmp-shadow')).nativeElement;
-    const shadow = cmp.shadowRoot.querySelector('.shadow');
-
+    const shadowRoot = cmp.shadowRoot;
+    const shadow = shadowRoot.querySelector('.shadow');
     expect(window.getComputedStyle(shadow).color).toEqual('rgb(255, 0, 0)');
 
-    const emulated = cmp.shadowRoot.querySelector('.emulated');
+    const emulated = fixture.debugElement.query(By.css('.emulated')).nativeElement;
     expect(window.getComputedStyle(emulated).color).toEqual('rgb(0, 0, 255)');
 
-    const none = cmp.shadowRoot.querySelector('.none');
+    const none = fixture.debugElement.query(By.css('.none')).nativeElement;
     expect(window.getComputedStyle(none).color).toEqual('rgb(0, 255, 0)');
+  });
+
+  it('should encapsulate shadow DOM components, with child components inheriting from shadow styles not global styles', () => {
+    const fixture = TestBed.createComponent(IsolatedShadowComponentParentApp);
+    fixture.detectChanges();
+    const shadowcmp = fixture.debugElement.query(By.css('cmp-shadow-children')).nativeElement;
+    const shadowRoot = shadowcmp.shadowRoot;
+
+    const shadow = shadowRoot.querySelector('.shadow');
+    expect(window.getComputedStyle(shadow).color).toEqual('rgb(255, 0, 0)');
+
+    const emulated = fixture.debugElement.query(By.css('.emulated')).nativeElement;
+    expect(window.getComputedStyle(emulated).color).toEqual('rgb(255, 0, 0)');
+
+    const none = fixture.debugElement.query(By.css('.none')).nativeElement;
+    expect(window.getComputedStyle(none).color).toEqual('rgb(255, 0, 0)');
+  });
+
+  it('child components of shadow components should inherit browser defaults rather than their component styles', () => {
+    const fixture = TestBed.createComponent(IsolatedShadowComponentParentApp);
+    fixture.detectChanges();
+
+    const shadowcmp = fixture.debugElement.query(By.css('cmp-shadow-children')).nativeElement;
+    const shadowRoot = shadowcmp.shadowRoot;
+    const shadow = shadowRoot.querySelector('.shadow');
+    expect(window.getComputedStyle(shadow).backgroundColor).toEqual('rgba(0, 0, 0, 0)');
+
+    const emulated = fixture.debugElement.query(By.css('.emulated')).nativeElement;
+    expect(window.getComputedStyle(emulated).backgroundColor).toEqual('rgba(0, 0, 0, 0)');
+
+    const none = fixture.debugElement.query(By.css('.none')).nativeElement;
+    expect(window.getComputedStyle(none).backgroundColor).toEqual('rgba(0, 0, 0, 0)');
+  });
+
+  it('shadow components should not be polluted by child components styles when using ExperimentalIsolatedShadowDom', () => {
+    const fixture = TestBed.createComponent(IsolatedShadowComponentParentApp);
+    fixture.detectChanges();
+
+    const cmp = fixture.debugElement.query(By.css('cmp-shadow-children')).nativeElement;
+    const shadowRoot = cmp.shadowRoot;
+    const shadow = shadowRoot.querySelector('.shadow');
+    expect(window.getComputedStyle(shadow).backgroundColor).not.toEqual('rgb(0, 0, 255)');
+    expect(window.getComputedStyle(shadow).backgroundColor).not.toEqual('rgb(0, 255, 0)');
   });
 
   it('should be able to append children to a <template> element', () => {
@@ -169,12 +217,14 @@ describe('DefaultDomRendererV2', () => {
 
       // Remove a single instance of the component.
       compInstance.componentOneInstanceHidden = true;
+      fixture.changeDetectorRef.markForCheck();
       fixture.detectChanges();
       // Verify style is still in DOM
       expect(await styleCount(fixture, '.emulated')).toBe(1);
 
       // Hide all instances of the component
       compInstance.componentTwoInstanceHidden = true;
+      fixture.changeDetectorRef.markForCheck();
       fixture.detectChanges();
 
       // Verify style is still in DOM
@@ -192,12 +242,14 @@ describe('DefaultDomRendererV2', () => {
 
       // Remove a single instance of the component.
       compInstance.componentOneInstanceHidden = true;
+      fixture.changeDetectorRef.markForCheck();
       fixture.detectChanges();
       // Verify style is still in DOM
       expect(await styleCount(fixture, '.none')).toBe(1);
 
       // Hide all instances of the component
       compInstance.componentTwoInstanceHidden = true;
+      fixture.changeDetectorRef.markForCheck();
       fixture.detectChanges();
 
       // Verify style is still in DOM
@@ -216,12 +268,14 @@ describe('DefaultDomRendererV2', () => {
 
       // Remove a single instance of the component.
       compInstance.componentOneInstanceHidden = true;
+      fixture.changeDetectorRef.markForCheck();
       fixture.detectChanges();
       // Verify style is still in DOM
       expect(await styleCount(fixture, '.emulated')).toBe(1);
 
       // Hide all instances of the component
       compInstance.componentTwoInstanceHidden = true;
+      fixture.changeDetectorRef.markForCheck();
       fixture.detectChanges();
 
       // Verify style is not in DOM
@@ -239,12 +293,14 @@ describe('DefaultDomRendererV2', () => {
 
       // Remove a single instance of the component.
       compInstance.componentOneInstanceHidden = true;
+      fixture.changeDetectorRef.markForCheck();
       fixture.detectChanges();
       // Verify style is still in DOM
       expect(await styleCount(fixture, '.none')).toBe(1);
 
       // Hide all instances of the component
       compInstance.componentTwoInstanceHidden = true;
+      fixture.changeDetectorRef.markForCheck();
       fixture.detectChanges();
 
       // Verify style is not in DOM
@@ -260,13 +316,93 @@ describe('DefaultDomRendererV2', () => {
     });
 
     it('should create MathML elements', () => {
-      // MathMLElement is fairly recent and doesn't exist on our Saucelabs test environments
-      if (typeof MathMLElement !== 'undefined') {
-        expect(
-          document.createElementNS(NAMESPACE_URIS['math'], 'math') instanceof MathMLElement,
-        ).toBeTrue();
-      }
+      expect(
+        document.createElementNS(NAMESPACE_URIS['math'], 'math') instanceof MathMLElement,
+      ).toBeTrue();
     });
+  });
+
+  it('should update an external sourceMappingURL by prepending the baseHref as a prefix', () => {
+    document.head.innerHTML = `<base href="/base/" />`;
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      declarations: [CmpEncapsulationNoneWithSourceMap],
+    });
+
+    const fixture = TestBed.createComponent(CmpEncapsulationNoneWithSourceMap);
+    fixture.detectChanges();
+
+    expect(document.head.querySelector('style')?.textContent).toContain(
+      '/*# sourceMappingURL=/base/cmp-none.css.map */',
+    );
+
+    document.head.innerHTML = '';
+  });
+});
+
+describe('addBaseHrefToCssSourceMap', () => {
+  it('should return the original styles if baseHref is empty', () => {
+    const styles = ['body { color: red; }'];
+    const result = addBaseHrefToCssSourceMap('', styles);
+    expect(result).toEqual(styles);
+  });
+
+  it('should skip styles that do not contain a sourceMappingURL', () => {
+    const styles = ['body { color: red; }', 'h1 { font-size: 2rem; }'];
+    const result = addBaseHrefToCssSourceMap('/base/', styles);
+    expect(result).toEqual(styles);
+  });
+
+  it('should not modify inline (encoded) sourceMappingURL maps', () => {
+    const styles = ['/*# sourceMappingURL=data:application/json;base64,xyz */'];
+    const result = addBaseHrefToCssSourceMap('/base/', styles);
+    expect(result).toEqual(styles);
+  });
+
+  it('should prepend baseHref to external sourceMappingURL', () => {
+    const styles = ['/*# sourceMappingURL=style.css */'];
+    const result = addBaseHrefToCssSourceMap('/base/', styles);
+    expect(result).toEqual(['/*# sourceMappingURL=/base/style.css */']);
+  });
+
+  it('should handle baseHref with a trailing slash correctly', () => {
+    const styles = ['/*# sourceMappingURL=style.css */'];
+    const result = addBaseHrefToCssSourceMap('/base/', styles);
+    expect(result).toEqual(['/*# sourceMappingURL=/base/style.css */']);
+  });
+
+  it('should handle baseHref without a trailing slash correctly', () => {
+    const styles = ['/*# sourceMappingURL=style.css */'];
+    const result = addBaseHrefToCssSourceMap('/base', styles);
+    expect(result).toEqual(['/*# sourceMappingURL=/style.css */']);
+  });
+
+  it('should not duplicate slashes in the final URL', () => {
+    const styles = ['/*# sourceMappingURL=./style.css */'];
+    const result = addBaseHrefToCssSourceMap('/base/', styles);
+    expect(result).toEqual(['/*# sourceMappingURL=/base/style.css */']);
+  });
+
+  it('should not add base href to sourceMappingURL that is absolute', () => {
+    const styles = ['/*# sourceMappingURL=http://example.com/style.css */'];
+    const result = addBaseHrefToCssSourceMap('/base/', styles);
+    expect(result).toEqual(['/*# sourceMappingURL=http://example.com/style.css */']);
+  });
+
+  it('should process multiple styles and handle each case correctly', () => {
+    const styles = [
+      '/*# sourceMappingURL=style1.css */',
+      '/*# sourceMappingURL=data:application/json;base64,xyz */',
+      'h1 { font-size: 2rem; }',
+      '/*# sourceMappingURL=style2.css */',
+    ];
+    const result = addBaseHrefToCssSourceMap('/base/', styles);
+    expect(result).toEqual([
+      '/*# sourceMappingURL=/base/style1.css */',
+      '/*# sourceMappingURL=data:application/json;base64,xyz */',
+      'h1 { font-size: 2rem; }',
+      '/*# sourceMappingURL=/base/style2.css */',
+    ]);
   });
 });
 
@@ -293,27 +429,86 @@ async function styleCount(
 
 @Component({
   selector: 'cmp-emulated',
-  template: `<div class="emulated"></div>`,
-  styles: [`.emulated { color: blue; }`],
+  template: ` <div class="emulated"></div>`,
+  styles: [
+    `
+      .emulated {
+        background-color: blue;
+        color: blue;
+      }
+    `,
+  ],
   encapsulation: ViewEncapsulation.Emulated,
+  standalone: false,
 })
 class CmpEncapsulationEmulated {}
 
 @Component({
   selector: 'cmp-none',
-  template: `<div class="none"></div>`,
-  styles: [`.none { color: lime; }`],
+  template: ` <div class="none"></div>`,
+  styles: [
+    `
+      .none {
+        background-color: lime;
+        color: lime;
+      }
+    `,
+  ],
   encapsulation: ViewEncapsulation.None,
+  standalone: false,
 })
 class CmpEncapsulationNone {}
 
 @Component({
+  selector: 'cmp-none',
+  template: ` <div class="none"></div>`,
+  styles: [
+    `
+      .none {
+        background-color: lime;
+        color: lime;
+      }
+
+      /*# sourceMappingURL=cmp-none.css.map */
+    `,
+  ],
+  encapsulation: ViewEncapsulation.None,
+  standalone: false,
+})
+class CmpEncapsulationNoneWithSourceMap {}
+
+@Component({
   selector: 'cmp-shadow',
-  template: `<div class="shadow"></div><cmp-emulated></cmp-emulated><cmp-none></cmp-none>`,
-  styles: [`.shadow { color: red; }`],
+  template: ` <div class="shadow"></div>`,
+  styles: [
+    `
+      .shadow {
+        color: red;
+      }
+    `,
+  ],
   encapsulation: ViewEncapsulation.ShadowDom,
+  standalone: false,
 })
 class CmpEncapsulationShadow {}
+
+@Component({
+  selector: 'cmp-shadow-children',
+  template: ` <div class="shadow">
+    <cmp-emulated></cmp-emulated>
+    <cmp-none></cmp-none>
+  </div>`,
+  styles: [
+    `
+      .shadow {
+        color: red;
+      }
+    `,
+  ],
+  encapsulation: ViewEncapsulation.ExperimentalIsolatedShadowDom,
+  standalone: false,
+})
+class CmpEncapsulationIsolatedShadowWithChildren {}
 
 @Component({
   selector: 'some-app',
@@ -322,10 +517,25 @@ class CmpEncapsulationShadow {}
     <cmp-emulated></cmp-emulated>
     <cmp-none></cmp-none>
   `,
+  standalone: false,
+  changeDetection: ChangeDetectionStrategy.Eager,
 })
 export class SomeApp {}
 
-@Component({selector: 'test-cmp', template: ''})
+@Component({
+  selector: 'shadow-parent-app-with-children',
+  template: ` <cmp-shadow-children></cmp-shadow-children> `,
+  standalone: false,
+  changeDetection: ChangeDetectionStrategy.Eager,
+})
+export class IsolatedShadowComponentParentApp {}
+
+@Component({
+  selector: 'test-cmp',
+  template: '',
+  standalone: false,
+  changeDetection: ChangeDetectionStrategy.Eager,
+})
 class TestCmp {
   constructor(public renderer: Renderer2) {}
 }
@@ -339,6 +549,8 @@ class TestCmp {
     <cmp-none *ngIf="!componentOneInstanceHidden && !showEmulatedComponents"></cmp-none>
     <cmp-none *ngIf="!componentTwoInstanceHidden && !showEmulatedComponents"></cmp-none>
   `,
+  standalone: false,
+  changeDetection: ChangeDetectionStrategy.Eager,
 })
 export class SomeAppForCleanUp {
   componentOneInstanceHidden = false;

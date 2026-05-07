@@ -6,16 +6,14 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
-import {AnimationTriggerNames} from '@angular/compiler';
-import {
-  isResolvedModuleWithProviders,
-  ResolvedModuleWithProviders,
-} from '@angular/compiler-cli/src/ngtsc/annotations/ng_module';
-import {ErrorCode, makeDiagnostic} from '@angular/compiler-cli/src/ngtsc/diagnostics';
+import {LegacyAnimationTriggerNames} from '@angular/compiler';
+import {isResolvedModuleWithProviders, ResolvedModuleWithProviders} from '../../ng_module';
+import {ErrorCode, FatalDiagnosticError, makeDiagnostic} from '../../../diagnostics';
 import ts from 'typescript';
 
 import {Reference} from '../../../imports';
 import {
+  DynamicValue,
   ForeignFunctionResolver,
   ResolvedValue,
   ResolvedValueMap,
@@ -27,43 +25,46 @@ import {createValueHasWrongTypeError, getOriginNodeForDiagnostics} from '../../c
 /**
  * Collect the animation names from the static evaluation result.
  * @param value the static evaluation result of the animations
- * @param animationTriggerNames the animation names collected and whether some names could not be
+ * @param legacyAnimationTriggerNames the animation names collected and whether some names could not be
  *     statically evaluated.
  */
-export function collectAnimationNames(
+export function collectLegacyAnimationNames(
   value: ResolvedValue,
-  animationTriggerNames: AnimationTriggerNames,
+  legacyAnimationTriggerNames: LegacyAnimationTriggerNames,
 ) {
   if (value instanceof Map) {
     const name = value.get('name');
     if (typeof name === 'string') {
-      animationTriggerNames.staticTriggerNames.push(name);
+      legacyAnimationTriggerNames.staticTriggerNames.push(name);
     } else {
-      animationTriggerNames.includesDynamicAnimations = true;
+      legacyAnimationTriggerNames.includesDynamicAnimations = true;
     }
   } else if (Array.isArray(value)) {
     for (const resolvedValue of value) {
-      collectAnimationNames(resolvedValue, animationTriggerNames);
+      collectLegacyAnimationNames(resolvedValue, legacyAnimationTriggerNames);
     }
   } else {
-    animationTriggerNames.includesDynamicAnimations = true;
+    legacyAnimationTriggerNames.includesDynamicAnimations = true;
   }
 }
 
-export function isAngularAnimationsReference(reference: Reference, symbolName: string): boolean {
+export function isLegacyAngularAnimationsReference(
+  reference: Reference,
+  symbolName: string,
+): boolean {
   return (
     reference.ownedByModuleGuess === '@angular/animations' && reference.debugName === symbolName
   );
 }
 
-export const animationTriggerResolver: ForeignFunctionResolver = (
+export const legacyAnimationTriggerResolver: ForeignFunctionResolver = (
   fn,
   node,
   resolve,
   unresolvable,
 ) => {
   const animationTriggerMethodName = 'trigger';
-  if (!isAngularAnimationsReference(fn, animationTriggerMethodName)) {
+  if (!isLegacyAngularAnimationsReference(fn, animationTriggerMethodName)) {
     return unresolvable;
   }
   const triggerNameExpression = node.arguments[0];
@@ -96,10 +97,20 @@ export function validateAndFlattenComponentImports(
   }
   const diagnostics: ts.Diagnostic[] = [];
 
-  for (const ref of imports) {
+  for (let i = 0; i < imports.length; i++) {
+    const ref = imports[i];
+    let refExpr = expr;
+    if (
+      ts.isArrayLiteralExpression(expr) &&
+      expr.elements.length === imports.length &&
+      !expr.elements.some(ts.isSpreadAssignment)
+    ) {
+      refExpr = expr.elements[i];
+    }
+
     if (Array.isArray(ref)) {
       const {imports: childImports, diagnostics: childDiagnostics} =
-        validateAndFlattenComponentImports(ref, expr, isDeferred);
+        validateAndFlattenComponentImports(ref, refExpr, isDeferred);
       flattened.push(...childImports);
       diagnostics.push(...childDiagnostics);
     } else if (ref instanceof Reference) {
@@ -132,11 +143,43 @@ export function validateAndFlattenComponentImports(
         ),
       );
     } else {
-      diagnostics.push(createValueHasWrongTypeError(expr, imports, errorMessage).toDiagnostic());
+      let diagnosticNode: ts.Node;
+      let diagnosticValue: ResolvedValue;
+
+      // Reporting a diagnostic on the entire array can be noisy, especially if the user has a
+      // large array. Attempt to determine the most accurate position within the `imports` expression to report the
+      // diagnostic on.
+      if (ref instanceof DynamicValue && isWithinExpression(ref.node, expr)) {
+        // Use the dynamic value position itself if it occurs within the `imports` expression.
+        diagnosticNode = ref.node;
+        diagnosticValue = ref;
+      } else if (refExpr !== expr) {
+        // The reference comes from a specific element in `expr`, so use that element to report the diagnostic on.
+        diagnosticNode = refExpr;
+        diagnosticValue = ref;
+      } else {
+        diagnosticNode = expr;
+        diagnosticValue = imports;
+      }
+
+      diagnostics.push(
+        createValueHasWrongTypeError(diagnosticNode, diagnosticValue, errorMessage).toDiagnostic(),
+      );
     }
   }
 
   return {imports: flattened, diagnostics};
+}
+
+function isWithinExpression(node: ts.Node, expr: ts.Expression): boolean {
+  let current: ts.Node | undefined = node;
+  while (current !== undefined) {
+    if (current === expr) {
+      return true;
+    }
+    current = current.parent;
+  }
+  return false;
 }
 
 /**

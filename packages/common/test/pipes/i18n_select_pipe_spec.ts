@@ -6,7 +6,7 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
-import {I18nSelectPipe} from '@angular/common';
+import {I18nSelectPipe} from '../../index';
 import {Component} from '@angular/core';
 import {TestBed} from '@angular/core/testing';
 
@@ -43,7 +43,6 @@ describe('I18nSelectPipe', () => {
         selector: 'test-component',
         imports: [I18nSelectPipe],
         template: '{{ value | i18nSelect:mapping }}',
-        standalone: true,
       })
       class TestComponent {
         value = 'other';

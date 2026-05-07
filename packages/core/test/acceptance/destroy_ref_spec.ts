@@ -14,8 +14,10 @@ import {
   Directive,
   EnvironmentInjector,
   inject,
-} from '@angular/core';
-import {TestBed} from '@angular/core/testing';
+  provideZoneChangeDetection,
+  ChangeDetectionStrategy,
+} from '../../src/core';
+import {TestBed} from '../../testing';
 
 describe('DestroyRef', () => {
   describe('for environnement injector', () => {
@@ -72,18 +74,24 @@ describe('DestroyRef', () => {
 
       expect(() => {
         destroyRef.onDestroy(() => {});
-      }).toThrowError('NG0205: Injector has already been destroyed.');
+      }).toThrowError(/NG0205: Injector has already been destroyed./);
     });
   });
 
   describe('for node injector', () => {
+    beforeEach(() => {
+      TestBed.configureTestingModule({
+        providers: [provideZoneChangeDetection()],
+      });
+    });
     it('should inject cleanup context in components', () => {
       let destroyed = false;
 
       @Component({
         selector: 'test',
-        standalone: true,
         template: ``,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class TestCmp {
         constructor(destroyCtx: DestroyRef) {
@@ -103,7 +111,6 @@ describe('DestroyRef', () => {
 
       @Directive({
         selector: '[withCleanup]',
-        standalone: true,
       })
       class WithCleanupDirective {
         constructor() {
@@ -113,11 +120,13 @@ describe('DestroyRef', () => {
 
       @Component({
         selector: 'test',
-        standalone: true,
         imports: [WithCleanupDirective],
         // note: we are trying to register a LView-level cleanup _before_ TView-level one (event
         // listener)
-        template: `<div withCleanup></div><button (click)="noop()"></button>`,
+        template: `<div withCleanup></div>
+          <button (click)="noop()"></button>`,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class TestCmp {
         noop() {}
@@ -136,7 +145,6 @@ describe('DestroyRef', () => {
 
       @Directive({
         selector: '[withCleanup]',
-        standalone: true,
       })
       class WithCleanupDirective {
         constructor() {
@@ -146,9 +154,10 @@ describe('DestroyRef', () => {
 
       @Component({
         selector: 'test',
-        standalone: true,
         imports: [WithCleanupDirective, NgIf],
         template: `<ng-template [ngIf]="show"><div withCleanup></div></ng-template>`,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class TestCmp {
         show = true;
@@ -167,8 +176,9 @@ describe('DestroyRef', () => {
       const onDestroySpy = jasmine.createSpy('destroy spy');
       @Component({
         selector: 'child',
-        standalone: true,
         template: '',
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class Child {
         constructor() {
@@ -176,9 +186,10 @@ describe('DestroyRef', () => {
         }
       }
       @Component({
-        standalone: true,
         imports: [Child, NgIf],
         template: '<child *ngIf="showChild"></child>',
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class Parent {
         showChild = true;
@@ -197,8 +208,9 @@ describe('DestroyRef', () => {
 
     @Component({
       selector: 'test',
-      standalone: true,
       template: ``,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
     })
     class TestCmp {
       unRegFn: () => void;
@@ -223,8 +235,9 @@ describe('DestroyRef', () => {
 
     @Component({
       selector: 'test',
-      standalone: true,
       template: ``,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
     })
     class TestCmp {
       unRegFn: () => void;
@@ -251,8 +264,9 @@ describe('DestroyRef', () => {
   it('should throw when trying to register destroy callback on destroyed LView', () => {
     @Component({
       selector: 'test',
-      standalone: true,
       template: ``,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
     })
     class TestCmp {
       constructor(public destroyRef: DestroyRef) {}
@@ -272,8 +286,9 @@ describe('DestroyRef', () => {
 
     @Component({
       selector: 'test',
-      standalone: true,
       template: ``,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
     })
     class TestCmp {
       constructor(destroyCtx: DestroyRef) {

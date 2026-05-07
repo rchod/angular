@@ -13,6 +13,7 @@ import {
   PlatformRef,
   StaticProvider,
   Type,
+  ɵinternalProvideZoneChangeDetection as internalProvideZoneChangeDetection,
 } from '@angular/core';
 import {platformBrowser} from '@angular/platform-browser';
 
@@ -67,7 +68,7 @@ let moduleUid = 0;
  * available until the downgraded module has been bootstrapped, i.e. by instantiating a downgraded
  * component.
  *
- * <div class="alert is-important">
+ * <div class="docs-alert docs-alert-important">
  *
  *   You cannot use `downgradeModule()` and `UpgradeModule` in the same hybrid application.<br />
  *   Use one or the other.
@@ -98,7 +99,7 @@ let moduleUid = 0;
  * For a more detailed discussion of the differences and their implications, see
  * [Upgrading for Performance](https://angular.io/guide/upgrade).
  *
- * <div class="alert is-helpful">
+ * <div class="docs-alert docs-alert-helpful">
  *
  *   You can manually trigger a change detection run in AngularJS using
  *   [scope.$apply(...)](https://docs.angularjs.org/api/ng/type/$rootScope.Scope#$apply) or
@@ -128,7 +129,7 @@ let moduleUid = 0;
  *   {@link PlatformRef#bootstrapmodulefactory `bootstrapModuleFactory()`} to bootstrap the
  *   downgraded modules, each one is considered a "root" module. As a consequence, a new instance
  *   will be created for every injectable provided in `"root"` (via
- *   {@link Injectable#providedIn `providedIn`}).
+ *   {@link /api/core/Injectable#providedIn providedIn}
  *   If this is not your intention, you can have a shared module (that will act as act as the "root"
  *   module) and create all downgraded modules using that module's injector:
  *
@@ -183,7 +184,7 @@ export function downgradeModule<T>(
  * available until the downgraded module has been bootstrapped, i.e. by instantiating a downgraded
  * component.
  *
- * <div class="alert is-important">
+ * <div class="docs-alert docs-alert-important">
  *
  *   You cannot use `downgradeModule()` and `UpgradeModule` in the same hybrid application.<br />
  *   Use one or the other.
@@ -214,7 +215,7 @@ export function downgradeModule<T>(
  * For a more detailed discussion of the differences and their implications, see
  * [Upgrading for Performance](https://angular.io/guide/upgrade).
  *
- * <div class="alert is-helpful">
+ * <div class="docs-alert docs-alert-helpful">
  *
  *   You can manually trigger a change detection run in AngularJS using
  *   [scope.$apply(...)](https://docs.angularjs.org/api/ng/type/$rootScope.Scope#$apply) or
@@ -244,7 +245,7 @@ export function downgradeModule<T>(
  *   {@link PlatformRef#bootstrapmodulefactory `bootstrapModuleFactory()`} to bootstrap the
  *   downgraded modules, each one is considered a "root" module. As a consequence, a new instance
  *   will be created for every injectable provided in `"root"` (via
- *   {@link Injectable#providedIn `providedIn`}).
+ *   {@link /api/core/Injectable#providedIn providedIn}
  *   If this is not your intention, you can have a shared module (that will act as act as the "root"
  *   module) and create all downgraded modules using that module's injector:
  *
@@ -300,7 +301,7 @@ export function downgradeModule<T>(moduleOrBootstrapFn: NgModuleFactory<T>): str
  * available until the downgraded module has been bootstrapped, i.e. by instantiating a downgraded
  * component.
  *
- * <div class="alert is-important">
+ * <div class="docs-alert docs-alert-important">
  *
  *   You cannot use `downgradeModule()` and `UpgradeModule` in the same hybrid application.<br />
  *   Use one or the other.
@@ -331,7 +332,7 @@ export function downgradeModule<T>(moduleOrBootstrapFn: NgModuleFactory<T>): str
  * For a more detailed discussion of the differences and their implications, see
  * [Upgrading for Performance](https://angular.io/guide/upgrade).
  *
- * <div class="alert is-helpful">
+ * <div class="docs-alert docs-alert-helpful">
  *
  *   You can manually trigger a change detection run in AngularJS using
  *   [scope.$apply(...)](https://docs.angularjs.org/api/ng/type/$rootScope.Scope#$apply) or
@@ -361,7 +362,7 @@ export function downgradeModule<T>(moduleOrBootstrapFn: NgModuleFactory<T>): str
  *   {@link PlatformRef#bootstrapmodulefactory `bootstrapModuleFactory()`} to bootstrap the
  *   downgraded modules, each one is considered a "root" module. As a consequence, a new instance
  *   will be created for every injectable provided in `"root"` (via
- *   {@link Injectable#providedIn `providedIn`}).
+ *   {@link /api/core/Injectable#providedIn providedIn}
  *   If this is not your intention, you can have a shared module (that will act as act as the "root"
  *   module) and create all downgraded modules using that module's injector:
  *
@@ -383,11 +384,15 @@ export function downgradeModule<T>(
   if (ɵutil.isNgModuleType(moduleOrBootstrapFn)) {
     // NgModule class
     bootstrapFn = (extraProviders: StaticProvider[]) =>
-      platformBrowser(extraProviders).bootstrapModule(moduleOrBootstrapFn);
+      platformBrowser(extraProviders).bootstrapModule(moduleOrBootstrapFn, {
+        applicationProviders: [internalProvideZoneChangeDetection({})],
+      });
   } else if (!ɵutil.isFunction(moduleOrBootstrapFn)) {
     // NgModule factory
     bootstrapFn = (extraProviders: StaticProvider[]) =>
-      platformBrowser(extraProviders).bootstrapModuleFactory(moduleOrBootstrapFn);
+      platformBrowser(extraProviders).bootstrapModuleFactory(moduleOrBootstrapFn, {
+        applicationProviders: [internalProvideZoneChangeDetection({})],
+      });
   } else {
     // bootstrap function
     bootstrapFn = moduleOrBootstrapFn;

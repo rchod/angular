@@ -43,8 +43,7 @@ export interface PopStateEvent {
  *
  * ### Example
  *
- * <code-example path='common/location/ts/path_location_component.ts'
- * region='LocationComponent'></code-example>
+ * {@example common/location/ts/path_location_component.ts region='LocationComponent'}
  *
  * @publicApi
  */
@@ -85,7 +84,7 @@ export class Location implements OnDestroy {
     });
   }
 
-  /** @nodoc */
+  /** @docs-private */
   ngOnDestroy(): void {
     this._urlChangeSubscription?.unsubscribe();
     this._urlChangeListeners = [];

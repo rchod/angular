@@ -17,6 +17,7 @@ import {
   ɵAnimationEngine as AnimationEngine,
   ɵAnimationRendererFactory as AnimationRendererFactory,
 } from '@angular/animations/browser';
+import {ChangeDetectionStrategy} from '@angular/compiler';
 import {
   APP_INITIALIZER,
   Component,
@@ -25,22 +26,20 @@ import {
   Injectable,
   NgModule,
   NgZone,
+  provideZoneChangeDetection,
   RendererFactory2,
   RendererType2,
   ViewChild,
 } from '@angular/core';
 import {TestBed} from '@angular/core/testing';
-import {bootstrapApplication} from '@angular/platform-browser';
-import {platformBrowserDynamic} from '@angular/platform-browser-dynamic';
+import {el, isNode, withBody} from '@angular/private/testing';
+import {bootstrapApplication, platformBrowser} from '../../index';
+import {DomRendererFactory2} from '../../src/dom/dom_renderer';
+import {provideAnimationsAsync} from '../async';
 import {
   BrowserAnimationsModule,
   ɵInjectableAnimationEngine as InjectableAnimationEngine,
-} from '@angular/platform-browser/animations';
-import {provideAnimationsAsync} from '@angular/platform-browser/animations/async';
-import {DomRendererFactory2} from '@angular/platform-browser/src/dom/dom_renderer';
-import {withBody} from '@angular/private/testing';
-
-import {el} from '../../testing/src/browser_util';
+} from '../index';
 
 (function () {
   if (isNode) return;
@@ -172,6 +171,7 @@ import {el} from '../../testing/src/browser_util';
               ]),
             ]),
           ],
+          standalone: false,
         })
         class Cmp {
           exp: any;
@@ -214,6 +214,8 @@ import {el} from '../../testing/src/browser_util';
               ]),
             ]),
           ],
+          standalone: false,
+          changeDetection: ChangeDetectionStrategy.Eager,
         })
         class Cmp {
           exp: any;
@@ -221,7 +223,10 @@ import {el} from '../../testing/src/browser_util';
         }
 
         TestBed.configureTestingModule({
-          providers: [{provide: AnimationEngine, useClass: InjectableAnimationEngine}],
+          providers: [
+            {provide: AnimationEngine, useClass: InjectableAnimationEngine},
+            provideZoneChangeDetection(),
+          ],
           declarations: [Cmp],
         });
 
@@ -247,14 +252,16 @@ import {el} from '../../testing/src/browser_util';
         @Component({
           selector: 'my-cmp',
           template: `
-               <div #elm1 *ngIf="exp1"></div>
-               <div #elm2 @animation1 *ngIf="exp2"></div>
-               <div #elm3 @animation2 *ngIf="exp3"></div>
-            `,
+            <div #elm1 *ngIf="exp1"></div>
+            <div #elm2 @animation1 *ngIf="exp2"></div>
+            <div #elm3 @animation2 *ngIf="exp3"></div>
+          `,
           animations: [
             trigger('animation1', [transition('a => b', [])]),
             trigger('animation2', [transition(':leave', [])]),
           ],
+          standalone: false,
+          changeDetection: ChangeDetectionStrategy.Eager,
         })
         class Cmp {
           exp1: any = true;
@@ -269,7 +276,10 @@ import {el} from '../../testing/src/browser_util';
         }
 
         TestBed.configureTestingModule({
-          providers: [{provide: AnimationEngine, useClass: InjectableAnimationEngine}],
+          providers: [
+            {provide: AnimationEngine, useClass: InjectableAnimationEngine},
+            provideZoneChangeDetection(),
+          ],
           declarations: [Cmp],
         });
 
@@ -331,10 +341,9 @@ import {el} from '../../testing/src/browser_util';
     it('should provide hooks at the start and end of change detection', () => {
       @Component({
         selector: 'my-cmp',
-        template: `
-          <div [@myAnimation]="exp"></div>
-        `,
+        template: ` <div [@myAnimation]="exp"></div> `,
         animations: [trigger('myAnimation', [])],
+        standalone: false,
       })
       class Cmp {
         public exp: any;
@@ -367,7 +376,11 @@ import {el} from '../../testing/src/browser_util';
     it(
       'should clear bootstrapped component contents when the `BrowserAnimationsModule` is imported',
       withBody('<div>before</div><app-root></app-root><div>after</div>', async () => {
-        @Component({selector: 'app-root', template: 'app-root content'})
+        @Component({
+          selector: 'app-root',
+          template: 'app-root content',
+          standalone: false,
+        })
         class AppComponent {}
 
         @NgModule({
@@ -377,7 +390,7 @@ import {el} from '../../testing/src/browser_util';
         })
         class AppModule {}
 
-        const ngModuleRef = await platformBrowserDynamic().bootstrapModule(AppModule);
+        const ngModuleRef = await platformBrowser().bootstrapModule(AppModule);
 
         const root = document.body.querySelector('app-root')!;
         expect(root.textContent).toEqual('app-root content');
@@ -406,7 +419,11 @@ import {el} from '../../testing/src/browser_util';
           constructor(rendererFactory: RendererFactory2) {}
         }
 
-        @Component({selector: 'app-root', template: 'app-root content'})
+        @Component({
+          selector: 'app-root',
+          template: 'app-root content',
+          standalone: false,
+        })
         class AppComponent {}
 
         @NgModule({
@@ -427,7 +444,7 @@ import {el} from '../../testing/src/browser_util';
         })
         class AppModule {}
 
-        const ngModuleRef = await platformBrowserDynamic().bootstrapModule(AppModule);
+        const ngModuleRef = await platformBrowser().bootstrapModule(AppModule);
 
         const root = document.body.querySelector('app-root')!;
         expect(root.textContent).toEqual('app-root content');
@@ -456,7 +473,7 @@ import {el} from '../../testing/src/browser_util';
           constructor(rendererFactory: RendererFactory2) {}
         }
 
-        @Component({selector: 'app-root', template: 'app-root content', standalone: true})
+        @Component({selector: 'app-root', template: 'app-root content'})
         class AppComponent {}
 
         const appRef = await bootstrapApplication(AppComponent, {
@@ -488,7 +505,7 @@ import {el} from '../../testing/src/browser_util';
     it(
       'should clear bootstrapped component contents when async animations are used',
       withBody('<div>before</div><app-root></app-root><div>after</div>', async () => {
-        @Component({selector: 'app-root', template: 'app-root content', standalone: true})
+        @Component({selector: 'app-root', template: 'app-root content'})
         class AppComponent {}
 
         const appRef = await bootstrapApplication(AppComponent, {

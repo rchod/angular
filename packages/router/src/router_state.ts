@@ -6,7 +6,7 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
-import {Type} from '@angular/core';
+import {EnvironmentInjector, Type} from '@angular/core';
 import {BehaviorSubject, Observable, of} from 'rxjs';
 import {map} from 'rxjs/operators';
 
@@ -29,7 +29,7 @@ import {Tree, TreeNode} from './utils/tree';
  * The following fragment shows how a component gets the root node
  * of the current state to establish its own route tree:
  *
- * ```
+ * ```ts
  * @Component({templateUrl:'template.html'})
  * class MyComponent {
  *   constructor(router: Router) {
@@ -63,8 +63,11 @@ export class RouterState extends Tree<ActivatedRoute> {
   }
 }
 
-export function createEmptyState(rootComponent: Type<any> | null): RouterState {
-  const snapshot = createEmptyStateSnapshot(rootComponent);
+export function createEmptyState(
+  rootComponent: Type<any> | null,
+  injector: EnvironmentInjector,
+): RouterState {
+  const snapshot = createEmptyStateSnapshot(rootComponent, injector);
   const emptyUrl = new BehaviorSubject([new UrlSegment('', {})]);
   const emptyParams = new BehaviorSubject({});
   const emptyData = new BehaviorSubject({});
@@ -84,7 +87,10 @@ export function createEmptyState(rootComponent: Type<any> | null): RouterState {
   return new RouterState(new TreeNode<ActivatedRoute>(activated, []), snapshot);
 }
 
-export function createEmptyStateSnapshot(rootComponent: Type<any> | null): RouterStateSnapshot {
+export function createEmptyStateSnapshot(
+  rootComponent: Type<any> | null,
+  injector: EnvironmentInjector,
+): RouterStateSnapshot {
   const emptyParams = {};
   const emptyData = {};
   const emptyQueryParams = {};
@@ -99,6 +105,7 @@ export function createEmptyStateSnapshot(rootComponent: Type<any> | null): Route
     rootComponent,
     null,
     {},
+    injector,
   );
   return new RouterStateSnapshot('', new TreeNode<ActivatedRouteSnapshot>(activated, []));
 }
@@ -115,8 +122,7 @@ export function createEmptyStateSnapshot(rootComponent: Type<any> | null): Route
  * on shallow equality. For example, changing deeply nested properties in resolved `data` will not
  * cause the `ActivatedRoute.data` `Observable` to emit a new value.
  *
- * {@example router/activated-route/module.ts region="activated-route"
- *     header="activated-route.component.ts"}
+ * {@example router/activated-route/activated_route_component.ts region="activated-route"}
  *
  * @see [Getting route information](guide/routing/common-router-tasks#getting-route-information)
  *
@@ -234,6 +240,8 @@ export class ActivatedRoute {
 
 export type ParamsInheritanceStrategy = 'emptyOnly' | 'always';
 
+export const DEFAULT_PARAMS_INHERITANCE_STRATEGY: ParamsInheritanceStrategy = 'always';
+
 /** @internal */
 export type Inherited = {
   params: Params;
@@ -250,7 +258,7 @@ export type Inherited = {
 export function getInherited(
   route: ActivatedRouteSnapshot,
   parent: ActivatedRouteSnapshot | null,
-  paramsInheritanceStrategy: ParamsInheritanceStrategy = 'emptyOnly',
+  paramsInheritanceStrategy: ParamsInheritanceStrategy,
 ): Inherited {
   let inherited: Inherited;
   const {routeConfig} = route;
@@ -305,7 +313,7 @@ export function getInherited(
  * The following example initializes a component with route information extracted
  * from the snapshot of the root node at the time of creation.
  *
- * ```
+ * ```ts
  * @Component({templateUrl:'./my-component.html'})
  * class MyComponent {
  *   constructor(route: ActivatedRoute) {
@@ -315,6 +323,8 @@ export function getInherited(
  *   }
  * }
  * ```
+ *
+ * @see [Understanding route snapshots](guide/routing/read-route-state#understanding-route-snapshots)
  *
  * @publicApi
  */
@@ -331,6 +341,8 @@ export class ActivatedRouteSnapshot {
   _paramMap?: ParamMap;
   /** @internal */
   _queryParamMap?: ParamMap;
+  /** @internal */
+  readonly _environmentInjector: EnvironmentInjector;
 
   /** The resolved route title */
   get title(): string | undefined {
@@ -349,7 +361,7 @@ export class ActivatedRouteSnapshot {
      *  You can compute all params (or data) in the router state or to get params outside
      *  of an activated component by traversing the `RouterState` tree as in the following
      *  example:
-     *  ```
+     *  ```ts
      *  collectRouteParams(router: Router) {
      *    let params = {};
      *    let stack: ActivatedRouteSnapshot[] = [router.routerState.snapshot.root];
@@ -375,9 +387,11 @@ export class ActivatedRouteSnapshot {
     public component: Type<any> | null,
     routeConfig: Route | null,
     resolve: ResolveData,
+    environmentInjector: EnvironmentInjector,
   ) {
     this.routeConfig = routeConfig;
     this._resolve = resolve;
+    this._environmentInjector = environmentInjector;
   }
 
   /** The root of the router state */
@@ -433,7 +447,7 @@ export class ActivatedRouteSnapshot {
  * The following example shows how a component is initialized with information
  * from the snapshot of the root node's state at the time of creation.
  *
- * ```
+ * ```ts
  * @Component({templateUrl:'template.html'})
  * class MyComponent {
  *   constructor(router: Router) {

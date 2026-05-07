@@ -13,29 +13,34 @@ import {
   TmplAstNode,
   TmplAstTextAttribute,
 } from '@angular/compiler';
-import {NgCompiler} from '@angular/compiler-cli/src/ngtsc/core';
 import {
   DirectiveSymbol,
   DomBindingSymbol,
   ElementSymbol,
   InputBindingSymbol,
   LetDeclarationSymbol,
+  NgCompiler,
   OutputBindingSymbol,
   PipeSymbol,
   ReferenceSymbol,
+  SelectorlessComponentSymbol,
+  SelectorlessDirectiveSymbol,
   Symbol,
   SymbolKind,
   TcbLocation,
   VariableSymbol,
-} from '@angular/compiler-cli/src/ngtsc/typecheck/api';
+} from '@angular/compiler-cli';
+
 import ts from 'typescript';
 
 import {DisplayInfoKind, SYMBOL_PUNC, SYMBOL_SPACE, SYMBOL_TEXT} from './utils/display_parts';
 import {
   createDollarAnyQuickInfo,
+  createDollarSafeNavigationMigration,
   createNgTemplateQuickInfo,
   createQuickInfoForBuiltIn,
   isDollarAny,
+  isDollarSafeNavigationMigration,
 } from './quick_info_built_ins';
 import {TemplateTarget} from './template_target';
 import {
@@ -47,8 +52,8 @@ import {
 } from './utils';
 
 export class QuickInfoBuilder {
-  private readonly typeChecker = this.compiler.getCurrentProgram().getTypeChecker();
-  private readonly parent = this.positionDetails.parent;
+  private readonly typeChecker: ts.TypeChecker;
+  private readonly parent: TmplAstNode | AST | null;
 
   constructor(
     private readonly tsLS: ts.LanguageService,
@@ -56,7 +61,10 @@ export class QuickInfoBuilder {
     private readonly component: ts.ClassDeclaration,
     private node: TmplAstNode | AST,
     private readonly positionDetails: TemplateTarget,
-  ) {}
+  ) {
+    this.typeChecker = this.compiler.getCurrentProgram().getTypeChecker();
+    this.parent = this.positionDetails.parent;
+  }
 
   get(): ts.QuickInfo | undefined {
     if (this.node instanceof TmplAstDeferredTrigger || this.node instanceof TmplAstBlockNode) {
@@ -80,6 +88,18 @@ export class QuickInfoBuilder {
       return createDollarAnyQuickInfo(this.parent);
     }
 
+    if (isDollarSafeNavigationMigration(this.node)) {
+      return createDollarSafeNavigationMigration(this.node);
+    }
+
+    if (
+      this.parent !== null &&
+      isDollarSafeNavigationMigration(this.parent) &&
+      this.parent.receiver === this.node
+    ) {
+      return createDollarSafeNavigationMigration(this.parent);
+    }
+
     return undefined;
   }
 
@@ -100,12 +120,15 @@ export class QuickInfoBuilder {
         return this.getQuickInfoForReferenceSymbol(symbol);
       case SymbolKind.DomBinding:
         return this.getQuickInfoForDomBinding(symbol);
-      case SymbolKind.Directive:
-        return this.getQuickInfoAtTcbLocation(symbol.tcbLocation);
       case SymbolKind.Pipe:
         return this.getQuickInfoForPipeSymbol(symbol);
+      case SymbolKind.SelectorlessComponent:
+      case SymbolKind.SelectorlessDirective:
+        return this.getQuickInfoForSelectorlessSymbol(symbol);
       case SymbolKind.Expression:
         return this.getQuickInfoAtTcbLocation(symbol.tcbLocation);
+      case SymbolKind.Directive:
+        return this.getQuickInfoForDirectiveSymbol(symbol);
     }
   }
 
@@ -137,55 +160,69 @@ export class QuickInfoBuilder {
       DisplayInfoKind.ELEMENT,
       getTextSpanOfNode(templateNode),
       undefined /* containerName */,
-      this.typeChecker.typeToString(symbol.tsType),
+      this.typeChecker.typeToString(
+        this.compiler.getTemplateTypeChecker().getTypeOfSymbol(symbol)!,
+      ),
     );
   }
 
-  private getQuickInfoForVariableSymbol(symbol: VariableSymbol): ts.QuickInfo {
-    const documentation = this.getDocumentationFromTypeDefAtLocation(symbol.initializerLocation);
-    return createQuickInfo(
-      symbol.declaration.name,
-      DisplayInfoKind.VARIABLE,
-      getTextSpanOfNode(this.node),
-      undefined /* containerName */,
-      this.typeChecker.typeToString(symbol.tsType),
-      documentation,
-    );
+  private getQuickInfoForVariableSymbol(symbol: VariableSymbol): ts.QuickInfo | undefined {
+    const quickInfo = this.getQuickInfoAtTcbLocation(symbol.localVarLocation);
+    if (quickInfo === undefined || quickInfo.displayParts === undefined) {
+      return quickInfo;
+    }
+
+    for (const part of quickInfo.displayParts) {
+      if (part.kind === 'localName') {
+        part.text = symbol.declaration.name;
+        break;
+      }
+    }
+
+    return updateQuickInfoKind(quickInfo, DisplayInfoKind.VARIABLE);
   }
 
   private getQuickInfoForLetDeclarationSymbol(symbol: LetDeclarationSymbol): ts.QuickInfo {
-    const documentation = this.getDocumentationFromTypeDefAtLocation(symbol.initializerLocation);
+    const info = this.getQuickInfoAtTcbLocation(symbol.localVarLocation);
     return createQuickInfo(
       symbol.declaration.name,
       DisplayInfoKind.LET,
       getTextSpanOfNode(this.node),
       undefined /* containerName */,
-      this.typeChecker.typeToString(symbol.tsType),
-      documentation,
+      this.typeChecker.typeToString(
+        this.compiler.getTemplateTypeChecker().getTypeOfSymbol(symbol)!,
+      ),
+      info?.documentation,
+      info?.tags,
     );
   }
 
   private getQuickInfoForReferenceSymbol(symbol: ReferenceSymbol): ts.QuickInfo {
-    const documentation = this.getDocumentationFromTypeDefAtLocation(symbol.targetLocation);
+    const info = this.getQuickInfoFromTypeDefAtLocation(symbol.targetLocation);
     return createQuickInfo(
       symbol.declaration.name,
       DisplayInfoKind.REFERENCE,
       getTextSpanOfNode(this.node),
       undefined /* containerName */,
-      this.typeChecker.typeToString(symbol.tsType),
-      documentation,
+      this.typeChecker.typeToString(
+        this.compiler.getTemplateTypeChecker().getTypeOfSymbol(symbol)!,
+      ),
+      info?.documentation,
+      info?.tags,
     );
   }
 
   private getQuickInfoForPipeSymbol(symbol: PipeSymbol): ts.QuickInfo | undefined {
-    if (symbol.tsSymbol !== null) {
+    if (this.compiler.getTemplateTypeChecker().getTsSymbolOfSymbol(symbol) !== null) {
       const quickInfo = this.getQuickInfoAtTcbLocation(symbol.tcbLocation);
       return quickInfo === undefined
         ? undefined
         : updateQuickInfoKind(quickInfo, DisplayInfoKind.PIPE);
     } else {
       return createQuickInfo(
-        this.typeChecker.typeToString(symbol.classSymbol.tsType),
+        this.typeChecker.typeToString(
+          this.compiler.getTemplateTypeChecker().getTypeOfSymbol(symbol.classSymbol)!,
+        ),
         DisplayInfoKind.PIPE,
         getTextSpanOfNode(this.node),
       );
@@ -214,25 +251,51 @@ export class QuickInfoBuilder {
     node: TmplAstNode | AST = this.node,
   ): ts.QuickInfo {
     const kind = dir.isComponent ? DisplayInfoKind.COMPONENT : DisplayInfoKind.DIRECTIVE;
-    const documentation = this.getDocumentationFromTypeDefAtLocation(dir.tcbLocation);
+    const info = this.getQuickInfoFromTypeDefAtLocation(dir.tcbLocation);
     let containerName: string | undefined;
-    if (ts.isClassDeclaration(dir.tsSymbol.valueDeclaration) && dir.ngModule !== null) {
+    const tsSymbol = this.compiler.getTemplateTypeChecker().getTsSymbolOfSymbol(dir);
+    if (
+      tsSymbol?.valueDeclaration &&
+      ts.isClassDeclaration(tsSymbol.valueDeclaration) &&
+      dir.ngModule !== null
+    ) {
       containerName = dir.ngModule.name.getText();
     }
 
     return createQuickInfo(
-      this.typeChecker.typeToString(dir.tsType),
+      this.typeChecker.typeToString(this.compiler.getTemplateTypeChecker().getTypeOfSymbol(dir)!),
       kind,
       getTextSpanOfNode(this.node),
       containerName,
       undefined,
-      documentation,
+      info?.documentation,
+      info?.tags,
     );
   }
 
-  private getDocumentationFromTypeDefAtLocation(
-    tcbLocation: TcbLocation,
-  ): ts.SymbolDisplayPart[] | undefined {
+  private getQuickInfoForSelectorlessSymbol(
+    symbol: SelectorlessComponentSymbol | SelectorlessDirectiveSymbol,
+  ): ts.QuickInfo {
+    const kind =
+      symbol.kind === SymbolKind.SelectorlessComponent
+        ? DisplayInfoKind.COMPONENT
+        : DisplayInfoKind.DIRECTIVE;
+    const info = this.getQuickInfoFromTypeDefAtLocation(symbol.tcbLocation);
+
+    return createQuickInfo(
+      this.typeChecker.typeToString(
+        this.compiler.getTemplateTypeChecker().getTypeOfSymbol(symbol)!,
+      ),
+      kind,
+      getTextSpanOfNode(this.node),
+      undefined,
+      undefined,
+      info?.documentation,
+      info?.tags,
+    );
+  }
+
+  private getQuickInfoFromTypeDefAtLocation(tcbLocation: TcbLocation): ts.QuickInfo | undefined {
     const typeDefs = this.tsLS.getTypeDefinitionAtPosition(
       tcbLocation.tcbPath,
       tcbLocation.positionInFile,
@@ -240,8 +303,7 @@ export class QuickInfoBuilder {
     if (typeDefs === undefined || typeDefs.length === 0) {
       return undefined;
     }
-    return this.tsLS.getQuickInfoAtPosition(typeDefs[0].fileName, typeDefs[0].textSpan.start)
-      ?.documentation;
+    return this.tsLS.getQuickInfoAtPosition(typeDefs[0].fileName, typeDefs[0].textSpan.start);
   }
 
   private getQuickInfoAtTcbLocation(location: TcbLocation): ts.QuickInfo | undefined {

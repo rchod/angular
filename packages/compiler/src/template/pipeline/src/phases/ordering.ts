@@ -14,7 +14,7 @@ function kindTest(kind: ir.OpKind): (op: ir.UpdateOp) => boolean {
 }
 
 function kindWithInterpolationTest(
-  kind: ir.OpKind.Attribute | ir.OpKind.Property | ir.OpKind.HostProperty,
+  kind: ir.OpKind.Attribute | ir.OpKind.Property | ir.OpKind.DomProperty,
   interpolation: boolean,
 ): (op: ir.UpdateOp) => boolean {
   return (op: ir.UpdateOp) => {
@@ -24,8 +24,10 @@ function kindWithInterpolationTest(
 
 function basicListenerKindTest(op: ir.CreateOp): boolean {
   return (
-    (op.kind === ir.OpKind.Listener && !(op.hostListener && op.isAnimationListener)) ||
-    op.kind === ir.OpKind.TwoWayListener
+    (op.kind === ir.OpKind.Listener && !(op.hostListener && op.isLegacyAnimationListener)) ||
+    op.kind === ir.OpKind.TwoWayListener ||
+    op.kind === ir.OpKind.Animation ||
+    op.kind === ir.OpKind.AnimationListener
   );
 }
 
@@ -47,7 +49,7 @@ interface Rule<T extends ir.CreateOp | ir.UpdateOp> {
  * the groups in the order defined here.
  */
 const CREATE_ORDERING: Array<Rule<ir.CreateOp>> = [
-  {test: (op) => op.kind === ir.OpKind.Listener && op.hostListener && op.isAnimationListener},
+  {test: (op) => op.kind === ir.OpKind.Listener && op.hostListener && op.isLegacyAnimationListener},
   {test: basicListenerKindTest},
 ];
 
@@ -64,14 +66,15 @@ const UPDATE_ORDERING: Array<Rule<ir.UpdateOp>> = [
   {test: kindWithInterpolationTest(ir.OpKind.Property, true)},
   {test: nonInterpolationPropertyKindTest},
   {test: kindWithInterpolationTest(ir.OpKind.Attribute, false)},
+  {test: kindTest(ir.OpKind.Control)},
 ];
 
 /**
  * Host bindings have their own update ordering.
  */
 const UPDATE_HOST_ORDERING: Array<Rule<ir.UpdateOp>> = [
-  {test: kindWithInterpolationTest(ir.OpKind.HostProperty, true)},
-  {test: kindWithInterpolationTest(ir.OpKind.HostProperty, false)},
+  {test: kindWithInterpolationTest(ir.OpKind.DomProperty, true)},
+  {test: kindWithInterpolationTest(ir.OpKind.DomProperty, false)},
   {test: kindTest(ir.OpKind.Attribute)},
   {test: kindTest(ir.OpKind.StyleMap), transform: keepLast},
   {test: kindTest(ir.OpKind.ClassMap), transform: keepLast},
@@ -85,14 +88,17 @@ const UPDATE_HOST_ORDERING: Array<Rule<ir.UpdateOp>> = [
 const handledOpKinds = new Set([
   ir.OpKind.Listener,
   ir.OpKind.TwoWayListener,
+  ir.OpKind.AnimationListener,
   ir.OpKind.StyleMap,
   ir.OpKind.ClassMap,
   ir.OpKind.StyleProp,
   ir.OpKind.ClassProp,
   ir.OpKind.Property,
   ir.OpKind.TwoWayProperty,
-  ir.OpKind.HostProperty,
+  ir.OpKind.DomProperty,
   ir.OpKind.Attribute,
+  ir.OpKind.Animation,
+  ir.OpKind.Control,
 ]);
 
 /**

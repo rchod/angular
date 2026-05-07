@@ -6,10 +6,15 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
-import {ChangeDetectorRef} from '../change_detection/change_detector_ref';
+import type {ChangeDetectorRef} from '../change_detection/change_detector_ref';
 import {NotificationSource} from '../change_detection/scheduling/zoneless_scheduling';
+import {
+  USE_EXHAUSTIVE_CHECK_NO_CHANGES_DEFAULT,
+  UseExhaustiveCheckNoChanges,
+} from '../change_detection/use_exhaustive_check_no_changes';
+import type {ApplicationRef} from '../core';
 import {RuntimeError, RuntimeErrorCode} from '../errors';
-import {EmbeddedViewRef, ViewRefTracker} from '../linker/view_ref';
+import type {EmbeddedViewRef} from '../linker/view_ref';
 import {removeFromArray} from '../util/array_utils';
 import {assertEqual} from '../util/assert';
 
@@ -17,39 +22,30 @@ import {collectNativeNodes} from './collect_native_nodes';
 import {checkNoChangesInternal, detectChangesInternal} from './instructions/change_detection';
 import {markViewDirty} from './instructions/mark_view_dirty';
 import {CONTAINER_HEADER_OFFSET, VIEW_REFS} from './interfaces/container';
-import {isLContainer, isRootView} from './interfaces/type_checks';
+import {isDestroyed, isLContainer, isRootView} from './interfaces/type_checks';
 import {
   CONTEXT,
   DECLARATION_LCONTAINER,
   FLAGS,
+  INJECTOR,
   LView,
   LViewFlags,
   PARENT,
-  REACTIVE_TEMPLATE_CONSUMER,
   TVIEW,
 } from './interfaces/view';
-import {
-  destroyLView,
-  detachMovedView,
-  detachView,
-  detachViewFromDOM,
-  trackMovedView,
-} from './node_manipulation';
-import {CheckNoChangesMode} from './state';
+import {destroyLView, detachMovedView, detachViewFromDOM} from './node_manipulation';
 import {
   markViewForRefresh,
+  requiresRefreshOrTraversal,
   storeLViewOnDestroy,
   updateAncestorTraversalFlagsOnAttach,
 } from './util/view_utils';
+import {detachView, trackMovedView} from './view/container';
 
-// Needed due to tsickle downleveling where multiple `implements` with classes creates
-// multiple @extends in Closure annotations, which is illegal. This workaround fixes
-// the multiple @extends by making the annotation @implements instead
-interface ChangeDetectorRefInterface extends ChangeDetectorRef {}
-
-export class ViewRef<T> implements EmbeddedViewRef<T>, ChangeDetectorRefInterface {
-  private _appRef: ViewRefTracker | null = null;
+export class ViewRef<T> implements EmbeddedViewRef<T>, ChangeDetectorRef {
+  private _appRef: ApplicationRef | null = null;
   private _attachedToViewContainer = false;
+  private exhaustive?: boolean;
 
   get rootNodes(): any[] {
     const lView = this._lView;
@@ -78,23 +74,10 @@ export class ViewRef<T> implements EmbeddedViewRef<T>, ChangeDetectorRefInterfac
      * This may be different from `_lView` if the `_cdRefInjectingView` is an embedded view.
      */
     private _cdRefInjectingView?: LView,
-    readonly notifyErrorHandler = true,
   ) {}
 
   get context(): T {
     return this._lView[CONTEXT] as unknown as T;
-  }
-
-  /**
-   * Reports whether the given view is considered dirty according to the different marking mechanisms.
-   */
-  get dirty(): boolean {
-    return (
-      !!(
-        this._lView[FLAGS] &
-        (LViewFlags.Dirty | LViewFlags.RefreshView | LViewFlags.HasChildViewsToRefresh)
-      ) || !!this._lView[REACTIVE_TEMPLATE_CONSUMER]?.dirty
-    );
   }
 
   /**
@@ -115,7 +98,7 @@ export class ViewRef<T> implements EmbeddedViewRef<T>, ChangeDetectorRefInterfac
   }
 
   get destroyed(): boolean {
-    return (this._lView[FLAGS] & LViewFlags.Destroyed) === LViewFlags.Destroyed;
+    return isDestroyed(this._lView);
   }
 
   destroy(): void {
@@ -158,11 +141,10 @@ export class ViewRef<T> implements EmbeddedViewRef<T>, ChangeDetectorRefInterfac
    * @usageNotes
    * ### Example
    *
-   * ```typescript
+   * ```ts
    * @Component({
    *   selector: 'app-root',
    *   template: `Number of ticks: {{numberOfTicks}}`
-   *   changeDetection: ChangeDetectionStrategy.OnPush,
    * })
    * class AppComponent {
    *   numberOfTicks = 0;
@@ -179,10 +161,6 @@ export class ViewRef<T> implements EmbeddedViewRef<T>, ChangeDetectorRefInterfac
    */
   markForCheck(): void {
     markViewDirty(this._cdRefInjectingView || this._lView, NotificationSource.MarkForCheck);
-  }
-
-  markForRefresh(): void {
-    markViewForRefresh(this._cdRefInjectingView || this._lView);
   }
 
   /**
@@ -204,7 +182,7 @@ export class ViewRef<T> implements EmbeddedViewRef<T>, ChangeDetectorRefInterfac
    * we want to check and update the list every five seconds. We can do that by detaching
    * the component's change detector and doing a local check every five seconds.
    *
-   * ```typescript
+   * ```ts
    * class DataProvider {
    *   // in a real application the returned data will be different every time
    *   get data() {
@@ -215,7 +193,9 @@ export class ViewRef<T> implements EmbeddedViewRef<T>, ChangeDetectorRefInterfac
    * @Component({
    *   selector: 'giant-list',
    *   template: `
-   *     <li *ngFor="let d of dataProvider.data">Data {{d}}</li>
+   *     @for(d of dataProvider.data; track $index) {
+   *        <li>Data {{d}}</li>
+   *     }
    *   `,
    * })
    * class GiantList {
@@ -257,7 +237,7 @@ export class ViewRef<T> implements EmbeddedViewRef<T>, ChangeDetectorRefInterfac
    * its change detector from the main change detector tree when the component's live property
    * is set to false.
    *
-   * ```typescript
+   * ```ts
    * class DataProvider {
    *   data = 1;
    *
@@ -331,7 +311,7 @@ export class ViewRef<T> implements EmbeddedViewRef<T>, ChangeDetectorRefInterfac
     // until the end of the refresh. Using `RefreshView` prevents creating a potential difference
     // in the state of the LViewFlags during template execution.
     this._lView[FLAGS] |= LViewFlags.RefreshView;
-    detectChangesInternal(this._lView, this.notifyErrorHandler);
+    detectChangesInternal(this._lView);
   }
 
   /**
@@ -341,12 +321,21 @@ export class ViewRef<T> implements EmbeddedViewRef<T>, ChangeDetectorRefInterfac
    * introduce other changes.
    */
   checkNoChanges(): void {
+    // Note: we use `if (ngDevMode) { ... }` instead of an early return.
+    // ESBuild is conservative about removing dead code that follows `return;`
+    // inside a function body, so the block may remain in the bundle.
+    // Using a conditional ensures the dev-only logic is reliably tree-shaken
+    // in production builds.
     if (ngDevMode) {
-      checkNoChangesInternal(
-        this._lView,
-        CheckNoChangesMode.OnlyDirtyViews,
-        this.notifyErrorHandler,
-      );
+      try {
+        this.exhaustive ??= this._lView[INJECTOR].get(
+          UseExhaustiveCheckNoChanges,
+          USE_EXHAUSTIVE_CHECK_NO_CHANGES_DEFAULT,
+        );
+      } catch {
+        this.exhaustive = USE_EXHAUSTIVE_CHECK_NO_CHANGES_DEFAULT;
+      }
+      checkNoChangesInternal(this._lView, this.exhaustive);
     }
   }
 
@@ -370,7 +359,7 @@ export class ViewRef<T> implements EmbeddedViewRef<T>, ChangeDetectorRefInterfac
     detachViewFromDOM(this._lView[TVIEW], this._lView);
   }
 
-  attachToAppRef(appRef: ViewRefTracker) {
+  attachToAppRef(appRef: ApplicationRef) {
     if (this._attachedToViewContainer) {
       throw new RuntimeError(
         RuntimeErrorCode.VIEW_ALREADY_ATTACHED,
@@ -385,4 +374,16 @@ export class ViewRef<T> implements EmbeddedViewRef<T>, ChangeDetectorRefInterfac
     }
     updateAncestorTraversalFlagsOnAttach(this._lView);
   }
+}
+
+/**
+ * Reports whether the given view is considered dirty according to the different marking mechanisms.
+ */
+export function isViewDirty(view: ViewRef<unknown>): boolean {
+  return requiresRefreshOrTraversal(view._lView) || !!(view._lView[FLAGS] & LViewFlags.Dirty);
+}
+
+export function markForRefresh(view: ViewRef<unknown>): void {
+  // This function is only used by elements where _cdRefInjectingView is the same as _lView
+  markViewForRefresh(view._lView);
 }

@@ -14,9 +14,9 @@ import {
   Injector,
   runInInjectionContext,
   Signal,
-} from '@angular/core';
-import {toSignal} from '@angular/core/rxjs-interop';
-import {TestBed} from '@angular/core/testing';
+} from '../../src/core';
+import {toSignal} from '../src';
+import {TestBed} from '../../testing';
 import {
   BehaviorSubject,
   Observable,
@@ -26,6 +26,7 @@ import {
   Subscribable,
   Unsubscribable,
 } from 'rxjs';
+import {ReactiveNode, SIGNAL} from '../../primitives/signals';
 
 describe('toSignal()', () => {
   it(
@@ -39,6 +40,28 @@ describe('toSignal()', () => {
       expect(counter()).toBe(1);
       counter$.next(3);
       expect(counter()).toBe(3);
+    }),
+  );
+
+  it(
+    'should set debugName when a debugName is provided',
+    test(() => {
+      const counter$ = new BehaviorSubject(0);
+      const counter = toSignal(counter$, {debugName: 'counterSignal'});
+      const node = counter[SIGNAL] as ReactiveNode;
+
+      expect(node.debugName).toBe('toSignal#counterSignal.source');
+    }),
+  );
+
+  it(
+    'should set debugName when a debugName is provided together with requireSync',
+    test(() => {
+      const counter$ = new BehaviorSubject(0);
+      const counter = toSignal(counter$, {debugName: 'counterSignal', requireSync: true});
+      const node = counter[SIGNAL] as ReactiveNode;
+
+      expect(node.debugName).toBe('toSignal#counterSignal.source');
     }),
   );
 
@@ -150,28 +173,6 @@ describe('toSignal()', () => {
     expect(() => doubleCounter()).toThrowError(
       /toSignal\(\) cannot be called from within a reactive context. Invoking `toSignal` causes new subscriptions every time./,
     );
-  });
-
-  it('should throw the error back to RxJS if rejectErrors is set', () => {
-    let capturedObserver: Observer<number> = null!;
-    const fake$ = {
-      subscribe(observer: Observer<number>): Unsubscribable {
-        capturedObserver = observer;
-        return {unsubscribe(): void {}};
-      },
-    } as Subscribable<number>;
-
-    const s = toSignal(fake$, {initialValue: 0, rejectErrors: true, manualCleanup: true});
-    expect(s()).toBe(0);
-    if (capturedObserver === null) {
-      return fail('Observer not captured as expected.');
-    }
-
-    capturedObserver.next(1);
-    expect(s()).toBe(1);
-
-    expect(() => capturedObserver.error('test')).toThrow('test');
-    expect(s()).toBe(1);
   });
 
   describe('with no initial value', () => {
@@ -305,6 +306,7 @@ describe('toSignal()', () => {
       @Component({
         template: '{{counter()}}',
         changeDetection: ChangeDetectionStrategy.OnPush,
+        standalone: false,
       })
       class TestCmp {
         // Component creation should not run inside the template effect/consumer,

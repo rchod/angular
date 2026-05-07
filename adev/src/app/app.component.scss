@@ -1,25 +1,11 @@
 @use '@angular/docs/styles/media-queries' as mq;
 
 :host {
-  max-width: 2560px;
   margin-inline: auto;
   display: flex;
   flex-direction: row;
   align-items: flex-start;
   min-height: 100vh;
-
-  // Display top level banner below the navigation.
-  docs-top-level-banner {
-    @include mq.for-tablet {
-      top: 4.6875rem;
-    }
-
-    @include mq.for-phone-only {
-      top: 3.75rem;
-      transform: translateY(0);
-      transition: transform 0.3s ease-out 0.6s;
-    }
-  }
 
   // Case: If secondary navigation exists, display banner below secondary navigation for tablets.
   &:has(adev-secondary-navigation) {
@@ -54,10 +40,21 @@
     }
   }
 
+  // Lock the page behind the mobile primary-nav drawer. `clip` preserves the primary nav's sticky context.
+  @include mq.for-phone-only {
+    &:has(.adev-nav-primary--open) {
+      overflow: clip;
+    }
+  }
+
   &:has(.adev-home) {
     .adev-nav {
       width: 0;
       height: 0;
+
+      @include mq.for-tablet-landscape-down {
+        width: 100%;
+      }
     }
 
     @include mq.for-tablet-landscape-up {
@@ -81,7 +78,7 @@
   font-size: 0.875rem;
   transform: translateY(-150%);
   transition: transform 0.3s ease-out;
-  &:focus {
+  &:focus-visible {
     transform: translateY(0);
   }
 }
@@ -101,7 +98,7 @@
     width: 100vw;
     height: 100vh;
     backdrop-filter: blur(2px);
-    background-color: color-mix(in srgb, var(--gray-1000) 5%, transparent);
+    background-color: color-mix(in srgb, var(--page-background) 5%, transparent);
     z-index: 50;
     visibility: hidden;
     opacity: 0;

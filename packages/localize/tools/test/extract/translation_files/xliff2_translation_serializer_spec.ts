@@ -7,7 +7,7 @@
  */
 import {absoluteFrom} from '@angular/compiler-cli/src/ngtsc/file_system';
 import {runInEachFileSystem} from '@angular/compiler-cli/src/ngtsc/file_system/testing';
-import {ɵParsedMessage, ɵSourceLocation} from '@angular/localize';
+import {ɵParsedMessage, ɵSourceLocation} from '../../../../index';
 
 import {FormatOptions} from '../../../src/extract/translation_files/format_options';
 import {Xliff2TranslationSerializer} from '../../../src/extract/translation_files/xliff2_translation_serializer';
@@ -19,7 +19,7 @@ runInEachFileSystem(() => {
   describe('Xliff2TranslationSerializer', () => {
     ([{}, {'xml:space': 'preserve'}] as FormatOptions[]).forEach((options) => {
       [false, true].forEach((useLegacyIds) => {
-        describe(`renderFile() [using ${useLegacyIds ? 'legacy' : 'canonical'} ids]`, () => {
+        describe(`renderFile() [using ${useLegacyIds ? 'legacy' : 'canonical'} ids] with options:${JSON.stringify(options)}`, () => {
           it('should convert a set of parsed messages into an XML string', () => {
             const phLocation: ɵSourceLocation = {
               start: {line: 0, column: 10},
@@ -174,7 +174,7 @@ runInEachFileSystem(() => {
             ]);
           });
 
-          it('should convert a set of parsed messages into an XML string', () => {
+          it('should merge messages with the same id', () => {
             const messageLocation1: ɵSourceLocation = {
               start: {line: 0, column: 5},
               end: {line: 0, column: 10},

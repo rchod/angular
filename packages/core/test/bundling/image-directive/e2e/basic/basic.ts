@@ -7,13 +7,12 @@
  */
 
 import {IMAGE_LOADER, NgOptimizedImage} from '@angular/common';
-import {Component} from '@angular/core';
+import {Component} from '../../../../../src/core';
 
 @Component({
   selector: 'basic',
-  standalone: true,
   imports: [NgOptimizedImage],
-  template: `<img ngSrc="/e2e/a.png" width="150" height="150" priority>`,
+  template: `<img ngSrc="/e2e/a.png" width="150" height="150" priority />`,
   providers: [
     {
       provide: IMAGE_LOADER,

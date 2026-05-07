@@ -6,9 +6,9 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
-import {AbsoluteFsPath, FileSystem} from '@angular/compiler-cli/src/ngtsc/file_system';
+import {AbsoluteFsPath, FileSystem} from '@angular/compiler-cli';
 import {confirmAsSerializable, Serializable} from '../../../utils/tsurge/helpers/serializable';
-import {BaseProgramInfo, ProgramInfo} from '../../../utils/tsurge/program_info';
+import {ProgramInfo} from '../../../utils/tsurge/program_info';
 import {TsurgeComplexMigration} from '../../../utils/tsurge/migration';
 import {CompilationUnitData} from './batch/unit_data';
 import {KnownInputs} from './input_detection/known_inputs';
@@ -18,21 +18,17 @@ import {MigrationHost} from './migration_host';
 import {executeAnalysisPhase} from './phase_analysis';
 import {pass4__checkInheritanceOfInputs} from './passes/4_check_inheritance';
 import {getCompilationUnitMetadata} from './batch/extract';
-import {mergeCompilationUnitData} from './batch/merge_unit_data';
+import {convertToGlobalMeta, combineCompilationUnitData} from './batch/merge_unit_data';
 import {Replacement} from '../../../utils/tsurge/replacement';
 import {populateKnownInputsFromGlobalData} from './batch/populate_global_data';
 import {executeMigrationPhase} from './phase_migrate';
 import {filterIncompatibilitiesForBestEffortMode} from './best_effort_mode';
-import assert from 'assert';
 import {
   ClassIncompatibilityReason,
-  InputIncompatibilityReason,
-} from './input_detection/incompatibility';
-import {isInputDescriptor} from './utils/input_id';
+  FieldIncompatibilityReason,
+} from './passes/problematic_patterns/incompatibility';
 import {MigrationConfig} from './migration_config';
 import {ClassFieldUniqueKey} from './passes/reference_resolution/known_fields';
-import {MigrationStats} from '../../../utils/tsurge';
-import {createNgtscProgram} from '../../../utils/tsurge/helpers/ngtsc_program';
 
 /**
  * Tsurge migration for migrating Angular `@Input()` declarations to
@@ -52,9 +48,8 @@ export class SignalInputMigration extends TsurgeComplexMigration<
     super();
   }
 
-  // Override the default ngtsc program creation, to add extra flags.
-  override createProgram(tsconfigAbsPath: string, fs?: FileSystem): BaseProgramInfo {
-    return createNgtscProgram(tsconfigAbsPath, fs, {
+  override createProgram(tsconfigAbsPath: string, fs: FileSystem): ProgramInfo {
+    return super.createProgram(tsconfigAbsPath, fs, {
       _compilePoisonedComponents: true,
       // We want to migrate non-exported classes too.
       compileNonExportedClasses: true,
@@ -65,8 +60,11 @@ export class SignalInputMigration extends TsurgeComplexMigration<
     });
   }
 
-  override prepareProgram(baseInfo: BaseProgramInfo): ProgramInfo {
-    const info = super.prepareProgram(baseInfo);
+  /**
+   * Prepares the program for this migration with additional custom
+   * fields to allow for batch-mode testing.
+   */
+  private _prepareProgram(info: ProgramInfo): ProgramInfo {
     // Optional filter for testing. Allows for simulation of parallel execution
     // even if some tsconfig's have overlap due to sharing of TS sources.
     // (this is commonly not the case in g3 where deps are `.d.ts` files).
@@ -76,7 +74,7 @@ export class SignalInputMigration extends TsurgeComplexMigration<
         // Optional replacement filter. Allows parallel execution in case
         // some tsconfig's have overlap due to sharing of TS sources.
         // (this is commonly not the case in g3 where deps are `.d.ts` files).
-        !limitToRootNamesOnly || info.programAbsoluteRootFileNames!.includes(f.fileName),
+        !limitToRootNamesOnly || info.__programAbsoluteRootFileNames!.includes(f.fileName),
     );
 
     return {
@@ -87,15 +85,16 @@ export class SignalInputMigration extends TsurgeComplexMigration<
 
   // Extend the program info with the analysis information we need in every phase.
   prepareAnalysisDeps(info: ProgramInfo): AnalysisProgramInfo {
-    assert(info.ngCompiler !== null, 'Expected `NgCompiler` to be configured.');
     const analysisInfo = {
       ...info,
-      ...prepareAnalysisInfo(info.program, info.ngCompiler, info.programAbsoluteRootFileNames),
+      ...prepareAnalysisInfo(info.program, info.ngCompiler, info.__programAbsoluteRootFileNames),
     };
     return analysisInfo;
   }
 
   override async analyze(info: ProgramInfo) {
+    info = this._prepareProgram(info);
+
     const analysisDeps = this.prepareAnalysisDeps(info);
     const knownInputs = new KnownInputs(info, this.config);
     const result = new MigrationResult();
@@ -124,8 +123,8 @@ export class SignalInputMigration extends TsurgeComplexMigration<
 
     // Non-batch mode!
     if (this.config.upgradeAnalysisPhaseToAvoidBatch) {
-      const merged = await this.merge([unitData]);
-      const replacements = await this.migrate(merged, info, {
+      const globalMeta = await this.globalMeta(unitData);
+      const {replacements} = await this.migrate(globalMeta, info, {
         knownInputs,
         result,
         host,
@@ -143,8 +142,17 @@ export class SignalInputMigration extends TsurgeComplexMigration<
     return confirmAsSerializable(unitData);
   }
 
-  override async merge(units: CompilationUnitData[]): Promise<Serializable<CompilationUnitData>> {
-    return confirmAsSerializable(mergeCompilationUnitData(units));
+  override async combine(
+    unitA: CompilationUnitData,
+    unitB: CompilationUnitData,
+  ): Promise<Serializable<CompilationUnitData>> {
+    return confirmAsSerializable(combineCompilationUnitData(unitA, unitB));
+  }
+
+  override async globalMeta(
+    combinedData: CompilationUnitData,
+  ): Promise<Serializable<CompilationUnitData>> {
+    return confirmAsSerializable(convertToGlobalMeta(combinedData));
   }
 
   override async migrate(
@@ -156,7 +164,9 @@ export class SignalInputMigration extends TsurgeComplexMigration<
       host: MigrationHost;
       analysisDeps: AnalysisProgramInfo;
     },
-  ): Promise<Replacement[]> {
+  ) {
+    info = this._prepareProgram(info);
+
     const knownInputs = nonBatchData?.knownInputs ?? new KnownInputs(info, this.config);
     const result = nonBatchData?.result ?? new MigrationResult();
     const host = nonBatchData?.host ?? createMigrationHost(info, this.config);
@@ -177,10 +187,10 @@ export class SignalInputMigration extends TsurgeComplexMigration<
     this.config.reportProgressFn?.(60, 'Collecting migration changes..');
     executeMigrationPhase(host, knownInputs, result, analysisDeps);
 
-    return result.replacements;
+    return {replacements: result.replacements};
   }
 
-  override async stats(globalMetadata: CompilationUnitData): Promise<MigrationStats> {
+  override async stats(globalMetadata: CompilationUnitData) {
     let fullCompilationInputs = 0;
     let sourceInputs = 0;
     let incompatibleInputs = 0;
@@ -193,14 +203,26 @@ export class SignalInputMigration extends TsurgeComplexMigration<
 
     for (const [id, input] of Object.entries(globalMetadata.knownInputs)) {
       fullCompilationInputs++;
-      if (input.seenAsSourceInput) {
-        sourceInputs++;
+
+      const isConsideredSourceInput =
+        input.seenAsSourceInput &&
+        input.memberIncompatibility !== FieldIncompatibilityReason.OutsideOfMigrationScope &&
+        input.memberIncompatibility !== FieldIncompatibilityReason.SkippedViaConfigFilter;
+
+      // We won't track incompatibilities to inputs that aren't considered source inputs.
+      // Tracking their statistics wouldn't provide any value.
+      if (!isConsideredSourceInput) {
+        continue;
       }
+
+      sourceInputs++;
+
       if (input.memberIncompatibility !== null || input.owningClassIncompatibility !== null) {
         incompatibleInputs++;
       }
+
       if (input.memberIncompatibility !== null) {
-        const reasonName = InputIncompatibilityReason[input.memberIncompatibility];
+        const reasonName = FieldIncompatibilityReason[input.memberIncompatibility];
         const key = `input-field-incompatibility-${reasonName}` as const;
         fieldIncompatibleCounts[key] ??= 0;
         fieldIncompatibleCounts[key]++;
@@ -213,15 +235,13 @@ export class SignalInputMigration extends TsurgeComplexMigration<
       }
     }
 
-    return {
-      counters: {
-        fullCompilationInputs,
-        sourceInputs,
-        incompatibleInputs,
-        ...fieldIncompatibleCounts,
-        ...classIncompatibleCounts,
-      },
-    };
+    return confirmAsSerializable({
+      fullCompilationInputs,
+      sourceInputs,
+      incompatibleInputs,
+      ...fieldIncompatibleCounts,
+      ...classIncompatibleCounts,
+    });
   }
 }
 
@@ -246,20 +266,10 @@ function filterInputsViaConfig(
       skippedInputs.add(input.descriptor.key);
       knownInputs.markFieldIncompatible(input.descriptor, {
         context: null,
-        reason: InputIncompatibilityReason.SkippedViaConfigFilter,
+        reason: FieldIncompatibilityReason.SkippedViaConfigFilter,
       });
     }
   }
-
-  result.references = result.references.filter((reference) => {
-    if (isInputDescriptor(reference.target)) {
-      // Only migrate the reference if the target is NOT skipped.
-      return !skippedInputs.has(reference.target.key);
-    }
-    // Class references may be migrated. This is up to the logic handling
-    // the class reference. E.g. it may not migrate if any member is incompatible.
-    return true;
-  });
 }
 
 function createMigrationHost(info: ProgramInfo, config: MigrationConfig): MigrationHost {

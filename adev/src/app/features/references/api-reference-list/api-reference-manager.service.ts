@@ -10,29 +10,9 @@ import {Injectable, signal} from '@angular/core';
 // This file is generated at build-time, error is expected here.
 import API_MANIFEST_JSON from '../../../../../src/assets/api/manifest.json';
 import {getApiUrl} from '../helpers/manifest.helper';
-import {ApiItem} from '../interfaces/api-item';
 import {ApiItemsGroup} from '../interfaces/api-items-group';
 import {ApiManifest} from '../interfaces/api-manifest';
-
-export const FEATURED_API_ITEMS_KEY = 'apiFeaturedItems';
-export const FEATURED_GROUP_TITLE = 'Most Common';
-
-export type FeaturedItemsByGroup = Record<string, ApiItem[]>;
-
-export const FEATURED_ITEMS_URLS = [
-  'api/common/DatePipe',
-  'api/common/NgIf',
-  'api/common/NgFor',
-  'api/common/NgClass',
-  'api/core/ViewChild',
-  'api/forms/NgModel',
-  'api/router/RouterLink',
-  'api/forms/FormControl',
-  'api/common/http/HttpClient',
-  'api/core/OnChanges',
-  'api/forms/FormGroup',
-  'api/router/CanActivate',
-];
+import {ApiItem} from '../interfaces/api-item';
 
 const manifest = API_MANIFEST_JSON as ApiManifest;
 
@@ -40,14 +20,6 @@ const manifest = API_MANIFEST_JSON as ApiManifest;
   providedIn: 'root',
 })
 export class ApiReferenceManager {
-  // Represents group of the featured items.
-  featuredGroup = signal<ApiItemsGroup>({
-    title: FEATURED_GROUP_TITLE,
-    id: 'featured',
-    items: [],
-    isFeatured: true,
-  });
-
   apiGroups = signal<ApiItemsGroup[]>(this.mapManifestToApiGroups());
 
   private mapManifestToApiGroups(): ApiItemsGroup[] {
@@ -57,28 +29,21 @@ export class ApiReferenceManager {
       groups.push({
         title: module.moduleLabel.replace('@angular/', ''),
         id: module.normalizedModuleName,
-        items: module.entries
-          .map((api) => {
-            const url = getApiUrl(module, api.name);
-            const isFeatured = FEATURED_ITEMS_URLS.some((featuredUrl) => featuredUrl === url);
-            const apiItem = {
-              itemType: api.type,
-              title: api.name,
-              isDeprecated: !!api.isDeprecated,
-              isFeatured,
-              url,
-            };
+        items: module.entries.map((api) => {
+          const url = getApiUrl(module, api.name);
+          const apiItem: ApiItem = {
+            itemType: api.type,
+            title: api.name,
+            deprecated: api.deprecated,
+            developerPreview: api.developerPreview,
+            experimental: api.experimental,
+            stable: api.stable,
+            url,
+            category: api.category,
+          };
 
-            if (isFeatured) {
-              this.featuredGroup.update((group) => {
-                group.items.push(apiItem);
-                return group;
-              });
-            }
-
-            return apiItem;
-          })
-          .sort((a, b) => a.title.localeCompare(b.title)),
+          return apiItem;
+        }),
       });
     }
 

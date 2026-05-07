@@ -6,11 +6,13 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
+import {SlicePipe} from '@angular/common';
 import {Component} from '@angular/core';
 
 // #docregion SlicePipe_string
 @Component({
   selector: 'slice-string-pipe',
+  imports: [SlicePipe],
   template: `<div>
     <p>{{ str }}[0:4]: '{{ str | slice: 0 : 4 }}' - output is expected to be 'abcd'</p>
     <p>{{ str }}[4:0]: '{{ str | slice: 4 : 0 }}' - output is expected to be ''</p>
@@ -28,8 +30,11 @@ export class SlicePipeStringComponent {
 // #docregion SlicePipe_list
 @Component({
   selector: 'slice-list-pipe',
+  imports: [SlicePipe],
   template: `<ul>
-    <li *ngFor="let i of collection | slice: 1 : 3">{{ i }}</li>
+    @for (i of collection | slice: 1 : 3; track $index) {
+      <li>{{ i }}</li>
+    }
   </ul>`,
 })
 export class SlicePipeListComponent {

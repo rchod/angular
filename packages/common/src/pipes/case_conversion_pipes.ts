@@ -6,9 +6,9 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
-import {Pipe, PipeTransform} from '@angular/core';
+import {Pipe, PipeTransform, Type} from '@angular/core';
 
-import {invalidPipeArgumentError} from './invalid_pipe_argument_error';
+import {invalidPipeArgumentError} from './utils';
 
 /**
  * Transforms text to all lower case.
@@ -20,14 +20,15 @@ import {invalidPipeArgumentError} from './invalid_pipe_argument_error';
  * The following example defines a view that allows the user to enter
  * text, and then uses the pipe to convert the input text to all lower case.
  *
- * <code-example path="common/pipes/ts/lowerupper_pipe.ts" region='LowerUpperPipe'></code-example>
+ * {@example common/pipes/ts/lowerupper_pipe.ts region='LowerUpperPipe'}
+ *
+ * @see [Built-in Pipes](guide/templates/pipes#built-in-pipes)
  *
  * @ngModule CommonModule
  * @publicApi
  */
 @Pipe({
   name: 'lowercase',
-  standalone: true,
 })
 export class LowerCasePipe implements PipeTransform {
   /**
@@ -38,9 +39,7 @@ export class LowerCasePipe implements PipeTransform {
   transform(value: string | null | undefined): string | null;
   transform(value: string | null | undefined): string | null {
     if (value == null) return null;
-    if (typeof value !== 'string') {
-      throw invalidPipeArgumentError(LowerCasePipe, value);
-    }
+    assertPipeArgument(LowerCasePipe, value);
     return value.toLowerCase();
   }
 }
@@ -69,14 +68,15 @@ const unicodeWordMatch =
  * @usageNotes
  * The following example shows the result of transforming various strings into title case.
  *
- * <code-example path="common/pipes/ts/titlecase_pipe.ts" region='TitleCasePipe'></code-example>
+ * {@example common/pipes/ts/titlecase_pipe.ts region='TitleCasePipe'}
+ *
+ * @see [Built-in Pipes](guide/templates/pipes#built-in-pipes)
  *
  * @ngModule CommonModule
  * @publicApi
  */
 @Pipe({
   name: 'titlecase',
-  standalone: true,
 })
 export class TitleCasePipe implements PipeTransform {
   /**
@@ -87,9 +87,7 @@ export class TitleCasePipe implements PipeTransform {
   transform(value: string | null | undefined): string | null;
   transform(value: string | null | undefined): string | null {
     if (value == null) return null;
-    if (typeof value !== 'string') {
-      throw invalidPipeArgumentError(TitleCasePipe, value);
-    }
+    assertPipeArgument(TitleCasePipe, value);
 
     return value.replace(
       unicodeWordMatch,
@@ -102,13 +100,13 @@ export class TitleCasePipe implements PipeTransform {
  * Transforms text to all upper case.
  * @see {@link LowerCasePipe}
  * @see {@link TitleCasePipe}
+ * @see [Built-in Pipes](guide/templates/pipes#built-in-pipes)
  *
  * @ngModule CommonModule
  * @publicApi
  */
 @Pipe({
   name: 'uppercase',
-  standalone: true,
 })
 export class UpperCasePipe implements PipeTransform {
   /**
@@ -119,9 +117,13 @@ export class UpperCasePipe implements PipeTransform {
   transform(value: string | null | undefined): string | null;
   transform(value: string | null | undefined): string | null {
     if (value == null) return null;
-    if (typeof value !== 'string') {
-      throw invalidPipeArgumentError(UpperCasePipe, value);
-    }
+    assertPipeArgument(UpperCasePipe, value);
     return value.toUpperCase();
+  }
+}
+
+function assertPipeArgument(pipe: Type<any>, value: Object): void {
+  if (typeof value !== 'string') {
+    throw invalidPipeArgumentError(pipe, value);
   }
 }

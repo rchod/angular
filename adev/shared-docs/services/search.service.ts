@@ -6,96 +6,60 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
-import {Injectable, afterNextRender, inject, signal} from '@angular/core';
+import {
+  Injectable,
+  InjectionToken,
+  Provider,
+  debounced,
+  inject,
+  linkedSignal,
+  resource,
+  signal,
+} from '@angular/core';
 import {ENVIRONMENT} from '../providers/index';
-import {SearchResult} from '../interfaces/index';
-import {toObservable} from '@angular/core/rxjs-interop';
-import {debounceTime, filter, from, of, switchMap} from 'rxjs';
-import {liteClient as algoliasearch} from 'algoliasearch/lite';
-import {NavigationEnd, Router} from '@angular/router';
+import type {Environment, SearchResult, SearchResultItem, SnippetResult} from '../interfaces/index';
+import {
+  LiteClient,
+  liteClient as algoliasearch,
+  SearchResponses,
+  SearchResult as AlgoliaSearchResult,
+} from 'algoliasearch/lite';
 
 export const SEARCH_DELAY = 200;
 // Maximum number of facet values to return for each facet during a regular search.
 export const MAX_VALUE_PER_FACET = 5;
 
+export const ALGOLIA_CLIENT: InjectionToken<LiteClient> = new InjectionToken<LiteClient>(
+  'Search service',
+);
+
+export const provideAlgoliaSearchClient = (config: Environment): Provider => {
+  return {
+    provide: ALGOLIA_CLIENT,
+    useFactory: () => algoliasearch(config.algolia.appId, config.algolia.apiKey),
+  };
+};
+
 @Injectable({
   providedIn: 'root',
 })
 export class Search {
-  private readonly _searchQuery = signal('');
-  private readonly _searchResults = signal<undefined | SearchResult[]>(undefined);
+  readonly searchQuery = signal('');
 
-  private readonly router = inject(Router);
   private readonly config = inject(ENVIRONMENT);
-  private readonly client = algoliasearch(this.config.algolia.appId, this.config.algolia.apiKey);
+  private readonly client = inject(ALGOLIA_CLIENT);
 
-  searchQuery = this._searchQuery.asReadonly();
-  searchResults = this._searchResults.asReadonly();
+  debounceParams = debounced(this.searchQuery, SEARCH_DELAY);
 
-  searchResults$ = toObservable(this.searchQuery).pipe(
-    debounceTime(SEARCH_DELAY),
-    switchMap((query) => {
-      return !!query
-        ? from(
-            this.client.search([
-              {
-                indexName: this.config.algolia.indexName,
-                params: {
-                  query: query,
-                  maxValuesPerFacet: MAX_VALUE_PER_FACET,
-                  attributesToRetrieve: [
-                    'hierarchy.lvl0',
-                    'hierarchy.lvl1',
-                    'hierarchy.lvl2',
-                    'hierarchy.lvl3',
-                    'hierarchy.lvl4',
-                    'hierarchy.lvl5',
-                    'hierarchy.lvl6',
-                    'content',
-                    'type',
-                    'url',
-                  ],
-                  hitsPerPage: 20,
-                  snippetEllipsisText: '…',
-                  highlightPreTag: '<ɵ>',
-                  highlightPostTag: '</ɵ>',
-                  attributesToHighlight: [],
-                  attributesToSnippet: [
-                    'hierarchy.lvl1:10',
-                    'hierarchy.lvl2:10',
-                    'hierarchy.lvl3:10',
-                    'hierarchy.lvl4:10',
-                    'hierarchy.lvl5:10',
-                    'hierarchy.lvl6:10',
-                    'content:10',
-                  ],
-                },
-                type: 'default',
-              },
-            ]),
-          )
-        : of(undefined);
-    }),
-  );
+  readonly resultsResource = resource({
+    params: () => this.debounceParams.value() || undefined, // coerces empty string to undefined
+    loader: async ({params}) => this.searchWithQuery(params),
+  });
 
-  constructor() {
-    afterNextRender(() => {
-      this.listenToSearchResults();
-      this.resetSearchQueryOnNavigationEnd();
-    });
-  }
-
-  updateSearchQuery(query: string): void {
-    this._searchQuery.set(query);
-  }
-
-  private listenToSearchResults(): void {
-    this.searchResults$.subscribe((response: any) => {
-      this._searchResults.set(
-        response ? this.getUniqueSearchResultItems(response.results[0].hits) : undefined,
-      );
-    });
-  }
+  readonly searchResults = linkedSignal<SearchResultItem[] | undefined, SearchResultItem[]>({
+    source: this.resultsResource.value,
+    computation: (next, prev) => (!next && this.searchQuery() ? prev?.value : next) ?? [],
+  });
 
   private getUniqueSearchResultItems(items: SearchResult[]): SearchResult[] {
     const uniqueUrls = new Set<string>();
@@ -115,17 +79,153 @@ export class Search {
       ) {
         return false;
       }
-      if (item.url && !uniqueUrls.has(item.url)) {
-        uniqueUrls.add(item.url);
+
+      if (item['url'] && typeof item['url'] === 'string' && !uniqueUrls.has(item['url'])) {
+        uniqueUrls.add(item['url']);
         return true;
       }
       return false;
     });
   }
 
-  private resetSearchQueryOnNavigationEnd(): void {
-    this.router.events.pipe(filter((event) => event instanceof NavigationEnd)).subscribe(() => {
-      this.updateSearchQuery('');
+  private parseResult(response: SearchResponses<unknown>): SearchResultItem[] | undefined {
+    if (!response) {
+      return;
+    }
+
+    const result: AlgoliaSearchResult = response.results[0];
+    if (!result || !('hits' in result)) {
+      return;
+    }
+
+    const items = result.hits as unknown as SearchResult[];
+
+    return this.getUniqueSearchResultItems(items).map((hitItem: SearchResult): SearchResultItem => {
+      const content = hitItem._snippetResult.content;
+      const hierarchy = hitItem._snippetResult.hierarchy;
+      const category = hitItem.hierarchy?.lvl0 ?? null;
+
+      const lvl1Value = hierarchy?.lvl1?.value || hitItem.hierarchy?.lvl1;
+
+      const sublabelSnippet = this.getBestSnippetForMatch(hitItem);
+
+      // If no lvl1, promote sublabel to label to avoid empty titles
+      const label = lvl1Value || sublabelSnippet || '';
+
+      const hasSubLabel = lvl1Value && (hierarchy?.lvl2 || hierarchy?.lvl3 || hierarchy?.lvl4);
+
+      return {
+        id: hitItem.objectID,
+        type: hitItem.hierarchy.lvl0 === 'Tutorials' ? 'code' : 'doc',
+        url: hitItem.url,
+
+        labelHtml: this.parseLabelToHtml(label),
+        subLabelHtml: this.parseLabelToHtml(hasSubLabel ? sublabelSnippet : null),
+        contentHtml: content ? this.parseLabelToHtml(content.value) : null,
+        package: category === 'Reference' ? extractPackageNameFromUrl(hitItem.url) : null,
+
+        category: hitItem.hierarchy?.lvl0 ?? null,
+      };
     });
   }
+
+  private getBestSnippetForMatch(result: SearchResult): string {
+    const hierarchy = result._snippetResult.hierarchy;
+    if (hierarchy === undefined) {
+      return '';
+    }
+
+    // return the most specific subheader match
+    if (matched(hierarchy.lvl4)) {
+      return hierarchy.lvl4!.value;
+    }
+    if (matched(hierarchy.lvl3)) {
+      return hierarchy.lvl3!.value;
+    }
+    if (matched(hierarchy.lvl2)) {
+      return hierarchy.lvl2!.value;
+    }
+    // if no subheader matched the query, fall back to just returning the most specific one
+    return hierarchy.lvl3?.value ?? hierarchy.lvl2?.value ?? '';
+  }
+
+  /**
+   * Returns an HTML string with marked text for the matches
+   */
+  private parseLabelToHtml(label: string | null): string | null {
+    if (label === null) {
+      return null;
+    }
+
+    const parts: Array<{highlight: boolean; text: string}> = [];
+    while (label.indexOf('<ɵ>') !== -1) {
+      const beforeMatch = label.substring(0, label.indexOf('<ɵ>'));
+      const match = label.substring(label.indexOf('<ɵ>') + 3, label.indexOf('</ɵ>'));
+      parts.push({highlight: false, text: beforeMatch});
+      parts.push({highlight: true, text: match});
+      label = label.substring(label.indexOf('</ɵ>') + 4);
+    }
+    parts.push({highlight: false, text: label});
+
+    return parts
+      .map((part) => {
+        return part.highlight ? `<mark>${part.text}</mark>` : `<span>${part.text}</span>`;
+      })
+      .join('');
+  }
+
+  public searchWithQuery(query: string): Promise<SearchResultItem[] | undefined> {
+    return this.client
+      .search([
+        {
+          indexName: this.config.algolia.indexName,
+          params: {
+            query: query,
+            maxValuesPerFacet: MAX_VALUE_PER_FACET,
+            attributesToRetrieve: [
+              'hierarchy.lvl0',
+              'hierarchy.lvl1',
+              'hierarchy.lvl2',
+              'hierarchy.lvl3',
+              'hierarchy.lvl4',
+              'hierarchy.lvl5',
+              'hierarchy.lvl6',
+              'content',
+              'type',
+              'url',
+            ],
+            hitsPerPage: 20,
+            snippetEllipsisText: '…',
+            highlightPreTag: '<ɵ>',
+            highlightPostTag: '</ɵ>',
+            attributesToHighlight: [],
+            attributesToSnippet: [
+              'hierarchy.lvl1:10',
+              'hierarchy.lvl2:10',
+              'hierarchy.lvl3:10',
+              'hierarchy.lvl4:10',
+              'hierarchy.lvl5:10',
+              'hierarchy.lvl6:10',
+              'content:10',
+            ],
+          },
+          type: 'default',
+        },
+      ])
+      .then((response: SearchResponses<unknown>) => {
+        return this.parseResult(response);
+      });
+  }
+}
+
+function matched(snippet: SnippetResult | undefined): boolean {
+  return snippet?.matchLevel !== undefined && snippet.matchLevel !== 'none';
+}
+
+function extractPackageNameFromUrl(url: string): string | null {
+  const extractedSegment = url.match(/\/api\/(.*)\/.*#?/);
+  if (extractedSegment == null) {
+    return null;
+  }
+  return `<code>@angular/${extractedSegment[1]}</code>`;
 }

@@ -6,7 +6,7 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
-import {MetadataReader} from '@angular/compiler-cli/src/ngtsc/metadata';
+import {MetadataReader} from '@angular/compiler-cli/private/migrations';
 import assert from 'assert';
 import {KnownInputs} from '../input_detection/known_inputs';
 import {InheritanceGraph} from '../utils/inheritance_graph';
@@ -16,7 +16,7 @@ import {checkInheritanceOfKnownFields} from './problematic_patterns/check_inheri
  * Phase that propagates incompatibilities to derived classes or
  * base classes. For example, consider:
  *
- * ```
+ * ```ts
  * class Base {
  *   bla = true;
  * }
@@ -34,7 +34,7 @@ import {checkInheritanceOfKnownFields} from './problematic_patterns/check_inheri
  */
 export function pass4__checkInheritanceOfInputs(
   inheritanceGraph: InheritanceGraph,
-  metaRegistry: MetadataReader,
+  metaRegistry: MetadataReader | null,
   knownInputs: KnownInputs,
 ) {
   checkInheritanceOfKnownFields(inheritanceGraph, metaRegistry, knownInputs, {

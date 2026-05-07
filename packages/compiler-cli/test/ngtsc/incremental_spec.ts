@@ -190,7 +190,10 @@ runInEachFileSystem(() => {
         `
         import {Directive} from '@angular/core';
 
-        @Directive({selector: '[barr]'})
+        @Directive({
+          selector: '[barr]',
+          standalone: false,
+        })
         export class BarDir {}
       `,
       );
@@ -214,7 +217,11 @@ runInEachFileSystem(() => {
         import {Component} from '@angular/core';
         import {SELECTOR} from './dep';
 
-        @Component({selector: SELECTOR, template: 'cmp'})
+        @Component({
+          selector: SELECTOR,
+          template: 'cmp',
+          standalone: false,
+        })
         export class Cmp1 {}
       `,
       );
@@ -223,7 +230,11 @@ runInEachFileSystem(() => {
         `
         import {Component} from '@angular/core';
 
-        @Component({selector: 'cmp2', template: '<cmp></cmp>'})
+        @Component({
+          selector: 'cmp2',
+          template: '<cmp></cmp>',
+          standalone: false,
+        })
         export class Cmp2 {}
       `,
       );
@@ -238,7 +249,10 @@ runInEachFileSystem(() => {
         `
         import {Directive} from '@angular/core';
 
-        @Directive({selector: 'dir'})
+        @Directive({
+          selector: 'dir',
+          standalone: false,
+        })
         export class Dir {}
       `,
       );
@@ -247,7 +261,10 @@ runInEachFileSystem(() => {
         `
         import {Pipe} from '@angular/core';
 
-        @Pipe({name: 'myPipe'})
+        @Pipe({
+          name: 'myPipe',
+          standalone: false,
+        })
         export class MyPipe {
           transform() {}
         }
@@ -296,7 +313,7 @@ runInEachFileSystem(() => {
         `
         import {Pipe} from '@angular/core';
 
-        @Pipe({name: 'foo_changed'})
+        @Pipe({name: 'foo_changed', standalone: false})
         export class FooPipe {
           transform() {}
         }
@@ -360,6 +377,7 @@ runInEachFileSystem(() => {
         @Component({
           selector: 'test-cmp',
           template: '<div dir>',
+          standalone: false,
         })
         export class TestCmp {}
 
@@ -411,6 +429,7 @@ runInEachFileSystem(() => {
 
         @Directive({
           selector: '[dir]',
+          standalone: false,
         })
         export class Dir {}
       `,
@@ -449,7 +468,10 @@ runInEachFileSystem(() => {
         `
         import {Directive, NgModule} from '@angular/core';
 
-        @Directive({selector: '[dep]'})
+        @Directive({
+          selector: '[dep]',
+          standalone: false,
+        })
         export class DepDir {}
 
         @NgModule({
@@ -468,6 +490,7 @@ runInEachFileSystem(() => {
         @Component({
           selector: 'test-cmp',
           template: '<div dep></div>',
+          standalone: false,
         })
         export class Cmp {}
       `,
@@ -569,7 +592,6 @@ runInEachFileSystem(() => {
         import {DepModule} from './provider-dep';
 
         @Component({
-          standalone: true,
           template: '',
           imports: [DepModule],
         })
@@ -608,7 +630,7 @@ runInEachFileSystem(() => {
     });
 
     it('should compile incrementally with template type-checking turned on', () => {
-      env.tsconfig({fullTemplateTypeCheck: true});
+      env.tsconfig({strictTemplates: true});
       env.write(
         'main.ts',
         `
@@ -630,7 +652,7 @@ runInEachFileSystem(() => {
       // This test verifies that ambient types declared in node_modules/@types are still available
       // in incremental compilations. In the below code, the usage of `require` should be valid
       // in the original program and the incremental program.
-      env.tsconfig({fullTemplateTypeCheck: true});
+      env.tsconfig({strictTemplates: true}, {types: ['node']});
       env.write('node_modules/@types/node/index.d.ts', 'declare var require: any;');
       env.write(
         'main.ts',
@@ -651,7 +673,7 @@ runInEachFileSystem(() => {
 
     // https://github.com/angular/angular/pull/26036
     it('should handle redirected source files', () => {
-      env.tsconfig({fullTemplateTypeCheck: true});
+      env.tsconfig({strictTemplates: true});
 
       // This file structure has an identical version of "a" under the root node_modules and inside
       // of "b". Because their package.json file indicates it is the exact same version of "a",
@@ -688,7 +710,7 @@ runInEachFileSystem(() => {
     });
 
     it('should allow incremental compilation with redirected source files', () => {
-      env.tsconfig({fullTemplateTypeCheck: true});
+      env.tsconfig({strictTemplates: true});
 
       // This file structure has an identical version of "a" under the root node_modules and inside
       // of "b". Because their package.json file indicates it is the exact same version of "a",
@@ -864,6 +886,7 @@ runInEachFileSystem(() => {
 
           @Component({
             template: '<div dir></div>',
+            standalone: false,
           })
           export class TestCmp {
             constructor(service: DefaultService) {}
@@ -875,7 +898,10 @@ runInEachFileSystem(() => {
           `
           import {Directive} from '@angular/core';
 
-          @Directive({ selector: '[dir]' })
+          @Directive({
+            selector: '[dir]',
+            standalone: false,
+          })
           export class TestDir {}
         `,
         );
@@ -901,7 +927,11 @@ runInEachFileSystem(() => {
           `
           import {Directive} from '@angular/core';
 
-          @Directive({ selector: '[dir]', inputs: ['added'] })
+          @Directive({
+            selector: '[dir]',
+            inputs: ['added'],
+            standalone: false,
+          })
           export class TestDir {}
         `,
         );
@@ -933,6 +963,7 @@ runInEachFileSystem(() => {
           @Component({
             selector: 'test-cmp',
             template: '<div dir [someInput]="1"></div>',
+            standalone: false,
           })
           export class Cmp {}
         `,
@@ -970,7 +1001,10 @@ runInEachFileSystem(() => {
           `
           import {Directive, Input} from '@angular/core';
 
-          @Directive({selector: '[dir]'})
+          @Directive({
+            selector: '[dir]',
+            standalone: false,
+          })
           export class Dir {
             @Input() someInput!: any;
           }
@@ -1078,7 +1112,8 @@ runInEachFileSystem(() => {
               beta: string;
             }
             @Directive({
-              selector: '[dir]'
+              selector: '[dir]',
+              standalone: false,
             })
             export class Dir<T extends keyof Keys> {
               // The use of 'keyof' in the generic bound causes a deopt to an inline type
@@ -1096,6 +1131,7 @@ runInEachFileSystem(() => {
             @Component({
               selector: 'test-cmp',
               template: '<div dir="gamma"></div>',
+              standalone: false,
             })
             export class Cmp {}
             @NgModule({
@@ -1134,7 +1170,8 @@ runInEachFileSystem(() => {
               beta: string;
             }
             @Directive({
-              selector: '[dir]'
+              selector: '[dir]',
+              standalone: false,
             })
             export class Dir<T extends keyof Keys> {
               @Input() dir: T;
@@ -1150,6 +1187,7 @@ runInEachFileSystem(() => {
             @Component({
               selector: 'test-cmp',
               template: '<div dir="alpha"></div>',
+              standalone: false,
             })
             export class Cmp {}
             @NgModule({
@@ -1237,7 +1275,8 @@ runInEachFileSystem(() => {
 
     @Component({
       selector: fooSelector,
-      template: '{{ 1 | foo }}'
+      template: '{{ 1 | foo }}',
+      standalone: false,
     })
     export class FooCmp {}
   `,
@@ -1247,7 +1286,10 @@ runInEachFileSystem(() => {
       `
     import {Pipe} from '@angular/core';
 
-    @Pipe({name: 'foo'})
+    @Pipe({
+      name: 'foo',
+      standalone: false,
+    })
     export class FooPipe {
       transform() {}
     }
@@ -1272,7 +1314,11 @@ runInEachFileSystem(() => {
       `
     import {Component} from '@angular/core';
 
-    @Component({selector: 'bar', templateUrl: './bar_component.html'})
+    @Component({
+      selector: 'bar',
+      templateUrl: './bar_component.html',
+      standalone: false,
+    })
     export class BarCmp {}
   `,
     );
@@ -1282,7 +1328,10 @@ runInEachFileSystem(() => {
       `
     import {Directive} from '@angular/core';
 
-    @Directive({selector: '[bar]'})
+    @Directive({
+      selector: '[bar]',
+      standalone: false,
+    })
     export class BarDir {}
   `,
     );
@@ -1291,7 +1340,10 @@ runInEachFileSystem(() => {
       `
     import {Pipe} from '@angular/core';
 
-    @Pipe({name: 'foo'})
+    @Pipe({
+      name: 'foo',
+      standalone: false,
+    })
     export class BarPipe {
       transform() {}
     }

@@ -6,33 +6,36 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
+import {expect} from '@angular/private/testing/matchers';
+import {Subject} from 'rxjs';
 import {
   AfterContentChecked,
   AfterContentInit,
   AfterViewChecked,
   AfterViewInit,
   asNativeElements,
+  ChangeDetectionStrategy,
   Component,
   ContentChild,
   ContentChildren,
   Directive,
+  ElementRef,
+  provideZoneChangeDetection,
   QueryList,
   TemplateRef,
   Type,
   ViewChild,
   ViewChildren,
   ViewContainerRef,
-} from '@angular/core';
-import {ElementRef} from '@angular/core/src/core';
-import {ComponentFixture, TestBed, waitForAsync} from '@angular/core/testing';
-import {expect} from '@angular/platform-browser/testing/src/matchers';
-import {Subject} from 'rxjs';
+} from '../../src/core';
+import {ComponentFixture, TestBed, waitForAsync} from '../../testing';
 
 import {stringify} from '../../src/util/stringify';
 
 describe('Query API', () => {
   beforeEach(() =>
     TestBed.configureTestingModule({
+      providers: [provideZoneChangeDetection()],
       declarations: [
         MyComp0,
         NeedsQuery,
@@ -189,6 +192,7 @@ describe('Query API', () => {
       q.shouldShow = false;
       q.shouldShow2 = true;
       q.logs = [];
+      view.changeDetectorRef.markForCheck();
       view.detectChanges();
       expect(q.logs).toEqual([
         ['setter', 'bar'],
@@ -198,6 +202,7 @@ describe('Query API', () => {
       q.shouldShow = false;
       q.shouldShow2 = false;
       q.logs = [];
+      view.changeDetectorRef.markForCheck();
       view.detectChanges();
       expect(q.logs).toEqual([
         ['setter', null],
@@ -621,7 +626,7 @@ describe('Query API', () => {
       expect(q.query.map((d: TextDirective) => d.text)).toEqual(['1', '-3', '2', '4']);
     });
 
-    it('should maintain directives in pre-order depth-first DOM order after dynamic insertion', () => {
+    it('should maintain directives in pre-order depth-first DOM order after dynamic insertion inside a parent element', () => {
       const template = '<needs-view-query-order-with-p #q></needs-view-query-order-with-p>';
       const view = createTestCmpAndDetectChanges(MyComp0, template);
       const q: NeedsViewQueryOrderWithParent = view.debugElement.children[0].references!['q'];
@@ -729,7 +734,11 @@ describe('Query API', () => {
     });
 
     it('should not throw if a content template is queried and created in the view during change detection - fixed in ivy', () => {
-      @Component({selector: 'auto-projecting', template: '<div *ngIf="true; then: content"></div>'})
+      @Component({
+        selector: 'auto-projecting',
+        template: '<div *ngIf="true; then: content"></div>',
+        standalone: false,
+      })
       class AutoProjecting {
         @ContentChild(TemplateRef) content!: TemplateRef<any>;
         @ContentChildren(TextDirective) query!: QueryList<TextDirective>;
@@ -746,12 +755,21 @@ describe('Query API', () => {
   });
 });
 
-@Directive({selector: '[text]', inputs: ['text'], exportAs: 'textDir'})
+@Directive({
+  selector: '[text]',
+  inputs: ['text'],
+  exportAs: 'textDir',
+  standalone: false,
+})
 class TextDirective {
   text: string | undefined;
 }
 
-@Component({selector: 'needs-content-children', template: ''})
+@Component({
+  selector: 'needs-content-children',
+  template: '',
+  standalone: false,
+})
 class NeedsContentChildren implements AfterContentInit {
   @ContentChildren(TextDirective) textDirChildren!: QueryList<TextDirective>;
   numberOfChildrenAfterContentInit!: number;
@@ -761,7 +779,11 @@ class NeedsContentChildren implements AfterContentInit {
   }
 }
 
-@Component({selector: 'needs-view-children', template: '<div text></div>'})
+@Component({
+  selector: 'needs-view-children',
+  template: '<div text></div>',
+  standalone: false,
+})
 class NeedsViewChildren implements AfterViewInit {
   @ViewChildren(TextDirective) textDirChildren!: QueryList<TextDirective>;
   numberOfChildrenAfterViewInit!: number;
@@ -771,7 +793,11 @@ class NeedsViewChildren implements AfterViewInit {
   }
 }
 
-@Component({selector: 'needs-content-child', template: ''})
+@Component({
+  selector: 'needs-content-child',
+  template: '',
+  standalone: false,
+})
 class NeedsContentChild implements AfterContentInit, AfterContentChecked {
   private _child: TextDirective | undefined;
 
@@ -795,12 +821,20 @@ class NeedsContentChild implements AfterContentInit, AfterContentChecked {
   }
 }
 
-@Directive({selector: '[directive-needs-content-child]'})
+@Directive({
+  selector: '[directive-needs-content-child]',
+  standalone: false,
+})
 class DirectiveNeedsContentChild {
   @ContentChild(TextDirective) child!: TextDirective;
 }
 
-@Component({selector: 'needs-view-child', template: `<div *ngIf="shouldShow" text="foo"></div>`})
+@Component({
+  selector: 'needs-view-child',
+  template: `<div *ngIf="shouldShow" text="foo"></div>`,
+  standalone: false,
+  changeDetection: ChangeDetectionStrategy.Eager,
+})
 class NeedsViewChild implements AfterViewInit, AfterViewChecked {
   shouldShow: boolean = true;
   shouldShow2: boolean = false;
@@ -838,24 +872,37 @@ function createTestCmpAndDetectChanges<T>(type: Type<T>, template: string): Comp
   return view;
 }
 
-@Component({selector: 'needs-static-content-view-child', template: `<div text="viewFoo"></div>`})
+@Component({
+  selector: 'needs-static-content-view-child',
+  template: `<div text="viewFoo"></div>`,
+  standalone: false,
+})
 class NeedsStaticContentAndViewChild {
   @ContentChild(TextDirective, {static: true}) contentChild!: TextDirective;
   @ViewChild(TextDirective, {static: true}) viewChild!: TextDirective;
 }
 
-@Directive({selector: '[dir]'})
+@Directive({
+  selector: '[dir]',
+  standalone: false,
+})
 class InertDirective {}
 
 @Component({
   selector: 'needs-query',
   template: '<div text="ignoreme"></div><b *ngFor="let  dir of query">{{dir.text}}|</b>',
+  standalone: false,
+  changeDetection: ChangeDetectionStrategy.Eager,
 })
 class NeedsQuery {
   @ContentChildren(TextDirective) query!: QueryList<TextDirective>;
 }
 
-@Component({selector: 'needs-four-queries', template: ''})
+@Component({
+  selector: 'needs-four-queries',
+  template: '',
+  standalone: false,
+})
 class NeedsFourQueries {
   @ContentChild(TextDirective) query1!: TextDirective;
   @ContentChild(TextDirective) query2!: TextDirective;
@@ -866,22 +913,35 @@ class NeedsFourQueries {
 @Component({
   selector: 'needs-query-desc',
   template: '<ng-content></ng-content><div *ngFor="let  dir of query">{{dir.text}}|</div>',
+  standalone: false,
 })
 class NeedsQueryDesc {
   @ContentChildren(TextDirective, {descendants: true}) query!: QueryList<TextDirective>;
 }
 
-@Component({selector: 'needs-query-by-ref-binding', template: '<ng-content>'})
+@Component({
+  selector: 'needs-query-by-ref-binding',
+  template: '<ng-content>',
+  standalone: false,
+})
 class NeedsQueryByLabel {
   @ContentChildren('textLabel', {descendants: true}) query!: QueryList<any>;
 }
 
-@Component({selector: 'needs-view-query-by-ref-binding', template: '<div #textLabel>text</div>'})
+@Component({
+  selector: 'needs-view-query-by-ref-binding',
+  template: '<div #textLabel>text</div>',
+  standalone: false,
+})
 class NeedsViewQueryByLabel {
   @ViewChildren('textLabel') query!: QueryList<any>;
 }
 
-@Component({selector: 'needs-query-by-ref-bindings', template: '<ng-content>'})
+@Component({
+  selector: 'needs-query-by-ref-bindings',
+  template: '<ng-content>',
+  standalone: false,
+})
 class NeedsQueryByTwoLabels {
   @ContentChildren('textLabel1,textLabel2', {descendants: true}) query!: QueryList<any>;
 }
@@ -889,6 +949,7 @@ class NeedsQueryByTwoLabels {
 @Component({
   selector: 'needs-query-and-project',
   template: '<div *ngFor="let  dir of query">{{dir.text}}|</div><ng-content></ng-content>',
+  standalone: false,
 })
 class NeedsQueryAndProject {
   @ContentChildren(TextDirective) query!: QueryList<TextDirective>;
@@ -897,12 +958,19 @@ class NeedsQueryAndProject {
 @Component({
   selector: 'needs-view-query',
   template: '<div text="1"><div text="2"></div></div><div text="3"></div><div text="4"></div>',
+  standalone: false,
+  changeDetection: ChangeDetectionStrategy.Eager,
 })
 class NeedsViewQuery {
   @ViewChildren(TextDirective) query!: QueryList<TextDirective>;
 }
 
-@Component({selector: 'needs-view-query-if', template: '<div *ngIf="show" text="1"></div>'})
+@Component({
+  selector: 'needs-view-query-if',
+  template: '<div *ngIf="show" text="1"></div>',
+  standalone: false,
+  changeDetection: ChangeDetectionStrategy.Eager,
+})
 class NeedsViewQueryIf {
   show: boolean = false;
   @ViewChildren(TextDirective) query!: QueryList<TextDirective>;
@@ -911,6 +979,8 @@ class NeedsViewQueryIf {
 @Component({
   selector: 'needs-view-query-nested-if',
   template: '<div text="1"><div *ngIf="show"><div dir></div></div></div>',
+  changeDetection: ChangeDetectionStrategy.Eager,
+  standalone: false,
 })
 class NeedsViewQueryNestedIf {
   show: boolean = true;
@@ -923,6 +993,8 @@ class NeedsViewQueryNestedIf {
     '<div text="1"></div>' +
     '<div *ngFor="let  i of list" [text]="i"></div>' +
     '<div text="4"></div>',
+  standalone: false,
+  changeDetection: ChangeDetectionStrategy.Eager,
 })
 class NeedsViewQueryOrder {
   @ViewChildren(TextDirective) query!: QueryList<TextDirective>;
@@ -935,13 +1007,19 @@ class NeedsViewQueryOrder {
     '<div dir><div text="1"></div>' +
     '<div *ngFor="let  i of list" [text]="i"></div>' +
     '<div text="4"></div></div>',
+  standalone: false,
+  changeDetection: ChangeDetectionStrategy.Eager,
 })
 class NeedsViewQueryOrderWithParent {
   @ViewChildren(TextDirective) query!: QueryList<TextDirective>;
   list: string[] = ['2', '3'];
 }
 
-@Component({selector: 'needs-tpl', template: '<ng-template><div>shadow</div></ng-template>'})
+@Component({
+  selector: 'needs-tpl',
+  template: '<ng-template><div>shadow</div></ng-template>',
+  standalone: false,
+})
 class NeedsTpl {
   @ViewChildren(TemplateRef) viewQuery!: QueryList<TemplateRef<Object>>;
   @ContentChildren(TemplateRef) query!: QueryList<TemplateRef<Object>>;
@@ -951,6 +1029,8 @@ class NeedsTpl {
 @Component({
   selector: 'needs-named-tpl',
   template: '<ng-template #tpl><div>shadow</div></ng-template>',
+  changeDetection: ChangeDetectionStrategy.Eager,
+  standalone: false,
 })
 class NeedsNamedTpl {
   @ViewChild('tpl', {static: true}) viewTpl!: TemplateRef<Object>;
@@ -958,19 +1038,34 @@ class NeedsNamedTpl {
   constructor(public vc: ViewContainerRef) {}
 }
 
-@Component({selector: 'needs-content-children-read', template: ''})
+@Component({
+  selector: 'needs-content-children-read',
+  template: '',
+  changeDetection: ChangeDetectionStrategy.Eager,
+  standalone: false,
+})
 class NeedsContentChildrenWithRead {
   @ContentChildren('q', {read: TextDirective}) textDirChildren!: QueryList<TextDirective>;
   @ContentChildren('nonExisting', {read: TextDirective}) nonExistingVar!: QueryList<TextDirective>;
 }
 
-@Component({selector: 'needs-content-child-read', template: ''})
+@Component({
+  selector: 'needs-content-child-read',
+  template: '',
+  changeDetection: ChangeDetectionStrategy.Eager,
+  standalone: false,
+})
 class NeedsContentChildWithRead {
   @ContentChild('q', {read: TextDirective}) textDirChild!: TextDirective;
   @ContentChild('nonExisting', {read: TextDirective}) nonExistingVar!: TextDirective;
 }
 
-@Component({selector: 'needs-content-children-shallow', template: ''})
+@Component({
+  selector: 'needs-content-children-shallow',
+  template: '',
+  changeDetection: ChangeDetectionStrategy.Eager,
+  standalone: false,
+})
 class NeedsContentChildrenShallow {
   @ContentChildren('q', {descendants: false}) children!: QueryList<ElementRef>;
 }
@@ -978,6 +1073,8 @@ class NeedsContentChildrenShallow {
 @Component({
   selector: 'needs-content-child-template-ref',
   template: '<div [ngTemplateOutlet]="templateRef"></div>',
+  changeDetection: ChangeDetectionStrategy.Eager,
+  standalone: false,
 })
 class NeedsContentChildTemplateRef {
   @ContentChild(TemplateRef, {static: true}) templateRef!: TemplateRef<any>;
@@ -989,12 +1086,16 @@ class NeedsContentChildTemplateRef {
     '<needs-content-child-template-ref>' +
     '<ng-template>OUTER<ng-template>INNER</ng-template></ng-template>' +
     '</needs-content-child-template-ref>',
+  changeDetection: ChangeDetectionStrategy.Eager,
+  standalone: false,
 })
 class NeedsContentChildTemplateRefApp {}
 
 @Component({
   selector: 'needs-view-children-read',
   template: '<div #q text="va"></div><div #w text="vb"></div>',
+  changeDetection: ChangeDetectionStrategy.Eager,
+  standalone: false,
 })
 class NeedsViewChildrenWithRead {
   @ViewChildren('q,w', {read: TextDirective}) textDirChildren!: QueryList<TextDirective>;
@@ -1004,13 +1105,20 @@ class NeedsViewChildrenWithRead {
 @Component({
   selector: 'needs-view-child-read',
   template: '<div #q text="va"></div>',
+  standalone: false,
+  changeDetection: ChangeDetectionStrategy.Eager,
 })
 class NeedsViewChildWithRead {
   @ViewChild('q', {read: TextDirective}) textDirChild!: TextDirective;
   @ViewChild('nonExisting', {read: TextDirective}) nonExistingVar!: TextDirective;
 }
 
-@Component({selector: 'needs-viewcontainer-read', template: '<div #q></div>'})
+@Component({
+  selector: 'needs-viewcontainer-read',
+  template: '<div #q></div>',
+  standalone: false,
+  changeDetection: ChangeDetectionStrategy.Eager,
+})
 class NeedsViewContainerWithRead {
   @ViewChild('q', {read: ViewContainerRef}) vc!: ViewContainerRef;
   @ViewChild('nonExisting', {read: ViewContainerRef}) nonExistingVar!: ViewContainerRef;
@@ -1021,21 +1129,40 @@ class NeedsViewContainerWithRead {
   }
 }
 
-@Component({selector: 'has-null-query-condition', template: '<div></div>'})
+@Component({
+  selector: 'has-null-query-condition',
+  template: '<div></div>',
+  standalone: false,
+  changeDetection: ChangeDetectionStrategy.Eager,
+})
 class HasNullQueryCondition {
   @ContentChildren(null!) errorTrigger: any;
 }
 
-@Component({selector: 'my-comp', template: ''})
+@Component({
+  selector: 'my-comp',
+  template: '',
+  standalone: false,
+  changeDetection: ChangeDetectionStrategy.Eager,
+})
 class MyComp0 {
   shouldShow: boolean = false;
   list: string[] = ['1d', '2d', '3d'];
 }
 
-@Component({selector: 'my-comp', template: ''})
+@Component({
+  selector: 'my-comp',
+  template: '',
+  standalone: false,
+  changeDetection: ChangeDetectionStrategy.Eager,
+})
 class MyCompBroken0 {}
 
-@Component({selector: 'manual-projecting', template: '<div #vc></div>'})
+@Component({
+  selector: 'manual-projecting',
+  template: '<div #vc></div>',
+  standalone: false,
+})
 class ManualProjecting {
   @ContentChild(TemplateRef, {static: true}) template!: TemplateRef<any>;
   @ViewChild('vc', {read: ViewContainerRef}) vc!: ViewContainerRef;

@@ -6,15 +6,15 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
-import {computed, Injectable, signal} from '@angular/core';
+import {computed, signal, Service} from '@angular/core';
 
-@Injectable({providedIn: 'root'})
+@Service()
 export class SampleService {
   exampleBoolean = true;
   exampleString = 'John';
   exampleSymbol = Symbol.iterator;
   exampleNumber = 40;
-  exampleBigint = 40n;
+  exampleBigint = BigInt(40);
   exampleUndefined = undefined;
   exampleNull = null;
 

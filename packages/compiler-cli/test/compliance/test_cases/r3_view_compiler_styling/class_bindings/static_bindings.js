@@ -1,7 +1,10 @@
 // ...
-MyComponent.ɵcmp = /*@__PURE__*/ $r3$.ɵɵdefineComponent({
+export class MyComponent {
+  // ...
+  static ɵcmp = /*@__PURE__*/ $r3$.ɵɵdefineComponent({
     type: MyComponent,
     selectors:[["my-component"]],
+    standalone: false,
     decls: 1,
     vars: 2,
     consts: [[__AttributeMarker.Classes__, "foo", __AttributeMarker.Styles__, "width", "100px"]],
@@ -15,3 +18,4 @@ MyComponent.ɵcmp = /*@__PURE__*/ $r3$.ɵɵdefineComponent({
     },
     encapsulation: 2
   });
+}

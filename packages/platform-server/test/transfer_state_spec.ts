@@ -6,9 +6,21 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
-import {Component, makeStateKey, NgModule, TransferState} from '@angular/core';
-import {BrowserModule} from '@angular/platform-browser';
-import {renderModule, ServerModule} from '@angular/platform-server';
+import {
+  APP_ID,
+  Component,
+  makeStateKey,
+  NgModule,
+  TransferState,
+  ɵgetTransferState as getTransferState,
+  Injector,
+  inject,
+  DOCUMENT,
+} from '@angular/core';
+import {BrowserModule, withEventReplay, withIncrementalHydration} from '@angular/platform-browser';
+import {renderModule, ServerModule} from '../index';
+import {getHydrationInfoFromTransferState, ssr} from './hydration_utils';
+import domino from '../third_party/domino/bundled-domino';
 
 describe('transfer_state', () => {
   const defaultExpectedOutput =
@@ -17,7 +29,11 @@ describe('transfer_state', () => {
   it('adds transfer script tag when using renderModule', async () => {
     const STATE_KEY = makeStateKey<number>('test');
 
-    @Component({selector: 'app', template: 'Works!'})
+    @Component({
+      selector: 'app',
+      template: 'Works!',
+      standalone: false,
+    })
     class TransferComponent {
       constructor(private transferStore: TransferState) {
         this.transferStore.set(STATE_KEY, 10);
@@ -38,7 +54,11 @@ describe('transfer_state', () => {
   it('cannot break out of <script> tag in serialized output', async () => {
     const STATE_KEY = makeStateKey<string>('testString');
 
-    @Component({selector: 'esc-app', template: 'Works!'})
+    @Component({
+      selector: 'esc-app',
+      template: 'Works!',
+      standalone: false,
+    })
     class EscapedComponent {
       constructor(private transferStore: TransferState) {
         this.transferStore.set(STATE_KEY, '</script><script>alert(\'Hello&\' + "World");');
@@ -57,7 +77,7 @@ describe('transfer_state', () => {
     expect(output).toBe(
       '<html><head></head><body><esc-app ng-version="0.0.0-PLACEHOLDER" ng-server-context="other">Works!</esc-app>' +
         '<script id="ng-state" type="application/json">' +
-        `{"testString":"\\u003C/script>\\u003Cscript>alert('Hello&' + \\"World\\");"}` +
+        `{"testString":"\\u003C\\u002Fscript>\\u003Cscript>alert('Hello&' + \\"World\\");"}` +
         '</script></body></html>',
     );
   });
@@ -65,7 +85,11 @@ describe('transfer_state', () => {
   it('adds transfer script tag when setting state during onSerialize', async () => {
     const STATE_KEY = makeStateKey<number>('test');
 
-    @Component({selector: 'app', template: 'Works!'})
+    @Component({
+      selector: 'app',
+      template: 'Works!',
+      standalone: false,
+    })
     class TransferComponent {
       constructor(private transferStore: TransferState) {
         this.transferStore.onSerialize(STATE_KEY, () => 10);
@@ -81,5 +105,60 @@ describe('transfer_state', () => {
 
     const output = await renderModule(TransferStoreModule, {document: '<app></app>'});
     expect(output).toBe(defaultExpectedOutput);
+  });
+
+  describe('getTransferState', () => {
+    it('ensures it only returns public info of the Transfer State', async () => {
+      @Component({
+        selector: 'dep',
+        template: ``,
+      })
+      class Dep {}
+
+      @Component({
+        selector: 'app',
+        imports: [Dep],
+        template: `
+          <!-- This defer block will add internal defer data to the transfer state -->
+          @defer (hydrate on interaction) {
+            <dep />
+          }
+        `,
+      })
+      class SimpleComponent {
+        constructor() {
+          // This is adds a data to the transfer state.
+          inject(TransferState).set<string>(makeStateKey('test'), 'testitest');
+        }
+      }
+
+      const hydrationFeatures = () => [withIncrementalHydration(), withEventReplay()];
+
+      const appId = 'custom-app-id';
+      const html = await ssr(SimpleComponent, {
+        envProviders: [{provide: APP_ID, useValue: appId}],
+        hydrationFeatures,
+      });
+      const transferCacheJson = getHydrationInfoFromTransferState(html)!;
+
+      // getTransferState reaches into the DOM to retrieve the transfer state.
+      // So we need to set the document with the generated HTML.
+      const {document} = domino.createWindow(html);
+
+      const transferState = getTransferState(
+        Injector.create({
+          providers: [
+            {provide: DOCUMENT, useValue: document},
+            {provide: APP_ID, useValue: appId},
+          ],
+        }),
+      );
+
+      // The transfer state also contains internal hydration keys,
+      expect(Object.keys(transferState).length).not.toEqual(JSON.parse(transferCacheJson).length);
+
+      // We only retrieve the public data from the transfer state.
+      expect(Object.keys(transferState)).toEqual(['test']);
+    });
   });
 });

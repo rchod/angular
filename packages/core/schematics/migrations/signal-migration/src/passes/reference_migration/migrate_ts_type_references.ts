@@ -7,11 +7,9 @@
  */
 
 import ts from 'typescript';
-import {KnownInputs} from '../../input_detection/known_inputs';
-import {MigrationResult} from '../../result';
+import {ImportManager} from '@angular/compiler-cli/private/migrations';
 import {ProgramInfo, projectFile, Replacement, TextUpdate} from '../../../../../utils/tsurge';
 import assert from 'assert';
-import {ImportManager} from '@angular/compiler-cli/src/ngtsc/translator';
 import {isTsClassTypeReference, Reference} from '../reference_resolution/reference_kinds';
 import {ReferenceMigrationHost} from './reference_migration_host';
 import {ClassFieldDescriptor} from '../reference_resolution/known_fields';
@@ -51,9 +49,15 @@ export function migrateTypeScriptTypeReferences<D extends ClassFieldDescriptor>(
 
       const firstArg = reference.from.node.typeArguments[0];
       const sf = firstArg.getSourceFile();
+      // Naive detection of the import. Sufficient for this test file migration.
+      const catalystImport = sf.text.includes(
+        'google3/javascript/angular2/testing/catalyst/fake_async',
+      )
+        ? 'google3/javascript/angular2/testing/catalyst/fake_async'
+        : 'google3/javascript/angular2/testing/catalyst/async';
 
       const unwrapImportExpr = importManager.addImport({
-        exportModuleSpecifier: 'google3/javascript/angular2/testing/catalyst',
+        exportModuleSpecifier: catalystImport,
         exportSymbolName: 'UnwrapSignalInputs',
         requestedFile: sf,
       });

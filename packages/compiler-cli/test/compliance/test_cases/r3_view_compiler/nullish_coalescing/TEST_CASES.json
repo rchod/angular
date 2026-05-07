@@ -3,9 +3,10 @@
   "cases": [
     {
       "description": "should handle nullish coalescing inside interpolations",
-      "inputFiles": [
-        "nullish_coalescing_interpolation.ts"
-      ],
+      "inputFiles": ["nullish_coalescing_interpolation.ts"],
+      "compilerOptions": {
+        "target": "es2020"
+      },
       "expectations": [
         {
           "files": [
@@ -20,9 +21,10 @@
     },
     {
       "description": "should handle nullish coalescing inside property bindings",
-      "inputFiles": [
-        "nullish_coalescing_property.ts"
-      ],
+      "inputFiles": ["nullish_coalescing_property.ts"],
+      "compilerOptions": {
+        "target": "es2020"
+      },
       "expectations": [
         {
           "files": [
@@ -37,9 +39,10 @@
     },
     {
       "description": "should handle nullish coalescing inside host bindings",
-      "inputFiles": [
-        "nullish_coalescing_host.ts"
-      ],
+      "inputFiles": ["nullish_coalescing_host.ts"],
+      "compilerOptions": {
+        "target": "es2020"
+      },
       "expectations": [
         {
           "files": [
@@ -51,6 +54,46 @@
           "failureMessage": "Incorrect host bindings"
         }
       ]
+    },
+    {
+      "description": "should preserve required parentheses for nullish coalescing",
+      "inputFiles": ["nullish_coalescing_parens.ts"],
+      "compilerOptions": {
+        "target": "es2020"
+      },
+      "expectations": [
+        {
+          "files": [
+            {
+              "expected": "nullish_coalescing_parens_template.js",
+              "generated": "nullish_coalescing_parens.js"
+            }
+          ],
+          "failureMessage": "Incorrect template"
+        }
+      ]
+    },
+    {
+      "description": "should preserve required parentheses for nullish coalescing with legacyOptionalChaining",
+      "inputFiles": ["nullish_coalescing_parens_use_null.ts"],
+      "compilationModeFilter": ["full compile", "instruction compile"],
+      "compilerOptions": {
+        "target": "es2020"
+      },
+      "expectations": [
+        {
+          "files": [
+            {
+              "expected": "nullish_coalescing_parens_template_use_null.js",
+              "generated": "nullish_coalescing_parens_use_null.js"
+            }
+          ],
+          "failureMessage": "Incorrect template"
+        }
+      ],
+      "angularCompilerOptions": {
+        "legacyOptionalChaining": true
+      }
     }
   ]
 }

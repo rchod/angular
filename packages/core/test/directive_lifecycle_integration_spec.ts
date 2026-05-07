@@ -6,6 +6,7 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
+import {ChangeDetectionStrategy} from '@angular/compiler';
 import {
   AfterContentChecked,
   AfterContentInit,
@@ -16,9 +17,10 @@ import {
   DoCheck,
   OnChanges,
   OnInit,
-} from '@angular/core';
-import {inject, TestBed} from '@angular/core/testing';
-import {Log} from '@angular/core/testing/src/testing_internal';
+  provideZoneChangeDetection,
+} from '../src/core';
+import {inject, TestBed} from '../testing';
+import {Log} from '../testing/src/testing_internal';
 
 describe('directive lifecycle integration spec', () => {
   let log: Log;
@@ -26,7 +28,7 @@ describe('directive lifecycle integration spec', () => {
   beforeEach(() => {
     TestBed.configureTestingModule({
       declarations: [LifecycleCmp, LifecycleDir, MyComp5],
-      providers: [Log],
+      providers: [provideZoneChangeDetection(), Log],
     }).overrideComponent(MyComp5, {set: {template: '<div [field]="123" lifecycle></div>'}});
   });
 
@@ -52,7 +54,10 @@ describe('directive lifecycle integration spec', () => {
   });
 });
 
-@Directive({selector: '[lifecycle-dir]'})
+@Directive({
+  selector: '[lifecycle-dir]',
+  standalone: false,
+})
 class LifecycleDir implements DoCheck {
   constructor(private _log: Log) {}
   ngDoCheck() {
@@ -64,6 +69,8 @@ class LifecycleDir implements DoCheck {
   selector: '[lifecycle]',
   inputs: ['field'],
   template: `<div lifecycle-dir></div>`,
+  standalone: false,
+  changeDetection: ChangeDetectionStrategy.Eager,
 })
 class LifecycleCmp
   implements
@@ -107,5 +114,9 @@ class LifecycleCmp
   }
 }
 
-@Component({selector: 'my-comp'})
+@Component({
+  selector: 'my-comp',
+  standalone: false,
+  changeDetection: ChangeDetectionStrategy.Eager,
+})
 class MyComp5 {}

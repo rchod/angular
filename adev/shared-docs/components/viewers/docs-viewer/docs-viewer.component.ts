@@ -6,102 +6,98 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
-import {CommonModule, DOCUMENT, isPlatformBrowser, Location} from '@angular/common';
+import {DOCUMENT, isPlatformBrowser, Location} from '@angular/common';
 import {
   ApplicationRef,
-  ChangeDetectionStrategy,
   Component,
   ComponentRef,
   createComponent,
   DestroyRef,
+  effect,
   ElementRef,
   EnvironmentInjector,
   inject,
   Injector,
-  Input,
-  OnChanges,
+  input,
+  output,
+  PendingTasks,
   PLATFORM_ID,
-  SimpleChanges,
   Type,
   ViewContainerRef,
   ViewEncapsulation,
-  ɵPendingTasks as PendingTasks,
-  EventEmitter,
-  Output,
 } from '@angular/core';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
-import {TOC_SKIP_CONTENT_MARKER, NavigationState} from '../../../services/index';
-import {TableOfContents} from '../../table-of-contents/table-of-contents.component';
-import {IconComponent} from '../../icon/icon.component';
-import {handleHrefClickEventWithRouter} from '../../../utils/index';
-import {Snippet} from '../../../interfaces/index';
 import {Router} from '@angular/router';
 import {fromEvent} from 'rxjs';
+import {Snippet} from '../../../interfaces';
+import {NavigationState, TOC_SKIP_CONTENT_MARKER} from '../../../services';
+import {handleHrefClickEventWithRouter} from '../../../utils';
+import {IconComponent} from '../../icon/icon.component';
+import {TableOfContents} from '../../table-of-contents/table-of-contents.component';
 
+import {DomSanitizer} from '@angular/platform-browser';
 import {Breadcrumb} from '../../breadcrumb/breadcrumb.component';
+import {CopyLinkButton} from '../../copy-link-anchor/copy-link-anchor.component';
 import {CopySourceCodeButton} from '../../copy-source-code-button/copy-source-code-button.component';
+import {TabGroup} from '../../tab-group/tab-group.component';
 import {ExampleViewer} from '../example-viewer/example-viewer.component';
-
-/// <reference types="@types/dom-view-transitions" />
 
 const TOC_HOST_ELEMENT_NAME = 'docs-table-of-contents';
 export const ASSETS_EXAMPLES_PATH = 'assets/content/examples';
-export const DOCS_VIEWER_SELECTOR = 'docs-viewer';
+export const DOCS_VIEWER_SELECTOR = 'docs-viewer, main[docsViewer]';
 export const DOCS_CODE_SELECTOR = '.docs-code';
 export const DOCS_CODE_MUTLIFILE_SELECTOR = '.docs-code-multifile';
-// TODO: Update the branch/sha
-export const GITHUB_CONTENT_URL =
-  'https://github.com/angular/angular/blob/main/adev/src/content/examples/';
+export const DOCS_CODE_TAB_GROUP_SELECTOR = '.docs-tab-group';
+export const DOCS_CODE_TAB_SELECTOR = '.docs-tab';
+const GITHUB_CONTENT_URL = 'https://github.com/angular/angular/blob/{{BUILD_SCM_ABBREV_HASH}}';
 
 @Component({
   selector: DOCS_VIEWER_SELECTOR,
-  standalone: true,
-  imports: [CommonModule],
   template: '',
   styleUrls: ['docs-viewer.component.scss'],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   encapsulation: ViewEncapsulation.None,
   host: {
     '[class.docs-animate-content]': 'animateContent',
+    '[class.docs-with-TOC]': 'hasToc()',
   },
 })
-export class DocViewer implements OnChanges {
-  @Input() docContent?: string;
-  @Input() hasToc = false;
-  @Output() contentLoaded = new EventEmitter<void>();
+export class DocViewer {
+  readonly docContent = input<string | undefined>();
+  readonly hasToc = input(false);
+  readonly contentLoaded = output<void>();
 
   private readonly destroyRef = inject(DestroyRef);
   private readonly document = inject(DOCUMENT);
   private readonly elementRef = inject(ElementRef);
   private readonly location = inject(Location);
   private readonly navigationState = inject(NavigationState);
-  private readonly platformId = inject(PLATFORM_ID);
   private readonly router = inject(Router);
   private readonly viewContainer = inject(ViewContainerRef);
   private readonly environmentInjector = inject(EnvironmentInjector);
   private readonly injector = inject(Injector);
   private readonly appRef = inject(ApplicationRef);
+  private readonly sanitizer = inject(DomSanitizer);
 
-  // tslint:disable-next-line:no-unused-variable
-  private animateContent = false;
+  protected animateContent = false;
   private readonly pendingTasks = inject(PendingTasks);
+
+  private readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
 
   private countOfExamples = 0;
 
-  async ngOnChanges(changes: SimpleChanges): Promise<void> {
-    const taskId = this.pendingTasks.add();
-    if ('docContent' in changes) {
-      await this.renderContentsAndRunClientSetup(this.docContent!);
-    }
-    this.pendingTasks.remove(taskId);
+  constructor() {
+    effect(async () => {
+      const removeTask = this.pendingTasks.add();
+      await this.renderContentsAndRunClientSetup(this.docContent());
+      removeTask();
+    });
   }
 
   async renderContentsAndRunClientSetup(content?: string): Promise<void> {
-    const isBrowser = isPlatformBrowser(this.platformId);
     const contentContainer = this.elementRef.nativeElement;
 
     if (content) {
-      if (isBrowser && !(this.document as any).startViewTransition) {
+      if (this.isBrowser && !(this.document as any).startViewTransition) {
         // Apply a special class to the host node to trigger animation.
         // Note: when a page is hydrated, the `content` would be empty,
         // so we don't trigger an animation to avoid a content flickering
@@ -112,7 +108,7 @@ export class DocViewer implements OnChanges {
       contentContainer.innerHTML = content;
     }
 
-    if (isBrowser) {
+    if (this.isBrowser) {
       // First we setup event listeners on the HTML we just loaded.
       // We want to do this before things like the example viewers are loaded.
       this.setupAnchorListeners(contentContainer);
@@ -123,6 +119,11 @@ export class DocViewer implements OnChanges {
       // In case when content contains static code snippets, then create buttons
       // responsible for copy source code.
       this.loadCopySourceCodeButtons();
+      // Setup copy link functionality for section anchor links
+      this.loadCopyLinkAnchors(contentContainer);
+      // In case when content contains tabs, create tabs component and move
+      // content in a tab into tab panel.
+      this.constructTabs(contentContainer);
     }
 
     // Display Breadcrumb component if the `<docs-breadcrumb>` element exists
@@ -134,7 +135,7 @@ export class DocViewer implements OnChanges {
     // Render ToC
     this.renderTableOfContents(contentContainer);
 
-    this.contentLoaded.next();
+    this.contentLoaded.emit();
   }
 
   /**
@@ -166,13 +167,20 @@ export class DocViewer implements OnChanges {
   }
 
   private renderTableOfContents(element: HTMLElement): void {
-    if (!this.hasToc) {
+    if (!this.hasToc()) {
       return;
     }
 
-    const firstHeading = element.querySelector<HTMLHeadingElement>('h2,h3[id]');
+    let firstHeading = element.querySelector<HTMLElement>('h2,h3[id]');
     if (!firstHeading) {
       return;
+    }
+
+    // If the first header is in a card container element, place TOC element
+    // before the container.
+    const parentEl = firstHeading.parentElement;
+    if (parentEl && parentEl.classList.contains('docs-card-container-header')) {
+      firstHeading = parentEl.parentElement;
     }
 
     // Since the content of the main area is dynamically created and there is
@@ -193,22 +201,28 @@ export class DocViewer implements OnChanges {
     path: string,
   ): Promise<void> {
     const preview = Boolean(placeholder.getAttribute('preview'));
+    const hideCode = Boolean(placeholder.getAttribute('hideCode'));
     const title = placeholder.getAttribute('header') ?? undefined;
+    const style = placeholder.getAttribute('style') ?? undefined;
     const firstCodeSnippetTitle =
       snippets.length > 0 ? (snippets[0].title ?? snippets[0].name) : undefined;
     const exampleRef = this.viewContainer.createComponent(ExampleViewer);
 
     this.countOfExamples++;
-    exampleRef.instance.metadata = {
+    exampleRef.setInput('metadata', {
       title: title ?? firstCodeSnippetTitle,
       path,
       files: snippets,
       preview,
+      hideCode,
       id: this.countOfExamples,
-    };
+      style,
+    });
 
-    exampleRef.instance.githubUrl = `${GITHUB_CONTENT_URL}/${snippets[0].name}`;
-    exampleRef.instance.stackblitzUrl = `${ASSETS_EXAMPLES_PATH}/${snippets[0].name}.html`;
+    exampleRef.setInput('githubUrl', `${GITHUB_CONTENT_URL}/${snippets[0].name}`);
+
+    // TODO: Re-add support for opening examples on StackBlitz
+    exampleRef.setInput('stackblitzUrl', null); // `${ASSETS_EXAMPLES_PATH}/${snippets[0].name}.html`;
 
     placeholder.parentElement!.replaceChild(exampleRef.location.nativeElement, placeholder);
 
@@ -220,8 +234,10 @@ export class DocViewer implements OnChanges {
 
     return tabs.map((tab) => ({
       name: tab.getAttribute('path') ?? tab.getAttribute('header') ?? '',
-      content: tab.innerHTML,
+      sanitizedContent: this.sanitizer.bypassSecurityTrustHtml(tab.innerHTML),
       visibleLinesRange: tab.getAttribute('visibleLines') ?? undefined,
+      shell: tab.classList.contains('shell'),
+      title: tab.getAttribute('header') ?? undefined,
     }));
   }
 
@@ -240,8 +256,11 @@ export class DocViewer implements OnChanges {
     return {
       title,
       name: path,
-      content: content?.outerHTML,
+      sanitizedContent: content?.outerHTML
+        ? this.sanitizer.bypassSecurityTrustHtml(content.outerHTML)
+        : '',
       visibleLinesRange: visibleLines,
+      shell: element.classList.contains('shell'),
     };
   }
 
@@ -249,12 +268,32 @@ export class DocViewer implements OnChanges {
   // the code
   private loadCopySourceCodeButtons(): void {
     const staticCodeSnippets = <Element[]>(
-      Array.from(this.elementRef.nativeElement.querySelectorAll('.docs-code:not([mermaid])'))
+      Array.from(
+        this.elementRef.nativeElement.querySelectorAll(
+          '.docs-code:not([mermaid],[hideCopy],.docs-no-copy)',
+        ),
+      )
     );
 
     for (let codeSnippet of staticCodeSnippets) {
       const copySourceCodeButton = this.viewContainer.createComponent(CopySourceCodeButton);
       codeSnippet.appendChild(copySourceCodeButton.location.nativeElement);
+    }
+  }
+
+  private loadCopyLinkAnchors(element: HTMLElement): void {
+    const docsAnchors = Array.from(element.querySelectorAll<HTMLAnchorElement>('a.docs-anchor'));
+
+    for (const anchor of docsAnchors) {
+      const href = anchor.getAttribute('href')!;
+      const label = anchor.textContent!;
+
+      const copyLinkButtonRef = this.viewContainer.createComponent(CopyLinkButton);
+      copyLinkButtonRef.setInput('href', href);
+      copyLinkButtonRef.setInput('label', label);
+      copyLinkButtonRef.setInput('matTooltip', `Copy link to ${label}`);
+
+      anchor.appendChild(copyLinkButtonRef.location.nativeElement);
     }
   }
 
@@ -268,9 +307,12 @@ export class DocViewer implements OnChanges {
   }
 
   private loadIcons(element: HTMLElement): void {
-    element.querySelectorAll('docs-icon').forEach((iconsPlaceholder) => {
-      this.renderComponent(IconComponent, iconsPlaceholder as HTMLElement);
-    });
+    // We need to make sure that we don't reload the icons in loadCopySourceCodeButtons
+    element
+      .querySelectorAll('docs-icon:not([docs-copy-source-code] docs-icon)')
+      .forEach((iconsPlaceholder) => {
+        this.renderComponent(IconComponent, iconsPlaceholder as HTMLElement);
+      });
   }
 
   /**
@@ -278,7 +320,7 @@ export class DocViewer implements OnChanges {
    */
   private renderComponent<T>(
     type: Type<T>,
-    hostElement: HTMLElement,
+    hostElement: Element,
     inputs?: {[key: string]: unknown},
   ): ComponentRef<T> {
     const componentRef = createComponent(type, {
@@ -293,13 +335,18 @@ export class DocViewer implements OnChanges {
       }
     }
 
-    // Trigger change detection after setting inputs.
-    componentRef.changeDetectorRef.detectChanges();
-
     // Attach a view to the ApplicationRef for change detection
     // purposes and for hydration serialization to pick it up
     // during SSG.
     this.appRef.attachView(componentRef.hostView);
+
+    // This is wrapped with `isBrowser` in for hydration purposes.
+    if (this.isBrowser) {
+      // The `docs-viewer` may be rendered multiple times when navigating
+      // between pages, which will create new components that need to be
+      // destroyed for gradual cleanup.
+      this.destroyRef.onDestroy(() => componentRef.destroy());
+    }
 
     return componentRef;
   }
@@ -335,7 +382,12 @@ export class DocViewer implements OnChanges {
             relativeUrl = hrefAttr;
           }
 
-          handleHrefClickEventWithRouter(e, this.router, relativeUrl);
+          // Unless this is a link to an element within the same page, use the Angular router.
+          // https://github.com/angular/angular/issues/30139
+          const scrollToElementExists = relativeUrl.startsWith(this.location.path() + '#');
+          if (!scrollToElementExists) {
+            handleHrefClickEventWithRouter(e, this.router, relativeUrl);
+          }
         });
     });
   }
@@ -344,6 +396,20 @@ export class DocViewer implements OnChanges {
     for (const anchor of Array.from(element.querySelectorAll(`a[href^="#"]:not(a[download])`))) {
       const url = new URL((anchor as HTMLAnchorElement).href);
       (anchor as HTMLAnchorElement).href = this.location.path() + url.hash;
+    }
+  }
+
+  /** Replace .docs-tab-group and .docs-tab with tabs component. */
+  private constructTabs(element: HTMLElement) {
+    for (const tabGroup of Array.from(element.querySelectorAll(DOCS_CODE_TAB_GROUP_SELECTOR))) {
+      const tabs = Array.from(tabGroup.querySelectorAll(DOCS_CODE_TAB_SELECTOR)).map((t) => ({
+        label: t.getAttribute('label') ?? '',
+        panel: t,
+      }));
+
+      const tabGroupRef = this.viewContainer.createComponent(TabGroup);
+      tabGroupRef.setInput('tabs', tabs);
+      tabGroup.parentElement!.replaceChild(tabGroupRef.location.nativeElement, tabGroup);
     }
   }
 }

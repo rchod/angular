@@ -7,6 +7,9 @@
  */
 
 import {CommonModule} from '@angular/common';
+import {loadTranslations} from '@angular/localize';
+import {By} from '@angular/platform-browser';
+import {expect} from '@angular/private/testing/matchers';
 import {
   ChangeDetectorRef,
   Component,
@@ -16,15 +19,20 @@ import {
   inject,
   Input,
   OnDestroy,
+  provideZoneChangeDetection,
   TemplateRef,
   ViewChild,
   ViewContainerRef,
-} from '@angular/core';
-import {TestBed} from '@angular/core/testing';
-import {By} from '@angular/platform-browser';
-import {expect} from '@angular/platform-browser/testing/src/matchers';
+  ChangeDetectionStrategy,
+} from '../../src/core';
+import {TestBed} from '../../testing';
 
 describe('projection', () => {
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [provideZoneChangeDetection()],
+    });
+  });
   function getElementHtml(element: HTMLElement) {
     return element.innerHTML
       .replace(/<!--(\W|\w)*?-->/g, '')
@@ -32,10 +40,22 @@ describe('projection', () => {
   }
 
   it('should project content', () => {
-    @Component({selector: 'child', template: `<div><ng-content></ng-content></div>`})
+    @Component({
+      selector: 'child',
+      template: `<div><ng-content></ng-content></div>`,
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
     class Child {}
 
-    @Component({selector: 'parent', template: '<child>content</child>'})
+    @Component({
+      selector: 'parent',
+      template: '<child>content</child>',
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
     class Parent {}
 
     TestBed.configureTestingModule({declarations: [Parent, Child]});
@@ -49,12 +69,18 @@ describe('projection', () => {
     @Component({
       selector: 'child',
       template: '<ng-content></ng-content>',
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
     })
     class Child {}
 
     @Component({
       selector: 'parent',
       template: '<child>content</child>',
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
     })
     class Parent {}
 
@@ -66,10 +92,22 @@ describe('projection', () => {
   });
 
   it('should project content with siblings', () => {
-    @Component({selector: 'child', template: '<ng-content></ng-content>'})
+    @Component({
+      selector: 'child',
+      template: '<ng-content></ng-content>',
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
     class Child {}
 
-    @Component({selector: 'parent', template: `<child>before<div>content</div>after</child>`})
+    // prettier-ignore
+    @Component({
+      selector: 'parent',
+      template: `<child>before<div>content</div>after</child>`,
+      standalone: false,
+    
+      changeDetection: ChangeDetectionStrategy.Eager,})
     class Parent {}
 
     TestBed.configureTestingModule({declarations: [Parent, Child]});
@@ -80,18 +118,30 @@ describe('projection', () => {
   });
 
   it('should be able to re-project content', () => {
-    @Component({selector: 'grand-child', template: `<div><ng-content></ng-content></div>`})
+    @Component({
+      selector: 'grand-child',
+      template: `<div><ng-content></ng-content></div>`,
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
     class GrandChild {}
 
     @Component({
       selector: 'child',
       template: `<grand-child><ng-content></ng-content></grand-child>`,
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
     })
     class Child {}
 
     @Component({
       selector: 'parent',
       template: `<child><b>Hello</b>World!</child>`,
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
     })
     class Parent {}
 
@@ -108,16 +158,28 @@ describe('projection', () => {
     @Component({
       selector: 'child',
       template: `<div><ng-content></ng-content></div>`,
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
     })
     class Child {}
 
     @Component({
       selector: 'projected-comp',
       template: 'content',
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
     })
     class ProjectedComp {}
 
-    @Component({selector: 'parent', template: `<child><projected-comp></projected-comp></child>`})
+    @Component({
+      selector: 'parent',
+      template: `<child><projected-comp></projected-comp></child>`,
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
     class Parent {}
 
     TestBed.configureTestingModule({declarations: [Parent, Child, ProjectedComp]});
@@ -130,19 +192,34 @@ describe('projection', () => {
   });
 
   it('should project components that have their own projection', () => {
-    @Component({selector: 'child', template: `<div><ng-content></ng-content></div>`})
+    @Component({
+      selector: 'child',
+      template: `<div><ng-content></ng-content></div>`,
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
     class Child {}
 
-    @Component({selector: 'projected-comp', template: `<p><ng-content></ng-content></p>`})
+    @Component({
+      selector: 'projected-comp',
+      template: `<p><ng-content></ng-content></p>`,
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
     class ProjectedComp {}
 
+    // prettier-ignore
     @Component({
       selector: 'parent',
       template: `
         <child>
           <projected-comp><div>Some content</div>Other content</projected-comp>
         </child>`,
-    })
+      standalone: false,
+    
+      changeDetection: ChangeDetectionStrategy.Eager,})
     class Parent {}
 
     TestBed.configureTestingModule({declarations: [Parent, Child, ProjectedComp]});
@@ -155,19 +232,39 @@ describe('projection', () => {
   });
 
   it('should project with multiple instances of a component with projection', () => {
-    @Component({selector: 'child', template: `<div><ng-content></ng-content></div>`})
+    @Component({
+      selector: 'child',
+      template: `<div><ng-content></ng-content></div>`,
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
     class Child {}
 
-    @Component({selector: 'projected-comp', template: `Before<ng-content></ng-content>After`})
+    @Component({
+      selector: 'projected-comp',
+      template: `Before<ng-content></ng-content>After`,
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
     class ProjectedComp {}
 
     @Component({
       selector: 'parent',
-      template: `
-        <child>
-          <projected-comp><div>A</div><p>123</p></projected-comp>
-          <projected-comp><div>B</div><p>456</p></projected-comp>
-        </child>`,
+      template: ` <child>
+        <projected-comp
+          ><div>A</div>
+          <p>123</p></projected-comp
+        >
+        <projected-comp
+          ><div>B</div>
+          <p>456</p></projected-comp
+        >
+      </child>`,
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
     })
     class Parent {}
 
@@ -184,19 +281,40 @@ describe('projection', () => {
   });
 
   it('should re-project with multiple instances of a component with projection', () => {
-    @Component({selector: 'child', template: `<div><ng-content></ng-content></div>`})
+    @Component({
+      selector: 'child',
+      template: `<div><ng-content></ng-content></div>`,
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
     class Child {}
 
-    @Component({selector: 'projected-comp', template: `Before<ng-content></ng-content>After`})
+    @Component({
+      selector: 'projected-comp',
+      template: `Before<ng-content></ng-content>After`,
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
     class ProjectedComp {}
 
     @Component({
       selector: 'parent',
-      template: `
-        <child>
-          <projected-comp><div>A</div><ng-content></ng-content><p>123</p></projected-comp>
-          <projected-comp><div>B</div><p>456</p></projected-comp>
-        </child>`,
+      template: ` <child>
+        <projected-comp
+          ><div>A</div>
+          <ng-content></ng-content>
+          <p>123</p></projected-comp
+        >
+        <projected-comp
+          ><div>B</div>
+          <p>456</p></projected-comp
+        >
+      </child>`,
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
     })
     class Parent {}
 
@@ -205,7 +323,10 @@ describe('projection', () => {
       template: `
         <parent>**ABC**</parent>
         <parent>**DEF**</parent>
-     `,
+      `,
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
     })
     class App {}
 
@@ -228,13 +349,26 @@ describe('projection', () => {
   it('should project into dynamic views (with createEmbeddedView)', () => {
     @Component({
       selector: 'child',
-      template: `Before-<ng-template [ngIf]="showing"><ng-content></ng-content></ng-template>-After`,
+      template: `Before-<ng-template [ngIf]="showing"><ng-content></ng-content></ng-template
+        >-After`,
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
     })
     class Child {
       showing = false;
     }
 
-    @Component({selector: 'parent', template: `<child><div>A</div>Some text</child>`})
+    @Component({
+      selector: 'parent',
+      template: `<child
+        ><div>A</div>
+        Some text</child
+      >`,
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
     class Parent {}
 
     TestBed.configureTestingModule({declarations: [Parent, Child], imports: [CommonModule]});
@@ -247,7 +381,7 @@ describe('projection', () => {
     childInstance.showing = true;
     fixture.detectChanges();
 
-    expect(getElementHtml(childElement)).toBe(`Before-<div>A</div>Some text-After`);
+    expect(getElementHtml(childElement)).toBe(`Before-<div>A</div> Some text-After`);
 
     childInstance.showing = false;
     fixture.detectChanges();
@@ -256,19 +390,21 @@ describe('projection', () => {
 
     childInstance.showing = true;
     fixture.detectChanges();
-    expect(getElementHtml(childElement)).toBe(`Before-<div>A</div>Some text-After`);
+    expect(getElementHtml(childElement)).toBe(`Before-<div>A</div> Some text-After`);
   });
 
   it('should project into dynamic views with specific selectors', () => {
     @Component({
       selector: 'child',
-      template: `
-        <ng-content></ng-content>
+      template: ` <ng-content></ng-content>
         Before-
         <ng-template [ngIf]="showing">
           <ng-content select="div"></ng-content>
         </ng-template>
         -After`,
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
     })
     class Child {
       showing = false;
@@ -282,6 +418,9 @@ describe('projection', () => {
           <span>B</span>
         </child>
       `,
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
     })
     class Parent {}
 
@@ -312,12 +451,21 @@ describe('projection', () => {
   });
 
   it('should project if <ng-content> is in a template that has different declaration/insertion points', () => {
-    @Component({selector: 'comp', template: `<ng-template><ng-content></ng-content></ng-template>`})
+    @Component({
+      selector: 'comp',
+      template: `<ng-template><ng-content></ng-content></ng-template>`,
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
     class Comp {
       @ViewChild(TemplateRef, {static: true}) template!: TemplateRef<any>;
     }
 
-    @Directive({selector: '[trigger]'})
+    @Directive({
+      selector: '[trigger]',
+      standalone: false,
+    })
     class Trigger {
       @Input() trigger!: Comp;
 
@@ -334,6 +482,9 @@ describe('projection', () => {
         <button [trigger]="comp"></button>
         <comp #comp>Some content</comp>
       `,
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
     })
     class Parent {}
 
@@ -355,11 +506,20 @@ describe('projection', () => {
     @Component({
       selector: 'child',
       template: `<div><ng-content></ng-content></div>
-          <span><ng-content></ng-content></span>`,
+        <span><ng-content></ng-content></span>`,
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
     })
     class Child {}
 
-    @Component({selector: 'parent', template: `<child>content</child>`})
+    @Component({
+      selector: 'parent',
+      template: `<child>content</child>`,
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
     class Parent {}
 
     TestBed.configureTestingModule({declarations: [Parent, Child], imports: [CommonModule]});
@@ -377,10 +537,19 @@ describe('projection', () => {
       selector: 'child',
       template:
         '<div *ngFor="let item of [1, 2]; let i = index">({{i}}):<ng-content></ng-content></div>',
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
     })
     class Child {}
 
-    @Component({selector: 'parent', template: '<child>content</child>'})
+    @Component({
+      selector: 'parent',
+      template: '<child>content</child>',
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
     class Parent {}
 
     TestBed.configureTestingModule({declarations: [Parent, Child], imports: [CommonModule]});
@@ -393,12 +562,21 @@ describe('projection', () => {
   });
 
   it('should handle projected containers inside other containers', () => {
-    @Component({selector: 'nested-comp', template: `<div>Child content</div>`})
+    @Component({
+      selector: 'nested-comp',
+      template: `<div>Child content</div>`,
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
     class NestedComp {}
 
     @Component({
       selector: 'root-comp',
       template: `<ng-content></ng-content>`,
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
     })
     class RootComp {}
 
@@ -411,6 +589,9 @@ describe('projection', () => {
           </ng-container>
         </root-comp>
       `,
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
     })
     class MyApp {
       items = [1, 2];
@@ -439,12 +620,14 @@ describe('projection', () => {
   it('should handle projection into element containers at the view root', () => {
     @Component({
       selector: 'root-comp',
-      template: `
-        <ng-template [ngIf]="show">
-          <ng-container>
-            <ng-content></ng-content>
-          </ng-container>
-        </ng-template>`,
+      template: ` <ng-template [ngIf]="show">
+        <ng-container>
+          <ng-content></ng-content>
+        </ng-container>
+      </ng-template>`,
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
     })
     class RootComp {
       @Input() show: boolean = true;
@@ -452,8 +635,10 @@ describe('projection', () => {
 
     @Component({
       selector: 'my-app',
-      template: `<root-comp [show]="show"><div></div></root-comp>
-      `,
+      template: `<root-comp [show]="show"><div></div></root-comp> `,
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
     })
     class MyApp {
       show = true;
@@ -474,6 +659,9 @@ describe('projection', () => {
     @Component({
       selector: 'root-comp',
       template: `<ng-template [ngIf]="show"><ng-content></ng-content></ng-template>`,
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
     })
     class RootComp {
       @Input() show: boolean = true;
@@ -481,7 +669,12 @@ describe('projection', () => {
 
     @Component({
       selector: 'my-app',
-      template: `<root-comp [show]="show"><ng-container><div></div></ng-container></root-comp>`,
+      template: `<root-comp [show]="show"
+        ><ng-container><div></div></ng-container
+      ></root-comp>`,
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
     })
     class MyApp {
       show = true;
@@ -499,17 +692,25 @@ describe('projection', () => {
   });
 
   it('should project ng-container at the content root', () => {
-    @Component({selector: 'child', template: `<ng-content></ng-content>`})
+    @Component({
+      selector: 'child',
+      template: `<ng-content></ng-content>`,
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
     class Child {}
 
     @Component({
       selector: 'parent',
       template: `<child>
-      <ng-container>
-        <ng-container>content</ng-container>
-      </ng-container>
-    </child>
-      `,
+        <ng-container>
+          <ng-container>content</ng-container>
+        </ng-container>
+      </child> `,
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
     })
     class Parent {}
 
@@ -521,25 +722,36 @@ describe('projection', () => {
   });
 
   it('should re-project ng-container at the content root', () => {
-    @Component({selector: 'grand-child', template: `<ng-content></ng-content>`})
+    @Component({
+      selector: 'grand-child',
+      template: `<ng-content></ng-content>`,
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
     class GrandChild {}
 
     @Component({
       selector: 'child',
       template: `<grand-child>
-      <ng-content></ng-content>
-    </grand-child>`,
+        <ng-content></ng-content>
+      </grand-child>`,
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
     })
     class Child {}
 
     @Component({
       selector: 'parent',
       template: `<child>
-      <ng-container>
-        <ng-container>content</ng-container>
-      </ng-container>
-    </child>
-      `,
+        <ng-container>
+          <ng-container>content</ng-container>
+        </ng-container>
+      </child> `,
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
     })
     class Parent {}
 
@@ -556,6 +768,9 @@ describe('projection', () => {
     @Component({
       selector: 'child-comp',
       template: `<ng-template [ngIf]="show"><ng-content></ng-content></ng-template>`,
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
     })
     class ChildComp {
       @Input() show: boolean = true;
@@ -564,6 +779,9 @@ describe('projection', () => {
     @Component({
       selector: 'parent-comp',
       template: `<child-comp [show]="show"><ng-content></ng-content></child-comp>`,
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
     })
     class ParentComp {
       @Input() show: boolean = true;
@@ -572,6 +790,9 @@ describe('projection', () => {
     @Component({
       selector: 'my-app',
       template: `<parent-comp [show]="show"><div></div></parent-comp>`,
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
     })
     class MyApp {
       show = true;
@@ -593,12 +814,18 @@ describe('projection', () => {
         selector: 'child',
         template: `<div id="first"><ng-content select="span[title=toFirst]"></ng-content></div>
           <div id="second"><ng-content select="span[title=toSecond]"></ng-content></div>`,
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class Child {}
 
       @Component({
         selector: 'parent',
         template: `<child><span title="toFirst">1</span><span title="toSecond">2</span></child>`,
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class Parent {}
 
@@ -616,12 +843,18 @@ describe('projection', () => {
         selector: 'child',
         template: `<div id="first"><ng-content select="span.toFirst"></ng-content></div>
           <div id="second"><ng-content select="span.toSecond"></ng-content></div>`,
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class Child {}
 
       @Component({
         selector: 'parent',
         template: `<child><span class="toFirst">1</span><span class="toSecond">2</span></child>`,
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class Parent {}
 
@@ -639,12 +872,20 @@ describe('projection', () => {
         selector: 'child',
         template: `<div id="first"><ng-content select="span.toFirst"></ng-content></div>
           <div id="second"><ng-content select="span.toSecond"></ng-content></div>`,
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class Child {}
 
       @Component({
         selector: 'parent',
-        template: `<child><span class="other toFirst">1</span><span class="noise toSecond">2</span></child>`,
+        template: `<child
+          ><span class="other toFirst">1</span><span class="noise toSecond">2</span></child
+        >`,
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class Parent {}
 
@@ -662,12 +903,18 @@ describe('projection', () => {
         selector: 'child',
         template: `<div id="first"><ng-content select="span"></ng-content></div>
           <div id="second"><ng-content select="span.toSecond"></ng-content></div>`,
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class Child {}
 
       @Component({
         selector: 'parent',
         template: `<child><span class="toFirst">1</span><span class="toSecond">2</span></child>`,
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class Parent {}
 
@@ -685,12 +932,20 @@ describe('projection', () => {
         selector: 'child',
         template: `<div id="first"><ng-content select="span.toFirst"></ng-content></div>
           <div id="second"><ng-content></ng-content></div>`,
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class Child {}
 
       @Component({
         selector: 'parent',
-        template: `<child><span class="toFirst">1</span><span>remaining</span>more remaining</child>`,
+        template: `<child
+          ><span class="toFirst">1</span><span>remaining</span>more remaining</child
+        >`,
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class Parent {}
 
@@ -708,12 +963,18 @@ describe('projection', () => {
         selector: 'child',
         template: `<div id="first"><ng-content></ng-content></div>
           <div id="second"><ng-content select="span.toSecond"></ng-content></div>`,
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class Child {}
 
       @Component({
         selector: 'parent',
         template: `<child><span>1</span><span class="toSecond">2</span>remaining</child>`,
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class Parent {}
 
@@ -730,23 +991,37 @@ describe('projection', () => {
      * Descending into projected content for selector-matching purposes is not supported
      * today: https://plnkr.co/edit/MYQcNfHSTKp9KvbzJWVQ?p=preview
      */
-    it('should not descend into re-projected content', () => {
+    it('should not descend into re-projected content for selector matching', () => {
       @Component({
         selector: 'grand-child',
-        template: `<ng-content select="span"></ng-content><hr><ng-content></ng-content>`,
+        template: `<ng-content select="span"></ng-content>
+          <hr />
+          <ng-content></ng-content>`,
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class GrandChild {}
 
       @Component({
         selector: 'child',
         template: `<grand-child>
-            <ng-content></ng-content>
-            <span>in child template</span>
-          </grand-child>`,
+          <ng-content></ng-content>
+          <span>in child template</span>
+        </grand-child>`,
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class Child {}
 
-      @Component({selector: 'parent', template: `<child><span>parent content</span></child>`})
+      @Component({
+        selector: 'parent',
+        template: `<child><span>parent content</span></child>`,
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class Parent {}
 
       TestBed.configureTestingModule({declarations: [GrandChild, Child, Parent]});
@@ -758,23 +1033,37 @@ describe('projection', () => {
       );
     });
 
-    it('should not descend into re-projected content', () => {
+    it('should match selectors against the ng-content element when re-projecting', () => {
       @Component({
         selector: 'card',
-        template: `<ng-content select="[card-title]"></ng-content><hr><ng-content select="[card-content]"></ng-content>`,
+        template: `<ng-content select="[card-title]"></ng-content>
+          <hr />
+          <ng-content select="[card-content]"></ng-content>`,
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class Card {}
 
       @Component({
         selector: 'card-with-title',
         template: `<card>
-         <h1 card-title>Title</h1>
-         <ng-content card-content></ng-content>
-       </card>`,
+          <h1 card-title>Title</h1>
+          <ng-content card-content></ng-content>
+        </card>`,
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class CardWithTitle {}
 
-      @Component({selector: 'parent', template: `<card-with-title>content</card-with-title>`})
+      @Component({
+        selector: 'parent',
+        template: `<card-with-title>content</card-with-title>`,
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class Parent {}
 
       TestBed.configureTestingModule({declarations: [Card, CardWithTitle, Parent]});
@@ -787,12 +1076,24 @@ describe('projection', () => {
     });
 
     it('should not match selectors against node having ngProjectAs attribute', () => {
-      @Component({selector: 'child', template: `<ng-content select="div"></ng-content>`})
+      @Component({
+        selector: 'child',
+        template: `<ng-content select="div"></ng-content>`,
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class Child {}
 
       @Component({
         selector: 'parent',
-        template: `<child><div ngProjectAs="span">should not project</div><div>should project</div></child>`,
+        template: `<child
+          ><div ngProjectAs="span">should not project</div>
+          <div>should project</div></child
+        >`,
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class Parent {}
 
@@ -810,12 +1111,18 @@ describe('projection', () => {
       @Component({
         selector: 'child',
         template: `<ng-content select="[title]"></ng-content>`,
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class Child {}
 
       @Component({
         selector: 'parent',
         template: `<child><span [title]="'Some title'">Has title</span></child>`,
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class Parent {}
 
@@ -832,10 +1139,18 @@ describe('projection', () => {
       @Component({
         selector: 'child',
         template: `<span><ng-content select="div"></ng-content></span>`,
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class Child {}
 
-      @Component({template: `<child><div *ngIf="value">content</div></child>`})
+      @Component({
+        template: `<child><div *ngIf="value">content</div></child>`,
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class Parent {
         value = false;
       }
@@ -851,16 +1166,22 @@ describe('projection', () => {
     });
   });
 
-  it('should handle projected containers inside other containers', () => {
+  it('should handle projected containers inside other containers 2', () => {
     @Component({
       selector: 'child-comp', //
       template: '<ng-content></ng-content>',
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
     })
     class ChildComp {}
 
     @Component({
       selector: 'root-comp', //
       template: '<ng-content></ng-content>',
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
     })
     class RootComp {}
 
@@ -873,6 +1194,9 @@ describe('projection', () => {
           </ng-container>
         </root-comp>
       `,
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
     })
     class MyApp {
       items: number[] = [1, 2, 3];
@@ -896,7 +1220,13 @@ describe('projection', () => {
   });
 
   it('should project content if the change detector has been detached', () => {
-    @Component({selector: 'my-comp', template: '<ng-content></ng-content>'})
+    @Component({
+      selector: 'my-comp',
+      template: '<ng-content></ng-content>',
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
     class MyComp {
       constructor(changeDetectorRef: ChangeDetectorRef) {
         changeDetectorRef.detach();
@@ -910,6 +1240,9 @@ describe('projection', () => {
           <p>hello</p>
         </my-comp>
       `,
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
     })
     class MyApp {}
 
@@ -921,7 +1254,10 @@ describe('projection', () => {
   });
 
   it('should support ngProjectAs with a various number of other bindings and attributes', () => {
-    @Directive({selector: '[color],[margin]'})
+    @Directive({
+      selector: '[color],[margin]',
+      standalone: false,
+    })
     class ElDecorator {
       @Input() color?: string;
       @Input() margin?: number;
@@ -937,6 +1273,9 @@ describe('projection', () => {
         ---
         <ng-content select="[card-footer]"></ng-content>
       `,
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
     })
     class Card {}
 
@@ -944,12 +1283,15 @@ describe('projection', () => {
       selector: 'card-with-title',
       template: `
         <card>
-         <h1 [color]="'red'" [margin]="10" ngProjectAs="[card-title]">Title</h1>
-         <h2  xlink:href="google.com" ngProjectAs="[card-subtitle]">Subtitle</h2>
-         <div style="font-color: blue;" ngProjectAs="[card-content]">content</div>
-         <div [color]="'blue'" ngProjectAs="[card-footer]">footer</div>
+          <h1 [color]="'red'" [margin]="10" ngProjectAs="[card-title]">Title</h1>
+          <h2 xlink:href="google.com" ngProjectAs="[card-subtitle]">Subtitle</h2>
+          <div style="font-color: blue;" ngProjectAs="[card-content]">content</div>
+          <div [color]="'blue'" ngProjectAs="[card-footer]">footer</div>
         </card>
       `,
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
     })
     class CardWithTitle {}
 
@@ -968,6 +1310,9 @@ describe('projection', () => {
         ---
         <ng-content select="[card-content]"></ng-content>
       `,
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
     })
     class Card {}
 
@@ -975,18 +1320,22 @@ describe('projection', () => {
       selector: 'card-with-title',
       template: `
         <card>
-         <h1 ngProjectAs="[card-title]">Title</h1>
-         <ng-content ngProjectAs="[card-content]"></ng-content>
+          <h1 ngProjectAs="[card-title]">Title</h1>
+          <ng-content ngProjectAs="[card-content]"></ng-content>
         </card>
       `,
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
     })
     class CardWithTitle {}
 
     @Component({
       selector: 'app',
-      template: `
-        <card-with-title>content</card-with-title>
-      `,
+      template: ` <card-with-title>content</card-with-title> `,
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
     })
     class App {}
 
@@ -1004,15 +1353,21 @@ describe('projection', () => {
         <ng-content select="[card-title]"></ng-content>
         content
       `,
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
     })
     class Card {}
 
     @Component({
       template: `
         <card>
-         <h1 ngProjectAs="[non-existing-title-slot],[card-title]">Title</h1>
+          <h1 ngProjectAs="[non-existing-title-slot],[card-title]">Title</h1>
         </card>
       `,
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
     })
     class App {}
 
@@ -1027,6 +1382,9 @@ describe('projection', () => {
     @Component({
       selector: 'projector',
       template: `<ng-content select="projectMe"></ng-content>`,
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
     })
     class Projector {}
 
@@ -1036,6 +1394,9 @@ describe('projection', () => {
           <div ngProjectAs="projectMe" title="some title"></div>
         </projector>
       `,
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
     })
     class Root {}
 
@@ -1054,10 +1415,19 @@ describe('projection', () => {
   describe('on inline templates (e.g.  *ngIf)', () => {
     it('should work when matching the element name', () => {
       let divDirectives = 0;
-      @Component({selector: 'selector-proj', template: '<ng-content select="div"></ng-content>'})
+      @Component({
+        selector: 'selector-proj',
+        template: '<ng-content select="div"></ng-content>',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class SelectedNgContentComp {}
 
-      @Directive({selector: 'div'})
+      @Directive({
+        selector: 'div',
+        standalone: false,
+      })
       class DivDirective {
         constructor() {
           divDirectives++;
@@ -1067,6 +1437,9 @@ describe('projection', () => {
       @Component({
         selector: 'main-selector',
         template: '<selector-proj><div x="true" *ngIf="true">Hello world!</div></selector-proj>',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class SelectorMainComp {}
 
@@ -1082,10 +1455,19 @@ describe('projection', () => {
 
     it('should work when matching attributes', () => {
       let xDirectives = 0;
-      @Component({selector: 'selector-proj', template: '<ng-content select="[x]"></ng-content>'})
+      @Component({
+        selector: 'selector-proj',
+        template: '<ng-content select="[x]"></ng-content>',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class SelectedNgContentComp {}
 
-      @Directive({selector: '[x]'})
+      @Directive({
+        selector: '[x]',
+        standalone: false,
+      })
       class XDirective {
         constructor() {
           xDirectives++;
@@ -1095,6 +1477,9 @@ describe('projection', () => {
       @Component({
         selector: 'main-selector',
         template: '<selector-proj><div x="true" *ngIf="true">Hello world!</div></selector-proj>',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class SelectorMainComp {}
 
@@ -1110,10 +1495,19 @@ describe('projection', () => {
 
     it('should work when matching classes', () => {
       let xDirectives = 0;
-      @Component({selector: 'selector-proj', template: '<ng-content select=".x"></ng-content>'})
+      @Component({
+        selector: 'selector-proj',
+        template: '<ng-content select=".x"></ng-content>',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class SelectedNgContentComp {}
 
-      @Directive({selector: '.x'})
+      @Directive({
+        selector: '.x',
+        standalone: false,
+      })
       class XDirective {
         constructor() {
           xDirectives++;
@@ -1123,6 +1517,9 @@ describe('projection', () => {
       @Component({
         selector: 'main-selector',
         template: '<selector-proj><div class="x" *ngIf="true">Hello world!</div></selector-proj>',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class SelectorMainComp {}
 
@@ -1140,6 +1537,9 @@ describe('projection', () => {
       @Component({
         selector: 'selector-proj',
         template: '<ng-content select="[ngTrackBy]"></ng-content>',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class SelectedNgContentComp {}
 
@@ -1148,6 +1548,9 @@ describe('projection', () => {
         template:
           'inline(<selector-proj><div *ngFor="let item of items trackBy getItemId">{{item.name}}</div></selector-proj>)' +
           'ng-template(<selector-proj><ng-template ngFor [ngForOf]="items" let-item ngTrackBy="getItemId"><div>{{item.name}}</div></ng-template></selector-proj>)',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class SelectorMainComp {
         items = [
@@ -1176,6 +1579,9 @@ describe('projection', () => {
           <ng-content select="[foo]"></ng-content>
           <ng-content select=".foo"></ng-content>
         `,
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class ProjectorApp {}
 
@@ -1188,6 +1594,9 @@ describe('projection', () => {
             <div *ngIf="show" ngProjectAs=".foo">as class</div>
           </projector-app>
         `,
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class RootComp {
         show = true;
@@ -1216,10 +1625,19 @@ describe('projection', () => {
     describe('on containers', () => {
       it('should work when matching attributes', () => {
         let xDirectives = 0;
-        @Component({selector: 'selector-proj', template: '<ng-content select="[x]"></ng-content>'})
+        @Component({
+          selector: 'selector-proj',
+          template: '<ng-content select="[x]"></ng-content>',
+          standalone: false,
+
+          changeDetection: ChangeDetectionStrategy.Eager,
+        })
         class SelectedNgContentComp {}
 
-        @Directive({selector: '[x]'})
+        @Directive({
+          selector: '[x]',
+          standalone: false,
+        })
         class XDirective {
           constructor() {
             xDirectives++;
@@ -1230,6 +1648,9 @@ describe('projection', () => {
           selector: 'main-selector',
           template:
             '<selector-proj><ng-container x="true">Hello world!</ng-container></selector-proj>',
+          standalone: false,
+
+          changeDetection: ChangeDetectionStrategy.Eager,
         })
         class SelectorMainComp {}
 
@@ -1245,10 +1666,19 @@ describe('projection', () => {
 
       it('should work when matching classes', () => {
         let xDirectives = 0;
-        @Component({selector: 'selector-proj', template: '<ng-content select=".x"></ng-content>'})
+        @Component({
+          selector: 'selector-proj',
+          template: '<ng-content select=".x"></ng-content>',
+          standalone: false,
+
+          changeDetection: ChangeDetectionStrategy.Eager,
+        })
         class SelectedNgContentComp {}
 
-        @Directive({selector: '.x'})
+        @Directive({
+          selector: '.x',
+          standalone: false,
+        })
         class XDirective {
           constructor() {
             xDirectives++;
@@ -1259,6 +1689,9 @@ describe('projection', () => {
           selector: 'main-selector',
           template:
             '<selector-proj><ng-container class="x">Hello world!</ng-container></selector-proj>',
+          standalone: false,
+
+          changeDetection: ChangeDetectionStrategy.Eager,
         })
         class SelectorMainComp {}
 
@@ -1276,12 +1709,18 @@ describe('projection', () => {
         @Component({
           selector: 'child-comp',
           template: '<ng-content select=".nomatch"></ng-content>',
+          standalone: false,
+
+          changeDetection: ChangeDetectionStrategy.Eager,
         })
         class ChildComp {}
 
         @Component({
           selector: 'parent-comp',
-          template: `<child-comp><span *ngIf="true" class="{{'a'}}"></span></child-comp>`,
+          template: `<child-comp><span *ngIf="true" class="{{ 'a' }}"></span></child-comp>`,
+          standalone: false,
+
+          changeDetection: ChangeDetectionStrategy.Eager,
         })
         class ParentComp {}
 
@@ -1294,12 +1733,23 @@ describe('projection', () => {
     });
 
     it('selection of child element should properly work even with confusing attribute names', () => {
-      @Component({selector: 'child-comp', template: '<ng-content select=".title"></ng-content>'})
+      @Component({
+        selector: 'child-comp',
+        template: '<ng-content select=".title"></ng-content>',
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class ChildComp {}
 
       @Component({
         selector: 'parent-comp',
-        template: `<child-comp><span *ngIf="true" id="5" jjj="class" class="{{'a'}}" [title]="'abc'"></span></child-comp>`,
+        template: `<child-comp
+          ><span *ngIf="true" id="5" jjj="class" class="{{ 'a' }}" [title]="'abc'"></span
+        ></child-comp>`,
+        standalone: false,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class ParentComp {}
 
@@ -1326,12 +1776,12 @@ describe('projection', () => {
           `<ng-content select="[two]">Two fallback</ng-content>` +
           `<ng-content select="[three]">Three fallback</ng-content>
         `,
-        standalone: true,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class Projection {}
 
       @Component({
-        standalone: true,
         imports: [Projection],
         template: `
           <projection>
@@ -1339,6 +1789,8 @@ describe('projection', () => {
             <div three>Three</div>
           </projection>
         `,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class App {}
 
@@ -1353,21 +1805,22 @@ describe('projection', () => {
       @Component({
         selector: 'projection',
         template: `<ng-content>Fallback content</ng-content>`,
-        standalone: true,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class Projection {}
 
       @Component({
-        standalone: true,
         imports: [Projection],
         template: `
-            <projection>
-              <!-- One -->
+          <projection>
+            <!-- One -->
 
+            <!-- Two -->
+          </projection>
+        `,
 
-              <!-- Two -->
-            </projection>
-          `,
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class App {}
 
@@ -1380,19 +1833,23 @@ describe('projection', () => {
     it('should account for ngProjectAs when rendering fallback content', () => {
       @Component({
         selector: 'projection',
-        template: `<ng-content select="div">I have no divs</ng-content>|<ng-content select="span">I have no spans</ng-content>`,
-        standalone: true,
+        template: `<ng-content select="div">I have no divs</ng-content>|<ng-content select="span"
+            >I have no spans</ng-content
+          >`,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class Projection {}
 
       @Component({
-        standalone: true,
         imports: [Projection],
         template: `
           <projection>
             <div ngProjectAs="span">div pretending to be a span</div>
           </projection>
         `,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class App {
         @ViewChild(Projection) projection!: Projection;
@@ -1408,13 +1865,15 @@ describe('projection', () => {
     it('should not render the fallback content if there is a control flow expression', () => {
       @Component({
         selector: 'projection',
-        template: `<ng-content>Wildcard fallback</ng-content>|<ng-content select="span">Span fallback</ng-content>`,
-        standalone: true,
+        template: `<ng-content>Wildcard fallback</ng-content>|<ng-content select="span"
+            >Span fallback</ng-content
+          >`,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class Projection {}
 
       @Component({
-        standalone: true,
         imports: [Projection],
         template: `
           <projection>
@@ -1423,6 +1882,8 @@ describe('projection', () => {
             }
           </projection>
         `,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class App {
         showSpan = false;
@@ -1451,16 +1912,16 @@ describe('projection', () => {
       @Component({
         selector: 'projection',
         template: `<ng-content>Fallback</ng-content>`,
-        standalone: true,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class Projection {}
 
       @Component({
-        standalone: true,
         imports: [Projection],
-        template: `
-          <projection><ng-container/></projection>
-        `,
+        template: ` <projection><ng-container /></projection> `,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class App {
         showSpan = false;
@@ -1473,14 +1934,19 @@ describe('projection', () => {
     it('should be able to use data bindings in the fallback content', () => {
       @Component({
         selector: 'projection',
-        template: `<ng-content>Value: {{value}}</ng-content>`,
-        standalone: true,
+        template: `<ng-content>Value: {{ value }}</ng-content>`,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class Projection {
         value = 0;
       }
 
-      @Component({standalone: true, imports: [Projection], template: `<projection/>`})
+      @Component({
+        imports: [Projection],
+        template: `<projection />`,
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {
         @ViewChild(Projection) projection!: Projection;
       }
@@ -1502,9 +1968,10 @@ describe('projection', () => {
             <button (click)="callback()">Click me</button>
           </ng-content>
 
-          Value: {{value}}
+          Value: {{ value }}
         `,
-        standalone: true,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class Projection {
         value = 0;
@@ -1514,7 +1981,11 @@ describe('projection', () => {
         }
       }
 
-      @Component({standalone: true, imports: [Projection], template: `<projection/>`})
+      @Component({
+        imports: [Projection],
+        template: `<projection />`,
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {}
 
       const fixture = TestBed.createComponent(App);
@@ -1531,7 +2002,6 @@ describe('projection', () => {
 
       @Directive({
         selector: 'fallback-dir',
-        standalone: true,
       })
       class FallbackDir implements OnDestroy {
         constructor() {
@@ -1545,20 +2015,22 @@ describe('projection', () => {
 
       @Component({
         selector: 'projection',
-        template: `<ng-content><fallback-dir/></ng-content>`,
-        standalone: true,
+        template: `<ng-content><fallback-dir /></ng-content>`,
         imports: [FallbackDir],
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class Projection {}
 
       @Component({
-        standalone: true,
         imports: [Projection],
         template: `
           @if (hasProjection) {
-            <projection/>
+            <projection />
           }
         `,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class App {
         hasProjection = true;
@@ -1578,7 +2050,6 @@ describe('projection', () => {
 
       @Directive({
         selector: 'fallback-dir',
-        standalone: true,
       })
       class FallbackDir {
         constructor() {
@@ -1588,18 +2059,20 @@ describe('projection', () => {
 
       @Component({
         selector: 'projection',
-        template: `<ng-content><fallback-dir/></ng-content>`,
-        standalone: true,
+        template: `<ng-content><fallback-dir /></ng-content>`,
         imports: [FallbackDir],
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class Projection {
         @ViewChild(FallbackDir) fallback!: FallbackDir;
       }
 
       @Component({
-        standalone: true,
         imports: [Projection],
-        template: `<projection/>`,
+        template: `<projection />`,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class App {
         @ViewChild(Projection) projection!: Projection;
@@ -1615,7 +2088,6 @@ describe('projection', () => {
     it('should be able to inject the host component from inside the fallback content', () => {
       @Directive({
         selector: 'fallback-dir',
-        standalone: true,
       })
       class FallbackDir {
         host = inject(Projection);
@@ -1623,18 +2095,20 @@ describe('projection', () => {
 
       @Component({
         selector: 'projection',
-        template: `<ng-content><fallback-dir/></ng-content>`,
-        standalone: true,
+        template: `<ng-content><fallback-dir /></ng-content>`,
         imports: [FallbackDir],
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class Projection {
         @ViewChild(FallbackDir) fallback!: FallbackDir;
       }
 
       @Component({
-        standalone: true,
         imports: [Projection],
-        template: `<projection/>`,
+        template: `<projection />`,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class App {
         @ViewChild(Projection) projection!: Projection;
@@ -1648,10 +2122,11 @@ describe('projection', () => {
 
     it('should render the fallback content if content is not provided through projectableNodes', () => {
       @Component({
-        standalone: true,
         template:
           `<ng-content>One fallback</ng-content>|` +
           `<ng-content>Two fallback</ng-content>|<ng-content>Three fallback</ng-content>`,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class Projection {}
 
@@ -1673,10 +2148,11 @@ describe('projection', () => {
 
     it('should render the content through projectableNodes along with fallback', () => {
       @Component({
-        standalone: true,
         template:
           `<ng-content>One fallback</ng-content>|` +
           `<ng-content>Two fallback</ng-content>|<ng-content>Three fallback</ng-content>`,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class Projection {}
 
@@ -1700,8 +2176,11 @@ describe('projection', () => {
     it('should render fallback content when ng-content is inside an ng-template', () => {
       @Component({
         selector: 'projection',
-        template: `<ng-container #ref/><ng-template #template><ng-content>Fallback</ng-content></ng-template>`,
-        standalone: true,
+        template: `<ng-container #ref /><ng-template #template
+            ><ng-content>Fallback</ng-content></ng-template
+          >`,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class Projection {
         @ViewChild('template') template!: TemplateRef<unknown>;
@@ -1713,9 +2192,10 @@ describe('projection', () => {
       }
 
       @Component({
-        standalone: true,
         imports: [Projection],
-        template: `<projection/>`,
+        template: `<projection />`,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class App {
         @ViewChild(Projection) projection!: Projection;
@@ -1737,7 +2217,8 @@ describe('projection', () => {
           <ng-content select="[inner-header]">Inner header fallback</ng-content>
           <ng-content select="[inner-footer]">Inner footer fallback</ng-content>
         `,
-        standalone: true,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class InnerProjection {}
 
@@ -1749,19 +2230,21 @@ describe('projection', () => {
             <ng-content select="[outer-footer]" inner-footer>Outer footer fallback</ng-content>
           </inner-projection>
         `,
-        standalone: true,
         imports: [InnerProjection],
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class Projection {}
 
       @Component({
-        standalone: true,
         imports: [Projection],
         template: `
           <projection>
             <span outer-header>Outer header override</span>
           </projection>
         `,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class App {}
 
@@ -1777,8 +2260,9 @@ describe('projection', () => {
 
       @Component({
         selector: 'fallback',
-        standalone: true,
         template: 'Fallback',
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class Fallback {
         constructor() {
@@ -1788,16 +2272,18 @@ describe('projection', () => {
 
       @Component({
         selector: 'projection',
-        template: `<ng-content><fallback/></ng-content>`,
-        standalone: true,
+        template: `<ng-content><fallback /></ng-content>`,
         imports: [Fallback],
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class Projection {}
 
       @Component({
-        standalone: true,
         imports: [Projection],
         template: `<projection>Hello</projection>`,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class App {}
 
@@ -1813,17 +2299,19 @@ describe('projection', () => {
         @Component({
           selector: 'projection',
           template: `<ng-content>Fallback</ng-content>`,
-          standalone: true,
+
+          changeDetection: ChangeDetectionStrategy.Eager,
         })
         class Projection {}
 
         @Component({
-          standalone: true,
           imports: [Projection],
           template: `
             <projection>Content</projection>
-            <projection/>
+            <projection />
           `,
+
+          changeDetection: ChangeDetectionStrategy.Eager,
         })
         class App {}
 
@@ -1841,17 +2329,19 @@ describe('projection', () => {
         @Component({
           selector: 'projection',
           template: `<ng-content>Fallback</ng-content>`,
-          standalone: true,
+
+          changeDetection: ChangeDetectionStrategy.Eager,
         })
         class Projection {}
 
         @Component({
-          standalone: true,
           imports: [Projection],
           template: `
-            <projection/>
+            <projection />
             <projection>Content</projection>
           `,
+
+          changeDetection: ChangeDetectionStrategy.Eager,
         })
         class App {}
 
@@ -1861,5 +2351,36 @@ describe('projection', () => {
         );
       },
     );
+
+    it('should translate elements inside fallback content', () => {
+      @Component({
+        selector: 'projection',
+        template: `
+          <ng-content>
+            <span i18n="@@MY_ID">a <b>b</b> c</span>
+          </ng-content>
+        `,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
+      class Projection {}
+
+      @Component({
+        imports: [Projection],
+        template: `<projection />`,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
+      class App {}
+
+      loadTranslations({
+        MY_ID: '1 {$START_BOLD_TEXT}2{$CLOSE_BOLD_TEXT} 3',
+      });
+
+      const fixture = TestBed.createComponent(App);
+      expect(getElementHtml(fixture.nativeElement)).toContain(
+        `<projection><span>1 <b>2</b> 3</span></projection>`,
+      );
+    });
   });
 });

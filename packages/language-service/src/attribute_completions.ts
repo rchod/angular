@@ -6,18 +6,25 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
-import {CssSelector, SelectorMatcher, TmplAstElement, TmplAstTemplate} from '@angular/compiler';
+import {
+  CssSelector,
+  MatchSource,
+  SelectorMatcher,
+  TmplAstElement,
+  TmplAstTemplate,
+} from '@angular/compiler';
 import {
   ElementSymbol,
   PotentialDirective,
   TemplateSymbol,
   TemplateTypeChecker,
   TypeCheckableDirectiveMeta,
-} from '@angular/compiler-cli/src/ngtsc/typecheck/api';
+} from '@angular/compiler-cli';
 import ts from 'typescript';
 
 import {DisplayInfoKind, unsafeCastDisplayInfoKindToScriptElementKind} from './utils/display_parts';
 import {makeElementSelector} from './utils';
+import {getClassDeclarationFromSymbolReference} from './utils/ts_utils';
 
 /**
  * Differentiates different kinds of `AttributeCompletion`s.
@@ -210,6 +217,8 @@ export function buildAttributeCompletionTable(
   component: ts.ClassDeclaration,
   element: TmplAstElement | TmplAstTemplate,
   checker: TemplateTypeChecker,
+  ls: ts.LanguageService,
+  includeExternalModule: boolean | undefined,
 ): Map<string, AttributeCompletion> {
   const table = new Map<string, AttributeCompletion>();
 
@@ -223,8 +232,9 @@ export function buildAttributeCompletionTable(
     // An `ElementSymbol` was available. This means inputs and outputs for directives on the
     // element can be added to the completion table.
     for (const dirSymbol of symbol.directives) {
-      const directive = dirSymbol.tsSymbol.valueDeclaration;
-      if (!ts.isClassDeclaration(directive)) {
+      const directive = getClassDeclarationFromSymbolReference(ls, dirSymbol.ref);
+
+      if (!directive || !ts.isClassDeclaration(directive)) {
         continue;
       }
       presentDirectives.add(directive);
@@ -237,7 +247,7 @@ export function buildAttributeCompletionTable(
       for (const {classPropertyName, bindingPropertyName} of meta.inputs) {
         let propertyName: string;
 
-        if (dirSymbol.isHostDirective) {
+        if (dirSymbol.matchSource === MatchSource.HostDirective) {
           if (!dirSymbol.exposedInputs?.hasOwnProperty(bindingPropertyName)) {
             continue;
           }
@@ -262,7 +272,7 @@ export function buildAttributeCompletionTable(
       for (const {classPropertyName, bindingPropertyName} of meta.outputs) {
         let propertyName: string;
 
-        if (dirSymbol.isHostDirective) {
+        if (dirSymbol.matchSource === MatchSource.HostDirective) {
           if (!dirSymbol.exposedOutputs?.hasOwnProperty(bindingPropertyName)) {
             continue;
           }
@@ -287,16 +297,17 @@ export function buildAttributeCompletionTable(
 
   // Next, explore hypothetical directives and determine if the addition of any single attributes
   // can cause the directive to match the element.
-  const directivesInScope = checker
-    .getPotentialTemplateDirectives(component)
-    .filter((d) => d.isInScope);
-  if (directivesInScope !== null) {
+  const potentialDirectives = checker.getPotentialTemplateDirectives(component, ls, {
+    includeExternalModule: includeExternalModule ?? false,
+  });
+  if (potentialDirectives !== null) {
     const elementSelector = makeElementSelector(element);
 
-    for (const dirInScope of directivesInScope) {
-      const directive = dirInScope.tsSymbol.valueDeclaration;
+    for (const currentDir of potentialDirectives) {
+      const directive = getClassDeclarationFromSymbolReference(ls, currentDir.ref);
+
       // Skip directives that are present on the element.
-      if (!ts.isClassDeclaration(directive) || presentDirectives.has(directive)) {
+      if (!directive || !ts.isClassDeclaration(directive) || presentDirectives.has(directive)) {
         continue;
       }
 
@@ -339,7 +350,7 @@ export function buildAttributeCompletionTable(
               // This attribute corresponds to an input binding.
               table.set(attrName, {
                 kind: AttributeCompletionKind.DirectiveInput,
-                directive: dirInScope,
+                directive: currentDir,
                 propertyName: attrName,
                 classPropertyName:
                   meta.inputs.getByBindingPropertyName(attrName)![0].classPropertyName,
@@ -349,7 +360,7 @@ export function buildAttributeCompletionTable(
               // This attribute corresponds to an output binding.
               table.set(attrName, {
                 kind: AttributeCompletionKind.DirectiveOutput,
-                directive: dirInScope,
+                directive: currentDir,
                 eventName: attrName,
                 classPropertyName:
                   meta.outputs.getByBindingPropertyName(attrName)![0].classPropertyName,
@@ -360,7 +371,7 @@ export function buildAttributeCompletionTable(
               table.set(attrName, {
                 kind: AttributeCompletionKind.DirectiveAttribute,
                 attribute: attrName,
-                directive: dirInScope,
+                directive: currentDir,
               });
             }
           }
@@ -379,7 +390,7 @@ export function buildAttributeCompletionTable(
           table.set(attrName, {
             kind: AttributeCompletionKind.StructuralDirectiveAttribute,
             attribute: attrName,
-            directive: dirInScope,
+            directive: currentDir,
           });
         }
       }
@@ -409,7 +420,7 @@ export function buildAttributeCompletionTable(
 }
 
 function buildSnippet(insertSnippet: true | undefined, text: string): string | undefined {
-  return insertSnippet ? `${text}="$1"` : undefined;
+  return insertSnippet ? `${text.replace(/\$/gi, '\\$')}="$1"` : undefined;
 }
 
 /**
@@ -449,6 +460,9 @@ export function addAttributeCompletionEntries(
   replacementSpan: ts.TextSpan | undefined,
   insertSnippet: true | undefined,
 ): void {
+  const directive = 'directive' in completion ? completion.directive : null;
+  const tsEntryData = directive?.tsCompletionEntryInfos?.[0]?.tsCompletionEntryData;
+
   switch (completion.kind) {
     case AttributeCompletionKind.DirectiveAttribute: {
       entries.push({
@@ -456,6 +470,7 @@ export function addAttributeCompletionEntries(
         name: completion.attribute,
         sortText: AsciiSortPriority.Second + completion.attribute,
         replacementSpan,
+        data: tsEntryData,
       });
       break;
     }
@@ -471,6 +486,7 @@ export function addAttributeCompletionEntries(
         isSnippet: insertSnippet,
         sortText: AsciiSortPriority.Second + prefix + completion.attribute,
         replacementSpan,
+        data: tsEntryData,
       });
       break;
     }
@@ -484,6 +500,7 @@ export function addAttributeCompletionEntries(
           isSnippet: insertSnippet,
           sortText: AsciiSortPriority.First + completion.propertyName,
           replacementSpan,
+          data: tsEntryData,
         });
         // If the directive supports banana-in-a-box for this input, offer that as well.
         if (completion.twoWayBindingSupported) {
@@ -495,6 +512,7 @@ export function addAttributeCompletionEntries(
             // This completion should sort after the property binding.
             sortText: AsciiSortPriority.First + completion.propertyName + '_1',
             replacementSpan,
+            data: tsEntryData,
           });
         }
         // Offer a completion of the input binding as an attribute.
@@ -506,6 +524,7 @@ export function addAttributeCompletionEntries(
           // This completion should sort after both property binding options (one-way and two-way).
           sortText: AsciiSortPriority.First + completion.propertyName + '_2',
           replacementSpan,
+          data: tsEntryData,
         });
       } else {
         entries.push({
@@ -515,6 +534,7 @@ export function addAttributeCompletionEntries(
           isSnippet: insertSnippet,
           sortText: AsciiSortPriority.First + completion.propertyName,
           replacementSpan,
+          data: tsEntryData,
         });
       }
       break;
@@ -528,6 +548,7 @@ export function addAttributeCompletionEntries(
           isSnippet: insertSnippet,
           sortText: AsciiSortPriority.First + completion.eventName,
           replacementSpan,
+          data: tsEntryData,
         });
       } else {
         entries.push({
@@ -537,6 +558,7 @@ export function addAttributeCompletionEntries(
           isSnippet: insertSnippet,
           sortText: AsciiSortPriority.First + completion.eventName,
           replacementSpan,
+          data: tsEntryData,
         });
       }
       break;
@@ -584,25 +606,41 @@ export function addAttributeCompletionEntries(
   }
 }
 
-export function getAttributeCompletionSymbol(
-  completion: AttributeCompletion,
+function getDirectiveSymbol(
+  directive: PotentialDirective,
   checker: ts.TypeChecker,
+  ls?: ts.LanguageService,
 ): ts.Symbol | null {
-  switch (completion.kind) {
+  if (!ls) return null;
+  const classDecl = getClassDeclarationFromSymbolReference(ls, directive.ref);
+  if (!classDecl || !classDecl.name) return null;
+  return checker.getSymbolAtLocation(classDecl.name) ?? null;
+}
+
+export function getAttributeCompletionSymbol(
+  attrKind: AttributeCompletionKind,
+  directive: PotentialDirective | null,
+  classPropertyName: string | null,
+  checker: ts.TypeChecker,
+  ls?: ts.LanguageService,
+): ts.Symbol | null {
+  switch (attrKind) {
     case AttributeCompletionKind.DomAttribute:
     case AttributeCompletionKind.DomEvent:
     case AttributeCompletionKind.DomProperty:
       return null;
     case AttributeCompletionKind.DirectiveAttribute:
     case AttributeCompletionKind.StructuralDirectiveAttribute:
-      return completion.directive.tsSymbol;
+      return directive ? getDirectiveSymbol(directive, checker, ls) : null;
     case AttributeCompletionKind.DirectiveInput:
     case AttributeCompletionKind.DirectiveOutput:
-      return (
-        checker
-          .getDeclaredTypeOfSymbol(completion.directive.tsSymbol)
-          .getProperty(completion.classPropertyName) ?? null
-      );
+      if (directive === null || classPropertyName === null) {
+        return null;
+      }
+
+      const dirSymbol = getDirectiveSymbol(directive, checker, ls);
+      if (!dirSymbol) return null;
+      return checker.getDeclaredTypeOfSymbol(dirSymbol).getProperty(classPropertyName) ?? null;
   }
 }
 

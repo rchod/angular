@@ -7,25 +7,17 @@
  */
 
 import {compileNgModuleFactory} from '../application/application_ngmodule_factory_compiler';
-import {
-  _callAndReportToErrorHandler,
-  BootstrapOptions,
-  optionsReducer,
-} from '../application/application_ref';
-import {
-  getNgZoneOptions,
-  internalProvideZoneChangeDetection,
-} from '../change_detection/scheduling/ng_zone_scheduling';
-import {ChangeDetectionScheduler} from '../change_detection/scheduling/zoneless_scheduling';
-import {ChangeDetectionSchedulerImpl} from '../change_detection/scheduling/zoneless_scheduling_impl';
-import {Injectable, Injector} from '../di';
+import {BootstrapOptions, optionsReducer} from '../application/application_ref';
+import {validAppIdInitializer} from '../application/application_tokens';
+import {provideZonelessChangeDetectionInternal} from '../change_detection/scheduling/zoneless_scheduling_impl';
+import {EnvironmentProviders, Injectable, Injector, Provider} from '../di';
+import {errorHandlerEnvironmentInitializer} from '../error_handler';
 import {RuntimeError, RuntimeErrorCode} from '../errors';
 import {Type} from '../interface/type';
 import {CompilerOptions} from '../linker';
 import {NgModuleFactory, NgModuleRef} from '../linker/ng_module_factory';
 import {createNgModuleRefWithProviders} from '../render3/ng_module_ref';
-import {getNgZone, NgZone} from '../zone/ng_zone';
-import {bootstrap} from './bootstrap';
+import {bootstrap, setModuleBootstrapImpl} from './bootstrap';
 import {PLATFORM_DESTROY_LISTENERS} from './platform_destroy_listeners';
 
 /**
@@ -54,24 +46,13 @@ export class PlatformRef {
    */
   bootstrapModuleFactory<M>(
     moduleFactory: NgModuleFactory<M>,
-    options?: BootstrapOptions,
+    options?: BootstrapOptions & {applicationProviders?: Array<Provider | EnvironmentProviders>},
   ): Promise<NgModuleRef<M>> {
-    const scheduleInRootZone = (options as any)?.scheduleInRootZone;
-    const ngZoneFactory = () =>
-      getNgZone(options?.ngZone, {
-        ...getNgZoneOptions({
-          eventCoalescing: options?.ngZoneEventCoalescing,
-          runCoalescing: options?.ngZoneRunCoalescing,
-        }),
-        scheduleInRootZone,
-      });
-    const ignoreChangesOutsideZone = options?.ignoreChangesOutsideZone;
     const allAppProviders = [
-      internalProvideZoneChangeDetection({
-        ngZoneFactory,
-        ignoreChangesOutsideZone,
-      }),
-      {provide: ChangeDetectionScheduler, useExisting: ChangeDetectionSchedulerImpl},
+      provideZonelessChangeDetectionInternal(),
+      ...(options?.applicationProviders ?? []),
+      errorHandlerEnvironmentInitializer,
+      ...(ngDevMode ? [validAppIdInitializer] : []),
     ];
     const moduleRef = createNgModuleRefWithProviders(
       moduleFactory.moduleType,
@@ -79,7 +60,12 @@ export class PlatformRef {
       allAppProviders,
     );
 
-    return bootstrap({moduleRef, allPlatformModules: this._modules});
+    setModuleBootstrapImpl();
+    return bootstrap({
+      moduleRef,
+      allPlatformModules: this._modules,
+      platformInjector: this.injector,
+    });
   }
 
   /**
@@ -88,7 +74,7 @@ export class PlatformRef {
    * @usageNotes
    * ### Simple Example
    *
-   * ```typescript
+   * ```ts
    * @NgModule({
    *   imports: [BrowserModule]
    * })
@@ -101,10 +87,15 @@ export class PlatformRef {
   bootstrapModule<M>(
     moduleType: Type<M>,
     compilerOptions:
-      | (CompilerOptions & BootstrapOptions)
-      | Array<CompilerOptions & BootstrapOptions> = [],
+      | (CompilerOptions &
+          BootstrapOptions & {applicationProviders?: Array<Provider | EnvironmentProviders>})
+      | Array<
+          CompilerOptions &
+            BootstrapOptions & {applicationProviders?: Array<Provider | EnvironmentProviders>}
+        > = [],
   ): Promise<NgModuleRef<M>> {
     const options = optionsReducer({}, compilerOptions);
+    setModuleBootstrapImpl();
     return compileNgModuleFactory(this.injector, options, moduleType).then((moduleFactory) =>
       this.bootstrapModuleFactory(moduleFactory, options),
     );

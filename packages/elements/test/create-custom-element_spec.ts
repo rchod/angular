@@ -12,12 +12,15 @@ import {
   DoBootstrap,
   EventEmitter,
   Injector,
+  input,
   Input,
+  isSignal,
   NgModule,
   Output,
+  signal,
+  WritableSignal,
 } from '@angular/core';
-import {BrowserModule} from '@angular/platform-browser';
-import {platformBrowserDynamic} from '@angular/platform-browser-dynamic';
+import {BrowserModule, platformBrowser} from '@angular/platform-browser';
 import {Subject} from 'rxjs';
 
 import {createCustomElement, NgElementConstructor} from '../src/create-custom-element';
@@ -31,6 +34,7 @@ interface WithFooBar {
   fooFoo: string;
   barBar: string;
   fooTransformed: unknown;
+  fooSignal: string | null;
 }
 
 describe('createCustomElement', () => {
@@ -45,7 +49,7 @@ describe('createCustomElement', () => {
     testContainer = document.createElement('div');
     document.body.appendChild(testContainer);
     destroyPlatform();
-    platformBrowserDynamic()
+    platformBrowser()
       .bootstrapModule(TestModule)
       .then((ref) => {
         injector = ref.injector;
@@ -66,7 +70,12 @@ describe('createCustomElement', () => {
   });
 
   it('should use a default strategy for converting component inputs', () => {
-    expect(NgElementCtor.observedAttributes).toEqual(['foo-foo', 'barbar', 'foo-transformed']);
+    expect(NgElementCtor.observedAttributes).toEqual([
+      'foo-foo',
+      'barbar',
+      'foo-transformed',
+      'foo-signal',
+    ]);
   });
 
   it('should send input values from attributes when connected', () => {
@@ -74,12 +83,14 @@ describe('createCustomElement', () => {
     element.setAttribute('foo-foo', 'value-foo-foo');
     element.setAttribute('barbar', 'value-barbar');
     element.setAttribute('foo-transformed', 'truthy');
+    element.setAttribute('foo-signal', 'value-signal');
     element.connectedCallback();
     expect(strategy.connectedElement).toBe(element);
 
     expect(strategy.getInputValue('fooFoo')).toBe('value-foo-foo');
     expect(strategy.getInputValue('barBar')).toBe('value-barbar');
     expect(strategy.getInputValue('fooTransformed')).toBe(true);
+    expect(strategy.getInputValue('fooSignal')).toBe('value-signal');
   });
 
   it('should work even if the constructor is not called (due to polyfill)', () => {
@@ -95,12 +106,14 @@ describe('createCustomElement', () => {
     element.setAttribute('foo-foo', 'value-foo-foo');
     element.setAttribute('barbar', 'value-barbar');
     element.setAttribute('foo-transformed', 'truthy');
+    element.setAttribute('foo-signal', 'value-signal');
     element.connectedCallback();
 
     expect(strategy.connectedElement).toBe(element);
     expect(strategy.getInputValue('fooFoo')).toBe('value-foo-foo');
     expect(strategy.getInputValue('barBar')).toBe('value-barbar');
     expect(strategy.getInputValue('fooTransformed')).toBe(true);
+    expect(strategy.getInputValue('fooSignal')).toBe('value-signal');
   });
 
   it('should listen to output events after connected', () => {
@@ -174,10 +187,12 @@ describe('createCustomElement', () => {
     element.fooFoo = 'foo-foo-value';
     element.barBar = 'barBar-value';
     element.fooTransformed = 'truthy';
+    element.fooSignal = 'value-signal';
 
     expect(strategy.inputs.get('fooFoo')).toBe('foo-foo-value');
     expect(strategy.inputs.get('barBar')).toBe('barBar-value');
     expect(strategy.inputs.get('fooTransformed')).toBe(true);
+    expect(strategy.inputs.get('fooSignal')).toBe('value-signal');
   });
 
   it('should properly handle getting/setting properties on the element even if the constructor is not called', () => {
@@ -191,10 +206,12 @@ describe('createCustomElement', () => {
     element.fooFoo = 'foo-foo-value';
     element.barBar = 'barBar-value';
     element.fooTransformed = 'truthy';
+    element.fooSignal = 'value-signal';
 
     expect(strategy.inputs.get('fooFoo')).toBe('foo-foo-value');
     expect(strategy.inputs.get('barBar')).toBe('barBar-value');
     expect(strategy.inputs.get('fooTransformed')).toBe(true);
+    expect(strategy.inputs.get('fooSignal')).toBe('value-signal');
   });
 
   it('should capture properties set before upgrading the element', () => {
@@ -204,10 +221,12 @@ describe('createCustomElement', () => {
       fooFoo: 'foo-prop-value',
       barBar: 'bar-prop-value',
       fooTransformed: 'truthy' as unknown,
+      fooSignal: 'value-signal',
     });
     expect(element.fooFoo).toBe('foo-prop-value');
     expect(element.barBar).toBe('bar-prop-value');
     expect(element.fooTransformed).toBe('truthy');
+    expect(element.fooSignal).toBe('value-signal');
 
     // Upgrade the element to a Custom Element and insert it into the DOM.
     customElements.define(selector, ElementCtor);
@@ -215,10 +234,12 @@ describe('createCustomElement', () => {
     expect(element.fooFoo).toBe('foo-prop-value');
     expect(element.barBar).toBe('bar-prop-value');
     expect(element.fooTransformed).toBe(true);
+    expect(element.fooSignal).toBe('value-signal');
 
     expect(strategy.inputs.get('fooFoo')).toBe('foo-prop-value');
     expect(strategy.inputs.get('barBar')).toBe('bar-prop-value');
     expect(strategy.inputs.get('fooTransformed')).toBe(true);
+    expect(strategy.inputs.get('fooSignal')).toBe('value-signal');
   });
 
   it('should capture properties set after upgrading the element but before inserting it into the DOM', () => {
@@ -228,10 +249,12 @@ describe('createCustomElement', () => {
       fooFoo: 'foo-prop-value',
       barBar: 'bar-prop-value',
       fooTransformed: 'truthy' as unknown,
+      fooSignal: 'value-signal',
     });
     expect(element.fooFoo).toBe('foo-prop-value');
     expect(element.barBar).toBe('bar-prop-value');
     expect(element.fooTransformed).toBe('truthy');
+    expect(element.fooSignal).toBe('value-signal');
 
     // Upgrade the element to a Custom Element (without inserting it into the DOM) and update a
     // property.
@@ -239,19 +262,23 @@ describe('createCustomElement', () => {
     customElements.upgrade(element);
     element.barBar = 'bar-prop-value-2';
     element.fooTransformed = '';
+    element.fooSignal = 'value-signal-changed';
     expect(element.fooFoo).toBe('foo-prop-value');
     expect(element.barBar).toBe('bar-prop-value-2');
     expect(element.fooTransformed).toBe('');
+    expect(element.fooSignal).toBe('value-signal-changed');
 
     // Insert the element into the DOM.
     testContainer.appendChild(element);
     expect(element.fooFoo).toBe('foo-prop-value');
     expect(element.barBar).toBe('bar-prop-value-2');
     expect(element.fooTransformed).toBe(false);
+    expect(element.fooSignal).toBe('value-signal-changed');
 
     expect(strategy.inputs.get('fooFoo')).toBe('foo-prop-value');
     expect(strategy.inputs.get('barBar')).toBe('bar-prop-value-2');
     expect(strategy.inputs.get('fooTransformed')).toBe(false);
+    expect(strategy.inputs.get('fooSignal')).toBe('value-signal-changed');
   });
 
   it('should allow overwriting properties with attributes after upgrading the element but before inserting it into the DOM', () => {
@@ -261,10 +288,12 @@ describe('createCustomElement', () => {
       fooFoo: 'foo-prop-value',
       barBar: 'bar-prop-value',
       fooTransformed: 'truthy' as unknown,
+      fooSignal: 'value-signal',
     });
     expect(element.fooFoo).toBe('foo-prop-value');
     expect(element.barBar).toBe('bar-prop-value');
     expect(element.fooTransformed).toBe('truthy');
+    expect(element.fooSignal).toBe('value-signal');
 
     // Upgrade the element to a Custom Element (without inserting it into the DOM) and set an
     // attribute.
@@ -275,16 +304,42 @@ describe('createCustomElement', () => {
     expect(element.fooFoo).toBe('foo-prop-value');
     expect(element.barBar).toBe('bar-attr-value');
     expect(element.fooTransformed).toBe(false);
+    expect(element.fooSignal).toBe('value-signal');
 
     // Insert the element into the DOM.
     testContainer.appendChild(element);
     expect(element.fooFoo).toBe('foo-prop-value');
     expect(element.barBar).toBe('bar-attr-value');
     expect(element.fooTransformed).toBe(false);
+    expect(element.fooSignal).toBe('value-signal');
 
     expect(strategy.inputs.get('fooFoo')).toBe('foo-prop-value');
     expect(strategy.inputs.get('barBar')).toBe('bar-attr-value');
     expect(strategy.inputs.get('fooTransformed')).toBe(false);
+    expect(strategy.inputs.get('fooSignal')).toBe('value-signal');
+  });
+
+  it('should return value from input getter for input signal', () => {
+    const {selector, ElementCtor} = createTestCustomElementForSignal();
+    const element = document.createElement(selector) as HTMLElement & {
+      fooSignal: string | null;
+    };
+    element.setAttribute('foo-signal', 'value-signal');
+
+    customElements.define(selector, ElementCtor);
+    testContainer.appendChild(element);
+    expect(element.fooSignal).toBe('value-signal');
+  });
+
+  it('should not unpack signal value with input decorator having signal as value', () => {
+    const {selector, ElementCtor} = createTestCustomElementForSignal();
+    const element = document.createElement(selector) as HTMLElement & {
+      fooFoo: WritableSignal<string | null>;
+    };
+
+    customElements.define(selector, ElementCtor);
+    testContainer.appendChild(element);
+    expect(isSignal(element.fooFoo)).toBe(true);
   });
 
   // Helpers
@@ -303,21 +358,45 @@ describe('createCustomElement', () => {
     };
   }
 
+  function createTestCustomElementForSignal() {
+    return {
+      selector: `test-element-${++selectorUid}`,
+      ElementCtor: createCustomElement(TestSignalComponent, {injector}),
+    };
+  }
+
   @Component({
     selector: 'test-component',
     template: 'TestComponent|foo({{ fooFoo }})|bar({{ barBar }})',
+    standalone: false,
   })
   class TestComponent {
     @Input() fooFoo: string = 'foo';
     @Input('barbar') barBar!: string;
     @Input({transform: (value: unknown) => !!value}) fooTransformed!: boolean;
 
+    // This needs to apply the decorator and pass `isSignal`, because
+    // the compiler transform doesn't run against JIT tests.
+    @Input({isSignal: true} as Input) fooSignal = input<string | null>(null);
+
     @Output() bazBaz = new EventEmitter<boolean>();
     @Output('quxqux') quxQux = new EventEmitter<Object>();
   }
+
+  @Component({
+    selector: 'test-signal-component',
+    template: 'TestSignalComponent|foo({{ fooFoo() }})|signal({{ fooSignal() }})',
+    standalone: false,
+  })
+  class TestSignalComponent {
+    @Input() fooFoo = signal<string | null>(null);
+    // This needs to apply the decorator and pass `isSignal`, because
+    // the compiler transform doesn't run against JIT tests.
+    @Input({isSignal: true} as Input) fooSignal = input<string | null>(null);
+  }
   @NgModule({
     imports: [BrowserModule],
-    declarations: [TestComponent],
+    declarations: [TestComponent, TestSignalComponent],
   })
   class TestModule implements DoBootstrap {
     ngDoBootstrap() {}

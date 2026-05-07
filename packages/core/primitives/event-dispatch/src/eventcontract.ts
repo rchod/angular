@@ -30,11 +30,7 @@
  * possible and thus its dependencies to a minimum.
  */
 
-import {
-  EarlyJsactionData,
-  EarlyJsactionDataContainer,
-  removeAllEventListeners,
-} from './earlyeventcontract';
+import {EarlyJsactionData, removeAllEventListeners} from './earlyeventcontract';
 import * as eventLib from './event';
 import {EventContractContainerManager} from './event_contract_container';
 import {MOUSE_SPECIAL_SUPPORT} from './event_contract_defines';
@@ -149,8 +145,11 @@ export class EventContract implements UnrenamedEventContract {
    *     to subscribe to jsaction="transitionEnd:foo" while the underlying
    *     event is webkitTransitionEnd in one browser and mozTransitionEnd
    *     in another.
+   *
+   * @param passive A boolean value that, if `true`, indicates that the event
+   *     handler will never call `preventDefault()`.
    */
-  addEvent(eventType: string, prefixedEventType?: string) {
+  addEvent(eventType: string, prefixedEventType?: string, passive?: boolean) {
     if (eventType in this.eventHandlers || !this.containerManager) {
       return;
     }
@@ -174,11 +173,15 @@ export class EventContract implements UnrenamedEventContract {
       this.browserEventTypeToExtraEventTypes[browserEventType] = eventTypes;
     }
 
-    this.containerManager.addEventListener(browserEventType, (element: Element) => {
-      return (event: Event) => {
-        eventHandler(eventType, event, element);
-      };
-    });
+    this.containerManager.addEventListener(
+      browserEventType,
+      (element: Element) => {
+        return (event: Event) => {
+          eventHandler(eventType, event, element);
+        };
+      },
+      passive,
+    );
   }
 
   /**
@@ -247,7 +250,7 @@ export class EventContract implements UnrenamedEventContract {
    * after it has been cleaned up.
    */
   cleanUp() {
-    this.containerManager!.cleanUp();
+    this.containerManager?.cleanUp();
     this.containerManager = null;
     this.eventHandlers = {};
     this.browserEventTypeToExtraEventTypes = {};

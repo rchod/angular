@@ -23,6 +23,8 @@ export enum ErrorCode {
   VALUE_HAS_WRONG_TYPE = 1010,
   VALUE_NOT_LITERAL = 1011,
 
+  DUPLICATE_DECORATED_PROPERTIES = 1012,
+
   /**
    * Raised when an initializer API is annotated with an unexpected decorator.
    *
@@ -49,6 +51,11 @@ export enum ErrorCode {
    * and the given access modifiers (e.g. `private`) are not allowed.
    */
   INITIALIZER_API_DISALLOWED_MEMBER_VISIBILITY = 1053,
+
+  /**
+   * Raised whenever there are duplicate binding property names for outputs, inputs & models.
+   */
+  DUPLICATE_BINDING_NAME = 1054,
 
   /**
    * An Angular feature, like inputs, outputs or queries is incorrectly
@@ -160,6 +167,33 @@ export enum ErrorCode {
    */
   NON_STANDALONE_NOT_ALLOWED = 2023,
 
+  /**
+   * Raised when a named template dependency isn't defined in the component's source file.
+   */
+  MISSING_NAMED_TEMPLATE_DEPENDENCY = 2024,
+
+  /**
+   * Raised if an incorrect type is used for a named template dependency (e.g. directive
+   * class used as a component).
+   */
+  INCORRECT_NAMED_TEMPLATE_DEPENDENCY_TYPE = 2025,
+
+  /**
+   * Raised for `@Component` fields that aren't supported in a selectorless context.
+   */
+  UNSUPPORTED_SELECTORLESS_COMPONENT_FIELD = 2026,
+
+  /**
+   * A component is using both the `animations` property and `animate.enter` or `animate.leave`
+   * in the template.
+   */
+  COMPONENT_ANIMATIONS_CONFLICT = 2027,
+
+  /**
+   * Raised when an `@Service` class is using constructor dependency injection.
+   */
+  SERVICE_CONSTRUCTOR_DI = 2028,
+
   SYMBOL_NOT_EXPORTED = 3001,
   /**
    * Raised when a relationship between directives and/or pipes would cause a cyclic import to be
@@ -177,6 +211,7 @@ export enum ErrorCode {
   CONFIG_EXTENDED_DIAGNOSTICS_IMPLIES_STRICT_TEMPLATES = 4003,
   CONFIG_EXTENDED_DIAGNOSTICS_UNKNOWN_CATEGORY_LABEL = 4004,
   CONFIG_EXTENDED_DIAGNOSTICS_UNKNOWN_CHECK = 4005,
+  CONFIG_EMIT_DECLARATION_ONLY_UNSUPPORTED = 4006,
 
   /**
    * Raised when a host expression has a parse error, such as a host listener or host binding
@@ -273,7 +308,7 @@ export enum ErrorCode {
    * The left-hand side of an assignment expression was a template variable. Effectively, the
    * template looked like:
    *
-   * ```
+   * ```html
    * <ng-template let-something>
    *   <button (click)="something = ...">...</button>
    * </ng-template>
@@ -308,7 +343,7 @@ export enum ErrorCode {
    * The tracking expression of a `for` loop block is accessing a variable that is unavailable,
    * for example:
    *
-   * ```
+   * ```angular-html
    * <ng-template let-ref>
    *   @for (item of items; track ref) {}
    * </ng-template>
@@ -320,7 +355,7 @@ export enum ErrorCode {
    * The trigger of a `defer` block cannot access its trigger element,
    * either because it doesn't exist or it's in a different view.
    *
-   * ```
+   * ```angular-html
    * @defer (on interaction(trigger)) {...}
    *
    * <ng-template>
@@ -334,7 +369,7 @@ export enum ErrorCode {
    * A control flow node is projected at the root of a component and is preventing its direct
    * descendants from being projected, because it has more than one root node.
    *
-   * ```
+   * ```angular-html
    * <comp>
    *  @if (expr) {
    *    <div projectsIntoSlot></div>
@@ -373,10 +408,62 @@ export enum ErrorCode {
   CONFLICTING_LET_DECLARATION = 8017,
 
   /**
+   * A binding inside selectorless directive syntax did
+   * not match any inputs/outputs of the directive.
+   */
+  UNCLAIMED_DIRECTIVE_BINDING = 8018,
+
+  /**
+   * An `@defer` block with an implicit trigger does not have a placeholder, for example:
+   *
+   * ```
+   * @defer(on viewport) {
+   *   Hello
+   * }
+   * ```
+   */
+  DEFER_IMPLICIT_TRIGGER_MISSING_PLACEHOLDER = 8019,
+
+  /**
+   * The `@placeholder` for an implicit `@defer` trigger is not set up correctly, for example:
+   *
+   * ```
+   * @defer(on viewport) {
+   *   Hello
+   * } @placeholder {
+   *   <!-- Multiple root nodes. -->
+   *   <button></button>
+   *   <div></div>
+   * }
+   * ```
+   */
+  DEFER_IMPLICIT_TRIGGER_INVALID_PLACEHOLDER = 8020,
+
+  /**
+   * Raised when an `@defer` block defines unreachable or redundant triggers.
+   * Examples: multiple main triggers, 'on immediate' together with other mains or any prefetch,
+   * prefetch timer delay that is not earlier than the main timer, or an identical prefetch
+   */
+  DEFER_TRIGGER_MISCONFIGURATION = 8021,
+
+  /** Raised when the user has an unsupported binding on a `FormField` directive. */
+  FORM_FIELD_UNSUPPORTED_BINDING = 8022,
+
+  /**
+   * Raised when multiple components in the compilation scope match a given element in a template.
+   */
+  MULTIPLE_MATCHING_COMPONENTS = 8023,
+
+  /**
+   * Raised when a host directive input/output is exposed multiple times under the same name.
+   */
+  CONFLICTING_HOST_DIRECTIVE_BINDING = 8024,
+
+  /**
    * A two way binding in a template has an incorrect syntax,
    * parentheses outside brackets. For example:
    *
-   * ```
+   * ```html
    * <div ([foo])="bar" />
    * ```
    */
@@ -385,7 +472,7 @@ export enum ErrorCode {
   /**
    * The left side of a nullish coalescing operation is not nullable.
    *
-   * ```
+   * ```html
    * {{ foo ?? bar }}
    * ```
    * When the type of foo doesn't include `null` or `undefined`.
@@ -402,7 +489,7 @@ export enum ErrorCode {
    * A text attribute is not interpreted as a binding but likely intended to be.
    *
    * For example:
-   * ```
+   * ```html
    * <div
    *   attr.x="value"
    *   class.blue="true"
@@ -420,7 +507,7 @@ export enum ErrorCode {
    * in their statement.
    *
    * For example:
-   * ```
+   * ```html
    * <ul><li *ngFor="item of items">{{item["name"]}};</li></ul>
    * ```
    */
@@ -440,7 +527,7 @@ export enum ErrorCode {
   /**
    * The left side of an optional chain operation is not nullable.
    *
-   * ```
+   * ```html
    * {{ foo?.bar }}
    * {{ foo?.['bar'] }}
    * {{ foo?.() }}
@@ -453,7 +540,7 @@ export enum ErrorCode {
    * `ngSkipHydration` should not be a binding (it should be a static attribute).
    *
    * For example:
-   * ```
+   * ```html
    * <my-cmp [ngSkipHydration]="someTruthyVar" />
    * ```
    *
@@ -466,7 +553,7 @@ export enum ErrorCode {
    * Signal functions should be invoked when interpolated in templates.
    *
    * For example:
-   * ```
+   * ```html
    * {{ mySignal() }}
    * ```
    */
@@ -475,7 +562,7 @@ export enum ErrorCode {
   /**
    * Initializer-based APIs can only be invoked from inside of an initializer.
    *
-   * ```
+   * ```ts
    * // Allowed
    * myInput = input();
    *
@@ -491,7 +578,7 @@ export enum ErrorCode {
    * A function in an event binding is not called.
    *
    * For example:
-   * ```
+   * ```html
    * <button (click)="myFunc"></button>
    * ```
    *
@@ -504,7 +591,7 @@ export enum ErrorCode {
    * A `@let` declaration in a template isn't used.
    *
    * For example:
-   * ```
+   * ```angular-html
    * @let used = 1; <!-- Not an error -->
    * @let notUsed = 2; <!-- Error -->
    *
@@ -517,6 +604,64 @@ export enum ErrorCode {
    * A symbol referenced in `@Component.imports` isn't being used within the template.
    */
   UNUSED_STANDALONE_IMPORTS = 8113,
+
+  /**
+   * An expression mixes nullish coalescing and logical and/or without parentheses.
+   */
+  UNPARENTHESIZED_NULLISH_COALESCING = 8114,
+
+  /**
+   * The function passed to `@for` track is not invoked.
+   *
+   * For example:
+   * ```angular-html
+   * @for (item of items; track trackByName) {}
+   * ```
+   *
+   * For the track function to work properly, it must be invoked.
+   *
+   * For example:
+   * ```angular-html
+   * @for (item of items; track trackByName(item)) {}
+   * ```
+   */
+  UNINVOKED_TRACK_FUNCTION = 8115,
+
+  /**
+   * A structural directive is used in a template, but the directive is not imported.
+   */
+  MISSING_STRUCTURAL_DIRECTIVE = 8116,
+
+  /**
+   * A function in a text interpolation is not invoked.
+   *
+   * For example:
+   * ```html
+   * <p> {{ firstName }} </p>
+   * ```
+   *
+   * The `firstName` function is not invoked. Instead, it should be:
+   * ```html
+   * <p> {{ firstName() }} </p>
+   * ```
+   */
+  UNINVOKED_FUNCTION_IN_TEXT_INTERPOLATION = 8117,
+
+  /**
+   * A required initializer is being invoked in a forbidden context such as a property initializer
+   * or a constructor.
+   *
+   * For example:
+   * ```ts
+   * class MyComponent {
+   *  myInput = input.required();
+   *  somValue = this.myInput(); // Error
+   *
+   *  constructor() {
+   *    this.myInput(); // Error
+   *  }
+   */
+  FORBIDDEN_REQUIRED_INITIALIZER_INVOCATION = 8118,
 
   /**
    * The template type-checking engine would need to generate an inline type check block for a

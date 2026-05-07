@@ -6,11 +6,17 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
-import {DOCUMENT} from '@angular/common';
-import {ApplicationRef, Component, Injectable, PLATFORM_ID} from '@angular/core';
-import {makeStateKey, TransferState} from '@angular/core/src/transfer_state';
-import {fakeAsync, flush, TestBed} from '@angular/core/testing';
-import {withBody} from '@angular/private/testing';
+import {DOCUMENT} from '../../index';
+import {
+  ApplicationRef,
+  Component,
+  Injectable,
+  PLATFORM_ID,
+  TransferState,
+  makeStateKey,
+} from '@angular/core';
+import {TestBed} from '@angular/core/testing';
+import {useAutoTick, timeout, withBody} from '@angular/private/testing';
 import {BehaviorSubject} from 'rxjs';
 
 import {HttpClient, HttpResponse, provideHttpClient} from '../public_api';
@@ -46,7 +52,12 @@ type RequestBody =
   | null;
 
 describe('TransferCache', () => {
-  @Component({selector: 'test-app-http', template: 'hello'})
+  useAutoTick();
+  @Component({
+    selector: 'test-app-http',
+    template: 'hello',
+    standalone: false,
+  })
   class SomeComponent {}
 
   describe('withHttpTransferCache', () => {
@@ -84,6 +95,14 @@ describe('TransferCache', () => {
       return response;
     }
 
+    beforeEach(() => {
+      globalThis['ngServerMode'] = true;
+    });
+
+    afterEach(() => {
+      globalThis['ngServerMode'] = undefined;
+    });
+
     beforeEach(
       withBody('<test-app-http></test-app-http>', () => {
         TestBed.resetTestingModule();
@@ -91,7 +110,9 @@ describe('TransferCache', () => {
 
         @Injectable()
         class ApplicationRefPatched extends ApplicationRef {
-          override isStable = new BehaviorSubject<boolean>(false);
+          override get isStable() {
+            return isStable;
+          }
         }
 
         TestBed.configureTestingModule({
@@ -108,7 +129,6 @@ describe('TransferCache', () => {
 
         const appRef = TestBed.inject(ApplicationRef);
         appRef.bootstrap(SomeComponent);
-        isStable = appRef.isStable as BehaviorSubject<boolean>;
       }),
     );
 
@@ -119,13 +139,44 @@ describe('TransferCache', () => {
       expect(transferState.get(key, null)).toEqual(jasmine.objectContaining({[BODY]: 'foo'}));
     });
 
-    it('should stop storing HTTP calls in `TransferState` after application becomes stable', fakeAsync(() => {
+    it('should cache arraybuffer responses correctly', () => {
+      const testData = new Uint8Array([1, 2, 3, 4, 5]).buffer;
+      let response!: ArrayBuffer;
+      TestBed.inject(HttpClient)
+        .get('/test-arraybuffer', {responseType: 'arraybuffer'})
+        .subscribe((r) => (response = r));
+      TestBed.inject(HttpTestingController).expectOne('/test-arraybuffer').flush(testData);
+
+      expect(new Uint8Array(response)).toEqual(new Uint8Array([1, 2, 3, 4, 5]));
+
+      let cachedResponse!: ArrayBuffer;
+      TestBed.inject(HttpClient)
+        .get('/test-arraybuffer', {responseType: 'arraybuffer'})
+        .subscribe((r) => (cachedResponse = r));
+      TestBed.inject(HttpTestingController).expectNone('/test-arraybuffer');
+
+      expect(new Uint8Array(cachedResponse)).toEqual(new Uint8Array([1, 2, 3, 4, 5]));
+    });
+
+    it('should cache blob responses correctly', () => {
+      const testData = new Uint8Array([10, 20, 30, 40, 50]).buffer;
+      let response!: Blob;
+      TestBed.inject(HttpClient)
+        .get('/test-blob', {responseType: 'blob'})
+        .subscribe((r) => (response = r));
+      TestBed.inject(HttpTestingController).expectOne('/test-blob').flush(testData);
+
+      expect(response instanceof Blob).toBeTrue();
+      expect(response.size).toBe(5);
+    });
+
+    it('should stop storing HTTP calls in `TransferState` after application becomes stable', async () => {
       makeRequestAndExpectOne('/test-1', 'foo');
       makeRequestAndExpectOne('/test-2', 'buzz');
 
       isStable.next(true);
 
-      flush();
+      await timeout();
 
       makeRequestAndExpectOne('/test-3', 'bar');
 
@@ -148,7 +199,7 @@ describe('TransferCache', () => {
           [RESPONSE_TYPE]: 'json',
         },
       });
-    }));
+    });
 
     it(`should use calls from cache when present and application is not stable`, () => {
       makeRequestAndExpectOne('/test-1', 'foo');
@@ -156,14 +207,14 @@ describe('TransferCache', () => {
       makeRequestAndExpectNone('/test-1');
     });
 
-    it(`should not use calls from cache when present and application is stable`, fakeAsync(() => {
+    it(`should not use calls from cache when present and application is stable`, async () => {
       makeRequestAndExpectOne('/test-1', 'foo');
 
       isStable.next(true);
-      flush();
+      await timeout();
       // Do the same call, this time it should go through as application is stable.
       makeRequestAndExpectOne('/test-1', 'foo');
-    }));
+    });
 
     it(`should differentiate calls with different parameters`, async () => {
       // make calls with different parameters. All of which should be saved in the state.
@@ -253,7 +304,6 @@ describe('TransferCache', () => {
       makeRequestAndExpectOne('/test-1?foo=1', 'foo', {method: 'POST'});
     });
 
-    // TODO: Investigate why this test is flaky
     it('should cache POST with the transferCache option', () => {
       makeRequestAndExpectOne('/test-1?foo=1', 'foo', {method: 'POST', transferCache: true});
       makeRequestAndExpectNone('/test-1?foo=1', 'POST', {transferCache: true});
@@ -319,6 +369,14 @@ describe('TransferCache', () => {
     });
 
     describe('caching in browser context', () => {
+      beforeEach(() => {
+        globalThis['ngServerMode'] = false;
+      });
+
+      afterEach(() => {
+        globalThis['ngServerMode'] = undefined;
+      });
+
       beforeEach(
         withBody('<test-app-http></test-app-http>', () => {
           TestBed.resetTestingModule();
@@ -326,7 +384,9 @@ describe('TransferCache', () => {
 
           @Injectable()
           class ApplicationRefPatched extends ApplicationRef {
-            override isStable = new BehaviorSubject<boolean>(false);
+            override get isStable() {
+              return new BehaviorSubject<boolean>(false);
+            }
           }
 
           TestBed.configureTestingModule({
@@ -361,7 +421,9 @@ describe('TransferCache', () => {
 
           @Injectable()
           class ApplicationRefPatched extends ApplicationRef {
-            override isStable = new BehaviorSubject<boolean>(false);
+            override get isStable() {
+              return new BehaviorSubject<boolean>(false);
+            }
           }
 
           TestBed.configureTestingModule({
@@ -459,7 +521,9 @@ describe('TransferCache', () => {
 
           @Injectable()
           class ApplicationRefPatched extends ApplicationRef {
-            override isStable = new BehaviorSubject<boolean>(false);
+            override get isStable() {
+              return new BehaviorSubject<boolean>(false);
+            }
           }
 
           TestBed.configureTestingModule({
@@ -507,7 +571,9 @@ describe('TransferCache', () => {
 
             @Injectable()
             class ApplicationRefPatched extends ApplicationRef {
-              override isStable = new BehaviorSubject<boolean>(false);
+              override get isStable() {
+                return new BehaviorSubject<boolean>(false);
+              }
             }
 
             TestBed.configureTestingModule({
@@ -557,7 +623,9 @@ describe('TransferCache', () => {
 
             @Injectable()
             class ApplicationRefPatched extends ApplicationRef {
-              override isStable = new BehaviorSubject<boolean>(false);
+              override get isStable() {
+                return new BehaviorSubject<boolean>(false);
+              }
             }
 
             TestBed.configureTestingModule({

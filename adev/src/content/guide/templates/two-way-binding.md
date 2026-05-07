@@ -13,20 +13,19 @@ Developers commonly use two-way binding to keep component data in sync with a fo
 The following example dynamically updates the `firstName` attribute on the page:
 
 ```angular-ts
-import { Component } from '@angular/core';
-import { FormsModule } from '@angular/forms';
+import {Component} from '@angular/core';
+import {FormsModule} from '@angular/forms';
 
 @Component({
-  standalone: true,
   imports: [FormsModule],
   template: `
     <main>
       <h2>Hello {{ firstName }}!</h2>
       <input type="text" [(ngModel)]="firstName" />
     </main>
-  `
+  `,
 })
-export class AppComponent {
+export class App {
   firstName = 'Ada';
 }
 ```
@@ -37,25 +36,23 @@ To use two-way binding with native form controls, you need to:
 1. Use the `ngModel` directive with the two-way binding syntax (e.g., `[(ngModel)]`)
 1. Assign it the state that you want it to update (e.g., `firstName`)
 
-Once that is setup, Angular will ensure that any updates in the text input will reflect correctly inside of the component state!
+Once that is set up, Angular will ensure that any updates in the text input will reflect correctly inside of the component state!
 
-Learn more about [`NgModel`](guide/directives#displaying-and-updating-properties-with-ngmodel) in the official docs.
+Learn more about [`NgModel`](/api/forms/NgModel) in the official docs.
 
 ## Two-way binding between components
 
 Leveraging two-way binding between a parent and child component requires more configuration compared to form elements.
 
-Here is an example where the `AppComponent` is responsible for setting the initial count state, but the logic for updating and rendering the UI for the counter primarily resides inside its child `CounterComponent`.
+Here is an example where the `App` is responsible for setting the initial count state, but the logic for updating and rendering the UI for the counter primarily resides inside its child `Counter`.
 
-```angular-ts
-// ./app.component.ts
-import { Component } from '@angular/core';
-import { CounterComponent } from './counter/counter.component';
+```angular-ts {header: 'app.ts'}
+import {Component} from '@angular/core';
+import {Counter} from './counter';
 
 @Component({
   selector: 'app-root',
-  standalone: true,
-  imports: [CounterComponent],
+  imports: [Counter],
   template: `
     <main>
       <h1>Counter: {{ initialCount }}</h1>
@@ -63,86 +60,75 @@ import { CounterComponent } from './counter/counter.component';
     </main>
   `,
 })
-export class AppComponent {
+export class App {
   initialCount = 18;
 }
 ```
 
-```angular-ts
-// './counter/counter.component.ts';
-import { Component, EventEmitter, Input, Output } from '@angular/core';
+```angular-ts {header: 'counter.ts'}
+import {Component, model} from '@angular/core';
 
 @Component({
   selector: 'app-counter',
-  standalone: true,
   template: `
     <button (click)="updateCount(-1)">-</button>
-    <span>{{ count }}</span>
+    <span>{{ count() }}</span>
     <button (click)="updateCount(+1)">+</button>
   `,
 })
-export class CounterComponent {
-  @Input() count: number;
-  @Output() countChange = new EventEmitter<number>();
+export class Counter {
+  count = model<number>(0);
 
   updateCount(amount: number): void {
-    this.count += amount;
-    this.countChange.emit(this.count);
+    this.count.update((currentCount) => currentCount + amount);
   }
 }
 ```
 
 ### Enabling two-way binding between components
 
-If we break down the example above to its core , each two-way binding for components requires the following:
+If we break down the example above to its core, each two-way binding for components requires the following:
 
-The child component must contain:
-
-1. An `@Input()` property
-1. A corresponding `@Output()` event emitter that has the exact same name as the input property plus "Change" at the end. The emitter must also emit the same type as the input property.
-1. A method that emits to the event emitter with the updated value of the `@Input()`.
+The child component must contain a `model` property.
 
 Here is a simplified example:
 
-```angular-ts
-// './counter/counter.component.ts';
-import { Component, EventEmitter, Input, Output } from '@angular/core';
+```angular-ts {header: 'counter.ts'}
+import {Component, model} from '@angular/core';
 
-@Component({ // Omitted for brevity })
-export class CounterComponent {
-  @Input() count: number;
-  @Output() countChange = new EventEmitter<number>();
+@Component({
+  /* Omitted for brevity */
+})
+export class Counter {
+  count = model<number>(0);
 
   updateCount(amount: number): void {
-    this.count += amount;
-    this.countChange.emit(this.count);
+    this.count.update((currentCount) => currentCount + amount);
   }
 }
 ```
 
 The parent component must:
 
-1. Wrap the `@Input()` property name in the two-way binding syntax.
-1. Specify the corresponding property to which the updated value is assigned
+1. Wrap the `model` property name in the two-way binding syntax.
+1. Assign a property or a signal to the `model` property.
 
 Here is a simplified example:
 
-```angular-ts
-// ./app.component.ts
-import { Component } from '@angular/core';
-import { CounterComponent } from './counter/counter.component';
+```angular-ts {header: 'app.ts'}
+import {Component} from '@angular/core';
+import {Counter} from './counter';
 
 @Component({
   selector: 'app-root',
-  standalone: true,
-  imports: [CounterComponent],
+  imports: [Counter],
   template: `
     <main>
       <app-counter [(count)]="initialCount"></app-counter>
     </main>
   `,
 })
-export class AppComponent {
+export class App {
   initialCount = 18;
 }
 ```

@@ -6,15 +6,16 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
-import {getActiveConsumer} from '@angular/core/primitives/signals';
+import {getActiveConsumer} from '../../../primitives/signals';
 
 import {RuntimeError, RuntimeErrorCode} from '../../errors';
 
 /**
  * Asserts that the current stack frame is not within a reactive context. Useful
- * to disallow certain code from running inside a reactive context (see {@link toSignal}).
+ * to disallow certain code from running inside a reactive context (see {@link /api/core/rxjs-interop/toSignal toSignal})
  *
  * @param debugFn a reference to the function making the assertion (used for the error message).
+ * @see [Asserts the reactive context](guide/signals#asserts-the-reactive-context)
  *
  * @publicApi
  */

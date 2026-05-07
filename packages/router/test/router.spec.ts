@@ -7,9 +7,9 @@
  */
 
 import {Location} from '@angular/common';
-import {EnvironmentInjector} from '@angular/core';
-import {inject, TestBed} from '@angular/core/testing';
-import {RouterModule} from '@angular/router';
+import {EnvironmentInjector, inject, ɵConsole as Console} from '@angular/core';
+import {TestBed} from '@angular/core/testing';
+import {RouterModule} from '../index';
 import {of} from 'rxjs';
 
 import {ChildActivationStart} from '../src/events';
@@ -20,11 +20,11 @@ import {resolveData as resolveDataOperator} from '../src/operators/resolve_data'
 import {Router} from '../src/router';
 import {ChildrenOutletContexts} from '../src/router_outlet_context';
 import {createEmptyStateSnapshot, RouterStateSnapshot} from '../src/router_state';
-import {DefaultUrlSerializer, UrlTree} from '../src/url_tree';
+import {DefaultUrlSerializer, UrlSerializer, UrlTree} from '../src/url_tree';
 import {getAllRouteGuards} from '../src/utils/preactivation';
 import {TreeNode} from '../src/utils/tree';
 
-import {createActivatedRouteSnapshot, Logger, provideTokenLogger} from './helpers';
+import {createActivatedRouteSnapshot, Logger} from './helpers';
 
 describe('Router', () => {
   describe('resetConfig', () => {
@@ -90,7 +90,9 @@ describe('Router', () => {
       TestBed.configureTestingModule({imports: [RouterModule.forRoot([])]});
     });
 
-    it('should be idempotent', inject([Router, Location], (r: Router, location: Location) => {
+    it('should be idempotent', () => {
+      const r: Router = TestBed.inject(Router);
+      const location: Location = TestBed.inject(Location);
       r.setUpLocationChangeListener();
       const a = (<any>r).nonRouterCurrentEntryChangeSubscription;
       r.setUpLocationChangeListener();
@@ -103,69 +105,84 @@ describe('Router', () => {
       const c = (<any>r).nonRouterCurrentEntryChangeSubscription;
 
       expect(c).not.toBe(b);
-    }));
+    });
+  });
+
+  describe('parseUrl', () => {
+    beforeEach(() => {
+      TestBed.configureTestingModule({imports: [RouterModule.forRoot([])]});
+    });
+
+    it('should log a warning and fall back to "/" when parsing fails', () => {
+      const router: Router = TestBed.inject(Router);
+      const urlSerializer: UrlSerializer = TestBed.inject(UrlSerializer);
+      const console: Console = TestBed.inject(Console);
+      spyOn(urlSerializer, 'parse').and.callFake((url: string) => {
+        if (url === 'invalid-url') {
+          throw new Error('test error');
+        }
+        // The fallback call should not be mocked
+        return new DefaultUrlSerializer().parse(url);
+      });
+      const spy = spyOn(console, 'warn');
+
+      const result = router.parseUrl('invalid-url');
+      expect(spy.calls.argsFor(0)).toMatch(/Error parsing URL/);
+      expect(result).toEqual(new DefaultUrlSerializer().parse('/'));
+    });
   });
 
   describe('PreActivation', () => {
     const serializer = new DefaultUrlSerializer();
     let empty: RouterStateSnapshot;
     let logger: Logger;
+
+    function createLoggerGuard(token: string, returnValue = true as boolean | UrlTree) {
+      return () => {
+        inject(Logger).add(token);
+        return returnValue;
+      };
+    }
     let events: any[];
 
-    const CA_CHILD = 'canActivate_child';
-    const CA_CHILD_FALSE = 'canActivate_child_false';
-    const CA_CHILD_REDIRECT = 'canActivate_child_redirect';
-    const CAC_CHILD = 'canActivateChild_child';
-    const CAC_CHILD_FALSE = 'canActivateChild_child_false';
-    const CAC_CHILD_REDIRECT = 'canActivateChild_child_redirect';
-    const CA_GRANDCHILD = 'canActivate_grandchild';
-    const CA_GRANDCHILD_FALSE = 'canActivate_grandchild_false';
-    const CA_GRANDCHILD_REDIRECT = 'canActivate_grandchild_redirect';
-    const CDA_CHILD = 'canDeactivate_child';
-    const CDA_CHILD_FALSE = 'canDeactivate_child_false';
-    const CDA_CHILD_REDIRECT = 'canDeactivate_child_redirect';
-    const CDA_GRANDCHILD = 'canDeactivate_grandchild';
-    const CDA_GRANDCHILD_FALSE = 'canDeactivate_grandchild_false';
-    const CDA_GRANDCHILD_REDIRECT = 'canDeactivate_grandchild_redirect';
+    const CA_CHILD = createLoggerGuard('canActivate_child');
+    const CA_CHILD_FALSE = createLoggerGuard('canActivate_child_false', false);
+    const CA_CHILD_REDIRECT = createLoggerGuard(
+      'canActivate_child_redirect',
+      serializer.parse('/canActivate_child_redirect'),
+    );
+    const CAC_CHILD = createLoggerGuard('canActivateChild_child');
+    const CAC_CHILD_FALSE = createLoggerGuard('canActivateChild_child_false', false);
+    const CAC_CHILD_REDIRECT = createLoggerGuard(
+      'canActivateChild_child_redirect',
+      serializer.parse('/canActivateChild_child_redirect'),
+    );
+    const CA_GRANDCHILD = createLoggerGuard('canActivate_grandchild');
+    const CA_GRANDCHILD_REDIRECT = createLoggerGuard(
+      'canActivate_grandchild_redirect',
+      serializer.parse('/canActivate_grandchild_redirect'),
+    );
+    const CDA_CHILD = createLoggerGuard('canDeactivate_child');
+    const CDA_CHILD_FALSE = createLoggerGuard('canDeactivate_child_false', false);
+    const CDA_CHILD_REDIRECT = createLoggerGuard(
+      'canDeactivate_child_redirect',
+      serializer.parse('/canDeactivate_child_redirect'),
+    );
+    const CDA_GRANDCHILD = createLoggerGuard('canDeactivate_grandchild');
 
     beforeEach(() => {
       TestBed.configureTestingModule({
         imports: [RouterModule],
-        providers: [
-          Logger,
-          provideTokenLogger(CA_CHILD),
-          provideTokenLogger(CA_CHILD_FALSE, false),
-          provideTokenLogger(CA_CHILD_REDIRECT, serializer.parse('/canActivate_child_redirect')),
-          provideTokenLogger(CAC_CHILD),
-          provideTokenLogger(CAC_CHILD_FALSE, false),
-          provideTokenLogger(
-            CAC_CHILD_REDIRECT,
-            serializer.parse('/canActivateChild_child_redirect'),
-          ),
-          provideTokenLogger(CA_GRANDCHILD),
-          provideTokenLogger(CA_GRANDCHILD_FALSE, false),
-          provideTokenLogger(
-            CA_GRANDCHILD_REDIRECT,
-            serializer.parse('/canActivate_grandchild_redirect'),
-          ),
-          provideTokenLogger(CDA_CHILD),
-          provideTokenLogger(CDA_CHILD_FALSE, false),
-          provideTokenLogger(CDA_CHILD_REDIRECT, serializer.parse('/canDeactivate_child_redirect')),
-          provideTokenLogger(CDA_GRANDCHILD),
-          provideTokenLogger(CDA_GRANDCHILD_FALSE, false),
-          provideTokenLogger(
-            CDA_GRANDCHILD_REDIRECT,
-            serializer.parse('/canDeactivate_grandchild_redirect'),
-          ),
-        ],
+        providers: [Logger],
       });
     });
 
-    beforeEach(inject([Logger], (_logger: Logger) => {
-      empty = createEmptyStateSnapshot(null);
+    beforeEach(() => {
+      const _logger: Logger = TestBed.inject(Logger);
+      empty = createEmptyStateSnapshot(null, TestBed.inject(EnvironmentInjector));
       logger = _logger;
       events = [];
-    }));
+    });
 
     describe('ChildActivation', () => {
       it('should run', () => {
@@ -195,7 +212,7 @@ describe('Router', () => {
 
         of(testTransition)
           .pipe(
-            checkGuardsOperator(TestBed.inject(EnvironmentInjector), (evt) => {
+            checkGuardsOperator((evt) => {
               events.push(evt);
             }),
           )
@@ -255,7 +272,7 @@ describe('Router', () => {
 
         of(testTransition)
           .pipe(
-            checkGuardsOperator(TestBed.inject(EnvironmentInjector), (evt) => {
+            checkGuardsOperator((evt) => {
               events.push(evt);
             }),
           )
@@ -313,7 +330,7 @@ describe('Router', () => {
 
         of(testTransition)
           .pipe(
-            checkGuardsOperator(TestBed.inject(EnvironmentInjector), (evt) => {
+            checkGuardsOperator((evt) => {
               events.push(evt);
             }),
           )
@@ -389,7 +406,7 @@ describe('Router', () => {
 
         of(testTransition)
           .pipe(
-            checkGuardsOperator(TestBed.inject(EnvironmentInjector), (evt) => {
+            checkGuardsOperator((evt) => {
               events.push(evt);
             }),
           )
@@ -440,7 +457,11 @@ describe('Router', () => {
 
         checkGuards(futureState, empty, TestBed.inject(EnvironmentInjector), (result) => {
           expect(result).toBe(true);
-          expect(logger.logs).toEqual([CA_CHILD, CAC_CHILD, CA_GRANDCHILD]);
+          expect(logger.logs).toEqual([
+            'canActivate_child',
+            'canActivateChild_child',
+            'canActivate_grandchild',
+          ]);
         });
       });
 
@@ -471,7 +492,7 @@ describe('Router', () => {
 
         checkGuards(futureState, empty, TestBed.inject(EnvironmentInjector), (result) => {
           expect(result).toBe(false);
-          expect(logger.logs).toEqual([CA_CHILD_FALSE]);
+          expect(logger.logs).toEqual(['canActivate_child_false']);
         });
       });
 
@@ -502,7 +523,7 @@ describe('Router', () => {
 
         checkGuards(futureState, empty, TestBed.inject(EnvironmentInjector), (result) => {
           expect(result).toBe(false);
-          expect(logger.logs).toEqual([CA_CHILD, CAC_CHILD_FALSE]);
+          expect(logger.logs).toEqual(['canActivate_child', 'canActivateChild_child_false']);
         });
       });
 
@@ -543,7 +564,12 @@ describe('Router', () => {
         );
 
         checkGuards(futureState, currentState, TestBed.inject(EnvironmentInjector), (result) => {
-          expect(logger.logs).toEqual([CDA_CHILD, CA_CHILD, CAC_CHILD, CA_GRANDCHILD]);
+          expect(logger.logs).toEqual([
+            'canDeactivate_child',
+            'canActivate_child',
+            'canActivateChild_child',
+            'canActivate_grandchild',
+          ]);
         });
       });
 
@@ -582,7 +608,7 @@ describe('Router', () => {
 
         checkGuards(futureState, currentState, TestBed.inject(EnvironmentInjector), (result) => {
           expect(result).toBe(false);
-          expect(logger.logs).toEqual([CDA_CHILD_FALSE]);
+          expect(logger.logs).toEqual(['canDeactivate_child_false']);
         });
       });
       it('should deactivate from bottom up, then activate top down', () => {
@@ -628,11 +654,11 @@ describe('Router', () => {
         checkGuards(futureState, currentState, TestBed.inject(EnvironmentInjector), (result) => {
           expect(result).toBe(true);
           expect(logger.logs).toEqual([
-            CDA_GRANDCHILD,
-            CDA_CHILD,
-            CA_CHILD,
-            CAC_CHILD,
-            CA_GRANDCHILD,
+            'canDeactivate_grandchild',
+            'canDeactivate_child',
+            'canActivate_child',
+            'canActivateChild_child',
+            'canActivate_grandchild',
           ]);
         });
 
@@ -664,8 +690,10 @@ describe('Router', () => {
           );
 
           checkGuards(futureState, empty, TestBed.inject(EnvironmentInjector), (result) => {
-            expect(serializer.serialize(result as UrlTree)).toBe('/' + CA_CHILD_REDIRECT);
-            expect(logger.logs).toEqual([CA_CHILD_REDIRECT]);
+            expect(serializer.serialize(result as UrlTree)).toBe(
+              '/' + 'canActivate_child_redirect',
+            );
+            expect(logger.logs).toEqual(['canActivate_child_redirect']);
           });
         });
 
@@ -695,8 +723,10 @@ describe('Router', () => {
           );
 
           checkGuards(futureState, empty, TestBed.inject(EnvironmentInjector), (result) => {
-            expect(serializer.serialize(result as UrlTree)).toBe('/' + CAC_CHILD_REDIRECT);
-            expect(logger.logs).toEqual([CAC_CHILD_REDIRECT]);
+            expect(serializer.serialize(result as UrlTree)).toBe(
+              '/' + 'canActivateChild_child_redirect',
+            );
+            expect(logger.logs).toEqual(['canActivateChild_child_redirect']);
           });
         });
 
@@ -726,8 +756,13 @@ describe('Router', () => {
           );
 
           checkGuards(futureState, empty, TestBed.inject(EnvironmentInjector), (result) => {
-            expect(serializer.serialize(result as UrlTree)).toBe('/' + CA_GRANDCHILD_REDIRECT);
-            expect(logger.logs).toEqual([CAC_CHILD, CA_GRANDCHILD_REDIRECT]);
+            expect(serializer.serialize(result as UrlTree)).toBe(
+              '/' + 'canActivate_grandchild_redirect',
+            );
+            expect(logger.logs).toEqual([
+              'canActivateChild_child',
+              'canActivate_grandchild_redirect',
+            ]);
           });
         });
 
@@ -765,8 +800,10 @@ describe('Router', () => {
           );
 
           checkGuards(futureState, currentState, TestBed.inject(EnvironmentInjector), (result) => {
-            expect(serializer.serialize(result as UrlTree)).toBe('/' + CDA_CHILD_REDIRECT);
-            expect(logger.logs).toEqual([CDA_CHILD_REDIRECT]);
+            expect(serializer.serialize(result as UrlTree)).toBe(
+              '/' + 'canDeactivate_child_redirect',
+            );
+            expect(logger.logs).toEqual(['canDeactivate_child_redirect']);
           });
         });
       });
@@ -859,7 +896,7 @@ function checkResolveData(
   of({
     guards: getAllRouteGuards(future, curr, new ChildrenOutletContexts(injector)),
   } as NavigationTransition)
-    .pipe(resolveDataOperator('emptyOnly', injector))
+    .pipe(resolveDataOperator('emptyOnly'))
     .subscribe(check, (e) => {
       throw e;
     });
@@ -876,7 +913,7 @@ function checkGuards(
   of({
     guards: getAllRouteGuards(future, curr, new ChildrenOutletContexts(injector)),
   } as NavigationTransition)
-    .pipe(checkGuardsOperator(injector))
+    .pipe(checkGuardsOperator())
     .subscribe({
       next(t) {
         if (t.guardsResult === null) throw new Error('Guard result expected');

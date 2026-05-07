@@ -6,7 +6,7 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
-import {setActiveConsumer} from '@angular/core/primitives/signals';
+import {setActiveConsumer} from '../../primitives/signals';
 
 import {
   AfterContentChecked,
@@ -17,7 +17,7 @@ import {
   OnChanges,
   OnDestroy,
   OnInit,
-} from '../interface/lifecycle_hooks';
+} from '../change_detection/lifecycle_hooks';
 import {assertDefined, assertEqual, assertNotEqual} from '../util/assert';
 
 import {assertFirstCreatePass} from './assert';
@@ -35,7 +35,7 @@ import {
   TView,
 } from './interfaces/view';
 import {profiler} from './profiler';
-import {ProfilerEvent} from './profiler_types';
+import {ProfilerEvent} from '../../primitives/devtools';
 import {isInCheckNoChangesMode} from './state';
 
 /**

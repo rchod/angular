@@ -13,14 +13,14 @@
  * It is up to the caller to do this - e.g. only call `createTaggedTemplate()` or pass `let`|`const`
  * to `createVariableDeclaration()` if the final JS will allow it.
  */
-export interface AstFactory<TStatement, TExpression> {
+export interface AstFactory<TStatement, TExpression, TType> {
   /**
    * Attach the `leadingComments` to the given `statement` node.
    *
    * @param statement the statement where the comments are to be attached.
    * @param leadingComments the comments to attach.
    */
-  attachComments(statement: TStatement, leadingComments: LeadingComment[]): void;
+  attachComments(statement: TStatement | TExpression, leadingComments: LeadingComment[]): void;
 
   /**
    * Create a literal array expression (e.g. `[expr1, expr2]`).
@@ -33,9 +33,10 @@ export interface AstFactory<TStatement, TExpression> {
    * Create an assignment expression (e.g. `lhsExpr = rhsExpr`).
    *
    * @param target an expression that evaluates to the left side of the assignment.
+   * @param operator binary assignment operator that will be applied.
    * @param value an expression that evaluates to the right side of the assignment.
    */
-  createAssignment(target: TExpression, value: TExpression): TExpression;
+  createAssignment(target: TExpression, operator: BinaryOperator, value: TExpression): TExpression;
 
   /**
    * Create a binary expression (e.g. `lhs && rhs`).
@@ -67,6 +68,16 @@ export interface AstFactory<TStatement, TExpression> {
   createCallExpression(callee: TExpression, args: TExpression[], pure: boolean): TExpression;
 
   /**
+   * Create a call chain expression (e.g. `callee?.(args)`).
+   */
+  createCallChain(
+    callee: TExpression,
+    args: TExpression[],
+    pure: boolean,
+    isOptional: boolean,
+  ): TExpression;
+
+  /**
    * Create a ternary expression (e.g. `testExpr ? trueExpr : falseExpr`).
    *
    * @param condition an expression that will be tested for truthiness.
@@ -88,6 +99,15 @@ export interface AstFactory<TStatement, TExpression> {
   createElementAccess(expression: TExpression, element: TExpression): TExpression;
 
   /**
+   * Create an element access chain expression (e.g. `obj?.[expr]`).
+   */
+  createElementAccessChain(
+    expression: TExpression,
+    element: TExpression,
+    isOptional: boolean,
+  ): TExpression;
+
+  /**
    * Create a statement that is simply executing the given `expression` (e.g. `x = 10;`).
    *
    * @param expression the expression to be converted to a statement.
@@ -103,7 +123,7 @@ export interface AstFactory<TStatement, TExpression> {
    */
   createFunctionDeclaration(
     functionName: string,
-    parameters: string[],
+    parameters: Parameter<TType>[],
     body: TStatement,
   ): TStatement;
 
@@ -117,7 +137,7 @@ export interface AstFactory<TStatement, TExpression> {
    */
   createFunctionExpression(
     functionName: string | null,
-    parameters: string[],
+    parameters: Parameter<TType>[],
     body: TStatement,
   ): TExpression;
 
@@ -128,7 +148,10 @@ export interface AstFactory<TStatement, TExpression> {
    * @param parameters the names of the function's parameters.
    * @param body an expression or block of statements that are the body of the function.
    */
-  createArrowFunctionExpression(parameters: string[], body: TExpression | TStatement): TExpression;
+  createArrowFunctionExpression(
+    parameters: Parameter<TType>[],
+    body: TExpression | TStatement,
+  ): TExpression;
 
   /**
    * Creates an expression that represents a dynamic import
@@ -136,7 +159,7 @@ export interface AstFactory<TStatement, TExpression> {
    *
    * @param url the URL that should by used in the dynamic import
    */
-  createDynamicImport(url: string): TExpression;
+  createDynamicImport(url: string | TExpression): TExpression;
 
   /**
    * Create an identifier.
@@ -198,6 +221,15 @@ export interface AstFactory<TStatement, TExpression> {
   createPropertyAccess(expression: TExpression, propertyName: string): TExpression;
 
   /**
+   * Create a property access chain expression (e.g. `obj?.prop`).
+   */
+  createPropertyAccessChain(
+    expression: TExpression,
+    propertyName: string,
+    isOptional: boolean,
+  ): TExpression;
+
+  /**
    * Create a return statement (e.g `return expr;`).
    *
    * @param expression the expression to be returned.
@@ -218,6 +250,18 @@ export interface AstFactory<TStatement, TExpression> {
   createTaggedTemplate(tag: TExpression, template: TemplateLiteral<TExpression>): TExpression;
 
   /**
+   * Create an untagged template literal
+   *
+   * ```
+   * `str1${expr1}str2${expr2}str3`
+   * ```
+   *
+   * @param template the collection of strings and expressions that constitute an interpolated
+   *     template literal.
+   */
+  createTemplateLiteral(template: TemplateLiteral<TExpression>): TExpression;
+
+  /**
    * Create a throw statement (e.g. `throw expr;`).
    *
    * @param expression the expression to be thrown.
@@ -232,6 +276,13 @@ export interface AstFactory<TStatement, TExpression> {
   createTypeOfExpression(expression: TExpression): TExpression;
 
   /**
+   * Create an expression that evaluates an expression and returns `undefined`.
+   *
+   * @param expression the expression whose type we want.
+   */
+  createVoidExpression(expression: TExpression): TExpression;
+
+  /**
    * Prefix the `operand` with the given `operator` (e.g. `-expr`).
    *
    * @param operator the text of the operator to apply (e.g. `+`, `-` or `!`).
@@ -244,13 +295,60 @@ export interface AstFactory<TStatement, TExpression> {
    *
    * @param variableName the name of the variable.
    * @param initializer if not `null` then this expression is assigned to the declared variable.
-   * @param type whether this variable should be declared as `var`, `let` or `const`.
+   * @param variableType whether this variable should be declared as `var`, `let` or `const`.
    */
   createVariableDeclaration(
     variableName: string,
     initializer: TExpression | null,
-    type: VariableDeclarationType,
+    variableType: VariableDeclarationType,
+    type: TType | null,
   ): TStatement;
+
+  /**
+   * Create a regular expression literal (e.g. `/\d+/g`).
+   *
+   * @param body Body of the regex.
+   * @param flags Flags of the regex, if any.
+   */
+  createRegularExpressionLiteral(body: string, flags: string | null): TExpression;
+
+  /**
+   * Create a spread element, typically in an array or function call. E.g. `[...a]` or `fn(...b)`.
+   *
+   * @param target Expression of the spread element.
+   */
+  createSpreadElement(expression: TExpression): TExpression;
+
+  /**
+   * Create a type node for a built-in type.
+   * @param type Type that should be created.
+   */
+  createBuiltInType(type: BuiltInType): TType;
+
+  /**
+   * Create an expression type.
+   * @param expression Expression to be turned into a type node.
+   * @param typeParams Type parameters for the expression.
+   */
+  createExpressionType(expression: TExpression, typeParams: TType[] | null): TType;
+
+  /**
+   * Create an array type.
+   * @param elementType Type of the array elements.
+   */
+  createArrayType(elementType: TType): TType;
+
+  /**
+   * Create a map type.
+   * @param valueType Type of the map values.
+   */
+  createMapType(valueType: TType): TType;
+
+  /**
+   * Forward a transplanted type.
+   * @param type Type to be transplanted, if supported.
+   */
+  transplantType(type: TType): TType;
 
   /**
    * Attach a source map range to the given node.
@@ -275,6 +373,21 @@ export type VariableDeclarationType = 'const' | 'let' | 'var';
  */
 export type UnaryOperator = '+' | '-' | '!';
 
+/** Supported built-in types. */
+export type BuiltInType =
+  | 'any'
+  | 'boolean'
+  | 'number'
+  | 'string'
+  | 'function'
+  | 'never'
+  | 'unknown';
+
+export interface Parameter<TType> {
+  name: string;
+  type: TType | null;
+}
+
 /**
  * The binary operators supported by the `AstFactory`.
  */
@@ -292,11 +405,24 @@ export type BinaryOperator =
   | '-'
   | '%'
   | '*'
+  | '**'
   | '!='
   | '!=='
   | '||'
   | '+'
-  | '??';
+  | '??'
+  | '='
+  | '+='
+  | '-='
+  | '*='
+  | '/='
+  | '%='
+  | '**='
+  | '&&='
+  | '||='
+  | '??='
+  | 'in'
+  | 'instanceof';
 
 /**
  * The original location of the start or end of a node created by the `AstFactory`.
@@ -321,9 +447,11 @@ export interface SourceMapRange {
 }
 
 /**
- * Information used by the `AstFactory` to create a property on an object literal expression.
+ * Information used by the `AstFactory` to create a property assignment
+ * on an object literal expression.
  */
-export interface ObjectLiteralProperty<TExpression> {
+export interface ObjectLiteralAssignment<TExpression> {
+  kind: 'property';
   propertyName: string;
   value: TExpression;
   /**
@@ -331,6 +459,19 @@ export interface ObjectLiteralProperty<TExpression> {
    */
   quoted: boolean;
 }
+
+/**
+ * Information used by the `AstFactory` to create a spread on an object literal expression.
+ */
+export interface ObjectLiteralSpread<TExpression> {
+  kind: 'spread';
+  expression: TExpression;
+}
+
+/** Possible properties in an object literal. */
+export type ObjectLiteralProperty<TExpression> =
+  | ObjectLiteralAssignment<TExpression>
+  | ObjectLiteralSpread<TExpression>;
 
 /**
  * Information used by the `AstFactory` to create a template literal string (i.e. a back-ticked

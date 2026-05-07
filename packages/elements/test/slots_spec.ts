@@ -8,16 +8,15 @@
 
 import {
   Component,
-  ComponentFactoryResolver,
   destroyPlatform,
   EventEmitter,
   Input,
   NgModule,
   Output,
+  reflectComponentType,
   ViewEncapsulation,
 } from '@angular/core';
-import {BrowserModule} from '@angular/platform-browser';
-import {platformBrowserDynamic} from '@angular/platform-browser-dynamic';
+import {BrowserModule, platformBrowser} from '@angular/platform-browser';
 
 import {createCustomElement, NgElement} from '../src/create-custom-element';
 
@@ -28,15 +27,14 @@ describe('slots', () => {
     testContainer = document.createElement('div');
     document.body.appendChild(testContainer);
     destroyPlatform();
-    platformBrowserDynamic()
+    platformBrowser()
       .bootstrapModule(TestModule)
       .then((ref) => {
         const injector = ref.injector;
-        const cfr: ComponentFactoryResolver = injector.get(ComponentFactoryResolver);
 
         testElements.forEach((comp) => {
-          const compFactory = cfr.resolveComponentFactory(comp);
-          customElements.define(compFactory.selector, createCustomElement(comp, {injector}));
+          const compType = reflectComponentType(comp)!;
+          customElements.define(compType.selector, createCustomElement(comp, {injector}));
         });
       })
       .then(done, done.fail);
@@ -108,6 +106,7 @@ describe('slots', () => {
   selector: 'default-slot-el',
   template: '<div class="slotparent"><slot></slot></div>',
   encapsulation: ViewEncapsulation.ShadowDom,
+  standalone: false,
 })
 class DefaultSlotComponent {
   constructor() {}
@@ -117,6 +116,7 @@ class DefaultSlotComponent {
   selector: 'named-slot-el',
   template: '<div class="slotparent"><slot name="header"></slot></div>',
   encapsulation: ViewEncapsulation.ShadowDom,
+  standalone: false,
 })
 class NamedSlotComponent {
   constructor() {}
@@ -126,6 +126,7 @@ class NamedSlotComponent {
   selector: 'named-slots-el',
   template: '<div class="slotparent"><slot name="header"></slot><slot name="body"></slot></div>',
   encapsulation: ViewEncapsulation.ShadowDom,
+  standalone: false,
 })
 class NamedSlotsComponent {
   constructor() {}
@@ -135,6 +136,7 @@ class NamedSlotsComponent {
   selector: 'slot-events-el',
   template: '<slot (slotchange)="onSlotChange($event)"></slot>',
   encapsulation: ViewEncapsulation.ShadowDom,
+  standalone: false,
 })
 class SlotEventsComponent {
   @Input() slotEvents: Event[] = [];

@@ -8,7 +8,7 @@
 
 import {Pipe, PipeTransform} from '@angular/core';
 
-import {invalidPipeArgumentError} from './invalid_pipe_argument_error';
+import {invalidPipeArgumentError} from './utils';
 
 /**
  * @ngModule CommonModule
@@ -43,12 +43,13 @@ import {invalidPipeArgumentError} from './invalid_pipe_argument_error';
  *
  * {@example common/pipes/ts/slice_pipe.ts region='SlicePipe_string'}
  *
+ * @see [Built-in Pipes](guide/templates/pipes#built-in-pipes)
+ *
  * @publicApi
  */
 @Pipe({
   name: 'slice',
   pure: false,
-  standalone: true,
 })
 export class SlicePipe implements PipeTransform {
   /**
@@ -82,14 +83,12 @@ export class SlicePipe implements PipeTransform {
   ): Array<T> | string | null {
     if (value == null) return null;
 
-    if (!this.supports(value)) {
+    const supports = typeof value === 'string' || Array.isArray(value);
+
+    if (!supports) {
       throw invalidPipeArgumentError(SlicePipe, value);
     }
 
     return value.slice(start, end);
-  }
-
-  private supports(obj: any): boolean {
-    return typeof obj === 'string' || Array.isArray(obj);
   }
 }

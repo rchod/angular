@@ -4,13 +4,14 @@
 import { Directive } from '@angular/core';
 import * as i0 from "@angular/core";
 export class SomeDirective {
+    static ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: SomeDirective, deps: [], target: i0.ɵɵFactoryTarget.Directive });
+    static ɵdir = i0.ɵɵngDeclareDirective({ minVersion: "14.0.0", version: "0.0.0-PLACEHOLDER", type: SomeDirective, isStandalone: false, selector: "[someDir]", ngImport: i0 });
 }
-SomeDirective.ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: SomeDirective, deps: [], target: i0.ɵɵFactoryTarget.Directive });
-SomeDirective.ɵdir = i0.ɵɵngDeclareDirective({ minVersion: "14.0.0", version: "0.0.0-PLACEHOLDER", type: SomeDirective, selector: "[someDir]", ngImport: i0 });
 i0.ɵɵngDeclareClassMetadata({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: SomeDirective, decorators: [{
             type: Directive,
             args: [{
                     selector: '[someDir]',
+                    standalone: false
                 }]
         }] });
 
@@ -30,18 +31,21 @@ import { Component, NgModule, QueryList, ViewChild, ViewChildren } from '@angula
 import { SomeDirective } from './some.directive';
 import * as i0 from "@angular/core";
 export class ViewQueryComponent {
-}
-ViewQueryComponent.ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: ViewQueryComponent, deps: [], target: i0.ɵɵFactoryTarget.Component });
-ViewQueryComponent.ɵcmp = i0.ɵɵngDeclareComponent({ minVersion: "14.0.0", version: "0.0.0-PLACEHOLDER", type: ViewQueryComponent, selector: "view-query-component", viewQueries: [{ propertyName: "someDir", first: true, predicate: SomeDirective, descendants: true }, { propertyName: "someDirs", predicate: SomeDirective, descendants: true }], ngImport: i0, template: `
+    someDir;
+    someDirs;
+    static ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: ViewQueryComponent, deps: [], target: i0.ɵɵFactoryTarget.Component });
+    static ɵcmp = i0.ɵɵngDeclareComponent({ minVersion: "14.0.0", version: "0.0.0-PLACEHOLDER", type: ViewQueryComponent, isStandalone: false, selector: "view-query-component", viewQueries: [{ propertyName: "someDir", first: true, predicate: SomeDirective, descendants: true }, { propertyName: "someDirs", predicate: SomeDirective, descendants: true }], ngImport: i0, template: `
     <div someDir></div>
   `, isInline: true, dependencies: [{ kind: "directive", type: i0.forwardRef(() => SomeDirective), selector: "[someDir]" }] });
+}
 i0.ɵɵngDeclareClassMetadata({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: ViewQueryComponent, decorators: [{
             type: Component,
             args: [{
                     selector: 'view-query-component',
                     template: `
     <div someDir></div>
-  `
+  `,
+                    standalone: false
                 }]
         }], propDecorators: { someDir: [{
                 type: ViewChild,
@@ -51,10 +55,10 @@ i0.ɵɵngDeclareClassMetadata({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDE
                 args: [SomeDirective]
             }] } });
 export class MyModule {
+    static ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule, deps: [], target: i0.ɵɵFactoryTarget.NgModule });
+    static ɵmod = i0.ɵɵngDeclareNgModule({ minVersion: "14.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule, declarations: [SomeDirective, ViewQueryComponent] });
+    static ɵinj = i0.ɵɵngDeclareInjector({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule });
 }
-MyModule.ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule, deps: [], target: i0.ɵɵFactoryTarget.NgModule });
-MyModule.ɵmod = i0.ɵɵngDeclareNgModule({ minVersion: "14.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule, declarations: [SomeDirective, ViewQueryComponent] });
-MyModule.ɵinj = i0.ɵɵngDeclareInjector({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule });
 i0.ɵɵngDeclareClassMetadata({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule, decorators: [{
             type: NgModule,
             args: [{ declarations: [SomeDirective, ViewQueryComponent] }]
@@ -85,18 +89,21 @@ export declare class MyModule {
 import { Component, Directive, forwardRef, NgModule, QueryList, ViewChild, ViewChildren } from '@angular/core';
 import * as i0 from "@angular/core";
 export class ViewQueryComponent {
-}
-ViewQueryComponent.ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: ViewQueryComponent, deps: [], target: i0.ɵɵFactoryTarget.Component });
-ViewQueryComponent.ɵcmp = i0.ɵɵngDeclareComponent({ minVersion: "14.0.0", version: "0.0.0-PLACEHOLDER", type: ViewQueryComponent, selector: "view-query-component", viewQueries: [{ propertyName: "someDir", first: true, predicate: i0.forwardRef(() => SomeDirective), descendants: true }, { propertyName: "someDirList", predicate: i0.forwardRef(() => SomeDirective), descendants: true }], ngImport: i0, template: `
+    someDir;
+    someDirList;
+    static ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: ViewQueryComponent, deps: [], target: i0.ɵɵFactoryTarget.Component });
+    static ɵcmp = i0.ɵɵngDeclareComponent({ minVersion: "14.0.0", version: "0.0.0-PLACEHOLDER", type: ViewQueryComponent, isStandalone: false, selector: "view-query-component", viewQueries: [{ propertyName: "someDir", first: true, predicate: i0.forwardRef(() => SomeDirective), descendants: true }, { propertyName: "someDirList", predicate: i0.forwardRef(() => SomeDirective), descendants: true }], ngImport: i0, template: `
     <div someDir></div>
   `, isInline: true, dependencies: [{ kind: "directive", type: i0.forwardRef(() => SomeDirective), selector: "[someDir]" }] });
+}
 i0.ɵɵngDeclareClassMetadata({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: ViewQueryComponent, decorators: [{
             type: Component,
             args: [{
                     selector: 'view-query-component',
                     template: `
     <div someDir></div>
-  `
+  `,
+                    standalone: false
                 }]
         }], propDecorators: { someDir: [{
                 type: ViewChild,
@@ -106,35 +113,37 @@ i0.ɵɵngDeclareClassMetadata({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDE
                 args: [forwardRef(() => SomeDirective)]
             }] } });
 export class MyApp {
-}
-MyApp.ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyApp, deps: [], target: i0.ɵɵFactoryTarget.Component });
-MyApp.ɵcmp = i0.ɵɵngDeclareComponent({ minVersion: "14.0.0", version: "0.0.0-PLACEHOLDER", type: MyApp, selector: "my-app", ngImport: i0, template: `
+    static ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyApp, deps: [], target: i0.ɵɵFactoryTarget.Component });
+    static ɵcmp = i0.ɵɵngDeclareComponent({ minVersion: "14.0.0", version: "0.0.0-PLACEHOLDER", type: MyApp, isStandalone: false, selector: "my-app", ngImport: i0, template: `
     <view-query-component></view-query-component>
   `, isInline: true, dependencies: [{ kind: "component", type: ViewQueryComponent, selector: "view-query-component" }] });
+}
 i0.ɵɵngDeclareClassMetadata({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyApp, decorators: [{
             type: Component,
             args: [{
                     selector: 'my-app',
                     template: `
     <view-query-component></view-query-component>
-  `
+  `,
+                    standalone: false
                 }]
         }] });
 export class SomeDirective {
+    static ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: SomeDirective, deps: [], target: i0.ɵɵFactoryTarget.Directive });
+    static ɵdir = i0.ɵɵngDeclareDirective({ minVersion: "14.0.0", version: "0.0.0-PLACEHOLDER", type: SomeDirective, isStandalone: false, selector: "[someDir]", ngImport: i0 });
 }
-SomeDirective.ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: SomeDirective, deps: [], target: i0.ɵɵFactoryTarget.Directive });
-SomeDirective.ɵdir = i0.ɵɵngDeclareDirective({ minVersion: "14.0.0", version: "0.0.0-PLACEHOLDER", type: SomeDirective, selector: "[someDir]", ngImport: i0 });
 i0.ɵɵngDeclareClassMetadata({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: SomeDirective, decorators: [{
             type: Directive,
             args: [{
                     selector: '[someDir]',
+                    standalone: false
                 }]
         }] });
 export class MyModule {
+    static ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule, deps: [], target: i0.ɵɵFactoryTarget.NgModule });
+    static ɵmod = i0.ɵɵngDeclareNgModule({ minVersion: "14.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule, declarations: [SomeDirective, ViewQueryComponent, MyApp] });
+    static ɵinj = i0.ɵɵngDeclareInjector({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule });
 }
-MyModule.ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule, deps: [], target: i0.ɵɵFactoryTarget.NgModule });
-MyModule.ɵmod = i0.ɵɵngDeclareNgModule({ minVersion: "14.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule, declarations: [SomeDirective, ViewQueryComponent, MyApp] });
-MyModule.ɵinj = i0.ɵɵngDeclareInjector({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule });
 i0.ɵɵngDeclareClassMetadata({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule, decorators: [{
             type: NgModule,
             args: [{ declarations: [SomeDirective, ViewQueryComponent, MyApp] }]
@@ -171,12 +180,14 @@ export declare class MyModule {
 import { Component, NgModule, QueryList, ViewChild, ViewChildren } from '@angular/core';
 import * as i0 from "@angular/core";
 export class ViewQueryComponent {
-}
-ViewQueryComponent.ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: ViewQueryComponent, deps: [], target: i0.ɵɵFactoryTarget.Component });
-ViewQueryComponent.ɵcmp = i0.ɵɵngDeclareComponent({ minVersion: "14.0.0", version: "0.0.0-PLACEHOLDER", type: ViewQueryComponent, selector: "view-query-component", viewQueries: [{ propertyName: "myRef", first: true, predicate: ["myRef"], descendants: true }, { propertyName: "myRefs", predicate: ["myRef1, myRef2, myRef3"], descendants: true }], ngImport: i0, template: `
+    myRef;
+    myRefs;
+    static ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: ViewQueryComponent, deps: [], target: i0.ɵɵFactoryTarget.Component });
+    static ɵcmp = i0.ɵɵngDeclareComponent({ minVersion: "14.0.0", version: "0.0.0-PLACEHOLDER", type: ViewQueryComponent, isStandalone: false, selector: "view-query-component", viewQueries: [{ propertyName: "myRef", first: true, predicate: ["myRef"], descendants: true }, { propertyName: "myRefs", predicate: ["myRef1, myRef2, myRef3"], descendants: true }], ngImport: i0, template: `
     <div #myRef></div>
     <div #myRef1></div>
   `, isInline: true });
+}
 i0.ɵɵngDeclareClassMetadata({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: ViewQueryComponent, decorators: [{
             type: Component,
             args: [{
@@ -184,7 +195,8 @@ i0.ɵɵngDeclareClassMetadata({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDE
                     template: `
     <div #myRef></div>
     <div #myRef1></div>
-  `
+  `,
+                    standalone: false
                 }]
         }], propDecorators: { myRef: [{
                 type: ViewChild,
@@ -194,10 +206,10 @@ i0.ɵɵngDeclareClassMetadata({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDE
                 args: ['myRef1, myRef2, myRef3']
             }] } });
 export class MyModule {
+    static ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule, deps: [], target: i0.ɵɵFactoryTarget.NgModule });
+    static ɵmod = i0.ɵɵngDeclareNgModule({ minVersion: "14.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule, declarations: [ViewQueryComponent] });
+    static ɵinj = i0.ɵɵngDeclareInjector({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule });
 }
-MyModule.ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule, deps: [], target: i0.ɵɵFactoryTarget.NgModule });
-MyModule.ɵmod = i0.ɵɵngDeclareNgModule({ minVersion: "14.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule, declarations: [ViewQueryComponent] });
-MyModule.ɵinj = i0.ɵɵngDeclareInjector({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule });
 i0.ɵɵngDeclareClassMetadata({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule, decorators: [{
             type: NgModule,
             args: [{ declarations: [ViewQueryComponent] }]
@@ -226,13 +238,14 @@ export declare class MyModule {
 import { Directive } from '@angular/core';
 import * as i0 from "@angular/core";
 export class SomeDirective {
+    static ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: SomeDirective, deps: [], target: i0.ɵɵFactoryTarget.Directive });
+    static ɵdir = i0.ɵɵngDeclareDirective({ minVersion: "14.0.0", version: "0.0.0-PLACEHOLDER", type: SomeDirective, isStandalone: false, selector: "[someDir]", ngImport: i0 });
 }
-SomeDirective.ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: SomeDirective, deps: [], target: i0.ɵɵFactoryTarget.Directive });
-SomeDirective.ɵdir = i0.ɵɵngDeclareDirective({ minVersion: "14.0.0", version: "0.0.0-PLACEHOLDER", type: SomeDirective, selector: "[someDir]", ngImport: i0 });
 i0.ɵɵngDeclareClassMetadata({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: SomeDirective, decorators: [{
             type: Directive,
             args: [{
                     selector: '[someDir]',
+                    standalone: false
                 }]
         }] });
 
@@ -252,18 +265,21 @@ import { Component, ElementRef, NgModule, ViewChild } from '@angular/core';
 import { SomeDirective } from './some.directive';
 import * as i0 from "@angular/core";
 export class ViewQueryComponent {
-}
-ViewQueryComponent.ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: ViewQueryComponent, deps: [], target: i0.ɵɵFactoryTarget.Component });
-ViewQueryComponent.ɵcmp = i0.ɵɵngDeclareComponent({ minVersion: "14.0.0", version: "0.0.0-PLACEHOLDER", type: ViewQueryComponent, selector: "view-query-component", viewQueries: [{ propertyName: "someDir", first: true, predicate: SomeDirective, descendants: true, static: true }, { propertyName: "foo", first: true, predicate: ["foo"], descendants: true }], ngImport: i0, template: `
+    someDir;
+    foo;
+    static ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: ViewQueryComponent, deps: [], target: i0.ɵɵFactoryTarget.Component });
+    static ɵcmp = i0.ɵɵngDeclareComponent({ minVersion: "14.0.0", version: "0.0.0-PLACEHOLDER", type: ViewQueryComponent, isStandalone: false, selector: "view-query-component", viewQueries: [{ propertyName: "someDir", first: true, predicate: SomeDirective, descendants: true, static: true }, { propertyName: "foo", first: true, predicate: ["foo"], descendants: true }], ngImport: i0, template: `
     <div someDir></div>
   `, isInline: true, dependencies: [{ kind: "directive", type: i0.forwardRef(() => SomeDirective), selector: "[someDir]" }] });
+}
 i0.ɵɵngDeclareClassMetadata({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: ViewQueryComponent, decorators: [{
             type: Component,
             args: [{
                     selector: 'view-query-component',
                     template: `
     <div someDir></div>
-  `
+  `,
+                    standalone: false
                 }]
         }], propDecorators: { someDir: [{
                 type: ViewChild,
@@ -273,10 +289,10 @@ i0.ɵɵngDeclareClassMetadata({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDE
                 args: ['foo']
             }] } });
 export class MyModule {
+    static ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule, deps: [], target: i0.ɵɵFactoryTarget.NgModule });
+    static ɵmod = i0.ɵɵngDeclareNgModule({ minVersion: "14.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule, declarations: [SomeDirective, ViewQueryComponent] });
+    static ɵinj = i0.ɵɵngDeclareInjector({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule });
 }
-MyModule.ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule, deps: [], target: i0.ɵɵFactoryTarget.NgModule });
-MyModule.ɵmod = i0.ɵɵngDeclareNgModule({ minVersion: "14.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule, declarations: [SomeDirective, ViewQueryComponent] });
-MyModule.ɵinj = i0.ɵɵngDeclareInjector({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule });
 i0.ɵɵngDeclareClassMetadata({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule, decorators: [{
             type: NgModule,
             args: [{ declarations: [SomeDirective, ViewQueryComponent] }]
@@ -307,13 +323,14 @@ export declare class MyModule {
 import { Directive } from '@angular/core';
 import * as i0 from "@angular/core";
 export class SomeDirective {
+    static ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: SomeDirective, deps: [], target: i0.ɵɵFactoryTarget.Directive });
+    static ɵdir = i0.ɵɵngDeclareDirective({ minVersion: "14.0.0", version: "0.0.0-PLACEHOLDER", type: SomeDirective, isStandalone: false, selector: "[someDir]", ngImport: i0 });
 }
-SomeDirective.ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: SomeDirective, deps: [], target: i0.ɵɵFactoryTarget.Directive });
-SomeDirective.ɵdir = i0.ɵɵngDeclareDirective({ minVersion: "14.0.0", version: "0.0.0-PLACEHOLDER", type: SomeDirective, selector: "[someDir]", ngImport: i0 });
 i0.ɵɵngDeclareClassMetadata({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: SomeDirective, decorators: [{
             type: Directive,
             args: [{
                     selector: '[someDir]',
+                    standalone: false
                 }]
         }] });
 
@@ -333,13 +350,17 @@ import { Component, ElementRef, NgModule, QueryList, TemplateRef, ViewChild, Vie
 import { SomeDirective } from './some.directive';
 import * as i0 from "@angular/core";
 export class ViewQueryComponent {
-}
-ViewQueryComponent.ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: ViewQueryComponent, deps: [], target: i0.ɵɵFactoryTarget.Component });
-ViewQueryComponent.ɵcmp = i0.ɵɵngDeclareComponent({ minVersion: "14.0.0", version: "0.0.0-PLACEHOLDER", type: ViewQueryComponent, selector: "view-query-component", viewQueries: [{ propertyName: "myRef", first: true, predicate: ["myRef"], descendants: true, read: TemplateRef }, { propertyName: "someDir", first: true, predicate: SomeDirective, descendants: true, read: ElementRef }, { propertyName: "myRefs", predicate: ["myRef1, myRef2, myRef3"], descendants: true, read: ElementRef }, { propertyName: "someDirs", predicate: SomeDirective, descendants: true, read: TemplateRef }], ngImport: i0, template: `
+    myRef;
+    myRefs;
+    someDir;
+    someDirs;
+    static ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: ViewQueryComponent, deps: [], target: i0.ɵɵFactoryTarget.Component });
+    static ɵcmp = i0.ɵɵngDeclareComponent({ minVersion: "14.0.0", version: "0.0.0-PLACEHOLDER", type: ViewQueryComponent, isStandalone: false, selector: "view-query-component", viewQueries: [{ propertyName: "myRef", first: true, predicate: ["myRef"], descendants: true, read: TemplateRef }, { propertyName: "someDir", first: true, predicate: SomeDirective, descendants: true, read: ElementRef }, { propertyName: "myRefs", predicate: ["myRef1, myRef2, myRef3"], descendants: true, read: ElementRef }, { propertyName: "someDirs", predicate: SomeDirective, descendants: true, read: TemplateRef }], ngImport: i0, template: `
     <div someDir></div>
     <div #myRef></div>
     <div #myRef1></div>
   `, isInline: true });
+}
 i0.ɵɵngDeclareClassMetadata({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: ViewQueryComponent, decorators: [{
             type: Component,
             args: [{
@@ -348,7 +369,8 @@ i0.ɵɵngDeclareClassMetadata({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDE
     <div someDir></div>
     <div #myRef></div>
     <div #myRef1></div>
-  `
+  `,
+                    standalone: false
                 }]
         }], propDecorators: { myRef: [{
                 type: ViewChild,
@@ -364,10 +386,10 @@ i0.ɵɵngDeclareClassMetadata({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDE
                 args: [SomeDirective, { read: TemplateRef }]
             }] } });
 export class MyModule {
+    static ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule, deps: [], target: i0.ɵɵFactoryTarget.NgModule });
+    static ɵmod = i0.ɵɵngDeclareNgModule({ minVersion: "14.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule, declarations: [ViewQueryComponent] });
+    static ɵinj = i0.ɵɵngDeclareInjector({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule });
 }
-MyModule.ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule, deps: [], target: i0.ɵɵFactoryTarget.NgModule });
-MyModule.ɵmod = i0.ɵɵngDeclareNgModule({ minVersion: "14.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule, declarations: [ViewQueryComponent] });
-MyModule.ɵinj = i0.ɵɵngDeclareInjector({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule });
 i0.ɵɵngDeclareClassMetadata({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule, decorators: [{
             type: NgModule,
             args: [{ declarations: [ViewQueryComponent] }]
@@ -398,13 +420,14 @@ export declare class MyModule {
 import { Directive } from '@angular/core';
 import * as i0 from "@angular/core";
 export class SomeDirective {
+    static ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: SomeDirective, deps: [], target: i0.ɵɵFactoryTarget.Directive });
+    static ɵdir = i0.ɵɵngDeclareDirective({ minVersion: "14.0.0", version: "0.0.0-PLACEHOLDER", type: SomeDirective, isStandalone: false, selector: "[someDir]", ngImport: i0 });
 }
-SomeDirective.ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: SomeDirective, deps: [], target: i0.ɵɵFactoryTarget.Directive });
-SomeDirective.ɵdir = i0.ɵɵngDeclareDirective({ minVersion: "14.0.0", version: "0.0.0-PLACEHOLDER", type: SomeDirective, selector: "[someDir]", ngImport: i0 });
 i0.ɵɵngDeclareClassMetadata({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: SomeDirective, decorators: [{
             type: Directive,
             args: [{
                     selector: '[someDir]',
+                    standalone: false
                 }]
         }] });
 
@@ -424,18 +447,21 @@ import { Component, ContentChild, ContentChildren, NgModule, QueryList } from '@
 import { SomeDirective } from './some.directive';
 import * as i0 from "@angular/core";
 export class ContentQueryComponent {
-}
-ContentQueryComponent.ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: ContentQueryComponent, deps: [], target: i0.ɵɵFactoryTarget.Component });
-ContentQueryComponent.ɵcmp = i0.ɵɵngDeclareComponent({ minVersion: "14.0.0", version: "0.0.0-PLACEHOLDER", type: ContentQueryComponent, selector: "content-query-component", queries: [{ propertyName: "someDir", first: true, predicate: SomeDirective, descendants: true }, { propertyName: "someDirList", predicate: SomeDirective }], ngImport: i0, template: `
+    someDir;
+    someDirList;
+    static ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: ContentQueryComponent, deps: [], target: i0.ɵɵFactoryTarget.Component });
+    static ɵcmp = i0.ɵɵngDeclareComponent({ minVersion: "14.0.0", version: "0.0.0-PLACEHOLDER", type: ContentQueryComponent, isStandalone: false, selector: "content-query-component", queries: [{ propertyName: "someDir", first: true, predicate: SomeDirective, descendants: true }, { propertyName: "someDirList", predicate: SomeDirective }], ngImport: i0, template: `
     <div><ng-content></ng-content></div>
   `, isInline: true });
+}
 i0.ɵɵngDeclareClassMetadata({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: ContentQueryComponent, decorators: [{
             type: Component,
             args: [{
                     selector: 'content-query-component',
                     template: `
     <div><ng-content></ng-content></div>
-  `
+  `,
+                    standalone: false
                 }]
         }], propDecorators: { someDir: [{
                 type: ContentChild,
@@ -445,13 +471,13 @@ i0.ɵɵngDeclareClassMetadata({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDE
                 args: [SomeDirective]
             }] } });
 export class MyApp {
-}
-MyApp.ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyApp, deps: [], target: i0.ɵɵFactoryTarget.Component });
-MyApp.ɵcmp = i0.ɵɵngDeclareComponent({ minVersion: "14.0.0", version: "0.0.0-PLACEHOLDER", type: MyApp, selector: "my-app", ngImport: i0, template: `
+    static ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyApp, deps: [], target: i0.ɵɵFactoryTarget.Component });
+    static ɵcmp = i0.ɵɵngDeclareComponent({ minVersion: "14.0.0", version: "0.0.0-PLACEHOLDER", type: MyApp, isStandalone: false, selector: "my-app", ngImport: i0, template: `
     <content-query-component>
       <div someDir></div>
     </content-query-component>
   `, isInline: true, dependencies: [{ kind: "directive", type: i0.forwardRef(() => SomeDirective), selector: "[someDir]" }, { kind: "component", type: i0.forwardRef(() => ContentQueryComponent), selector: "content-query-component" }] });
+}
 i0.ɵɵngDeclareClassMetadata({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyApp, decorators: [{
             type: Component,
             args: [{
@@ -460,14 +486,15 @@ i0.ɵɵngDeclareClassMetadata({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDE
     <content-query-component>
       <div someDir></div>
     </content-query-component>
-  `
+  `,
+                    standalone: false
                 }]
         }] });
 export class MyModule {
+    static ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule, deps: [], target: i0.ɵɵFactoryTarget.NgModule });
+    static ɵmod = i0.ɵɵngDeclareNgModule({ minVersion: "14.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule, declarations: [SomeDirective, ContentQueryComponent, MyApp] });
+    static ɵinj = i0.ɵɵngDeclareInjector({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule });
 }
-MyModule.ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule, deps: [], target: i0.ɵɵFactoryTarget.NgModule });
-MyModule.ɵmod = i0.ɵɵngDeclareNgModule({ minVersion: "14.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule, declarations: [SomeDirective, ContentQueryComponent, MyApp] });
-MyModule.ɵinj = i0.ɵɵngDeclareInjector({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule });
 i0.ɵɵngDeclareClassMetadata({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule, decorators: [{
             type: NgModule,
             args: [{ declarations: [SomeDirective, ContentQueryComponent, MyApp] }]
@@ -502,18 +529,21 @@ export declare class MyModule {
 import { Component, ContentChild, ContentChildren, Directive, forwardRef, NgModule, QueryList } from '@angular/core';
 import * as i0 from "@angular/core";
 export class ContentQueryComponent {
-}
-ContentQueryComponent.ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: ContentQueryComponent, deps: [], target: i0.ɵɵFactoryTarget.Component });
-ContentQueryComponent.ɵcmp = i0.ɵɵngDeclareComponent({ minVersion: "14.0.0", version: "0.0.0-PLACEHOLDER", type: ContentQueryComponent, selector: "content-query-component", queries: [{ propertyName: "someDir", first: true, predicate: i0.forwardRef(() => SomeDirective), descendants: true }, { propertyName: "someDirList", predicate: i0.forwardRef(() => SomeDirective) }], ngImport: i0, template: `
+    someDir;
+    someDirList;
+    static ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: ContentQueryComponent, deps: [], target: i0.ɵɵFactoryTarget.Component });
+    static ɵcmp = i0.ɵɵngDeclareComponent({ minVersion: "14.0.0", version: "0.0.0-PLACEHOLDER", type: ContentQueryComponent, isStandalone: false, selector: "content-query-component", queries: [{ propertyName: "someDir", first: true, predicate: i0.forwardRef(() => SomeDirective), descendants: true }, { propertyName: "someDirList", predicate: i0.forwardRef(() => SomeDirective) }], ngImport: i0, template: `
     <div><ng-content></ng-content></div>
   `, isInline: true });
+}
 i0.ɵɵngDeclareClassMetadata({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: ContentQueryComponent, decorators: [{
             type: Component,
             args: [{
                     selector: 'content-query-component',
                     template: `
     <div><ng-content></ng-content></div>
-  `
+  `,
+                    standalone: false
                 }]
         }], propDecorators: { someDir: [{
                 type: ContentChild,
@@ -523,13 +553,13 @@ i0.ɵɵngDeclareClassMetadata({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDE
                 args: [forwardRef(() => SomeDirective)]
             }] } });
 export class MyApp {
-}
-MyApp.ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyApp, deps: [], target: i0.ɵɵFactoryTarget.Component });
-MyApp.ɵcmp = i0.ɵɵngDeclareComponent({ minVersion: "14.0.0", version: "0.0.0-PLACEHOLDER", type: MyApp, selector: "my-app", ngImport: i0, template: `
+    static ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyApp, deps: [], target: i0.ɵɵFactoryTarget.Component });
+    static ɵcmp = i0.ɵɵngDeclareComponent({ minVersion: "14.0.0", version: "0.0.0-PLACEHOLDER", type: MyApp, isStandalone: false, selector: "my-app", ngImport: i0, template: `
     <content-query-component>
       <div someDir></div>
     </content-query-component>
   `, isInline: true, dependencies: [{ kind: "directive", type: i0.forwardRef(() => SomeDirective), selector: "[someDir]" }, { kind: "component", type: i0.forwardRef(() => ContentQueryComponent), selector: "content-query-component" }] });
+}
 i0.ɵɵngDeclareClassMetadata({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyApp, decorators: [{
             type: Component,
             args: [{
@@ -538,24 +568,26 @@ i0.ɵɵngDeclareClassMetadata({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDE
     <content-query-component>
       <div someDir></div>
     </content-query-component>
-  `
+  `,
+                    standalone: false
                 }]
         }] });
 export class SomeDirective {
+    static ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: SomeDirective, deps: [], target: i0.ɵɵFactoryTarget.Directive });
+    static ɵdir = i0.ɵɵngDeclareDirective({ minVersion: "14.0.0", version: "0.0.0-PLACEHOLDER", type: SomeDirective, isStandalone: false, selector: "[someDir]", ngImport: i0 });
 }
-SomeDirective.ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: SomeDirective, deps: [], target: i0.ɵɵFactoryTarget.Directive });
-SomeDirective.ɵdir = i0.ɵɵngDeclareDirective({ minVersion: "14.0.0", version: "0.0.0-PLACEHOLDER", type: SomeDirective, selector: "[someDir]", ngImport: i0 });
 i0.ɵɵngDeclareClassMetadata({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: SomeDirective, decorators: [{
             type: Directive,
             args: [{
                     selector: '[someDir]',
+                    standalone: false
                 }]
         }] });
 export class MyModule {
+    static ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule, deps: [], target: i0.ɵɵFactoryTarget.NgModule });
+    static ɵmod = i0.ɵɵngDeclareNgModule({ minVersion: "14.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule, declarations: [SomeDirective, ContentQueryComponent, MyApp] });
+    static ɵinj = i0.ɵɵngDeclareInjector({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule });
 }
-MyModule.ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule, deps: [], target: i0.ɵɵFactoryTarget.NgModule });
-MyModule.ɵmod = i0.ɵɵngDeclareNgModule({ minVersion: "14.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule, declarations: [SomeDirective, ContentQueryComponent, MyApp] });
-MyModule.ɵinj = i0.ɵɵngDeclareInjector({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule });
 i0.ɵɵngDeclareClassMetadata({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule, decorators: [{
             type: NgModule,
             args: [{ declarations: [SomeDirective, ContentQueryComponent, MyApp] }]
@@ -592,12 +624,14 @@ export declare class MyModule {
 import { Component, ContentChild, ContentChildren, NgModule, QueryList } from '@angular/core';
 import * as i0 from "@angular/core";
 export class ContentQueryComponent {
-}
-ContentQueryComponent.ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: ContentQueryComponent, deps: [], target: i0.ɵɵFactoryTarget.Component });
-ContentQueryComponent.ɵcmp = i0.ɵɵngDeclareComponent({ minVersion: "14.0.0", version: "0.0.0-PLACEHOLDER", type: ContentQueryComponent, selector: "content-query-component", queries: [{ propertyName: "myRef", first: true, predicate: ["myRef"], descendants: true }, { propertyName: "myRefs", predicate: ["myRef1, myRef2, myRef3"] }], ngImport: i0, template: `
+    myRef;
+    myRefs;
+    static ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: ContentQueryComponent, deps: [], target: i0.ɵɵFactoryTarget.Component });
+    static ɵcmp = i0.ɵɵngDeclareComponent({ minVersion: "14.0.0", version: "0.0.0-PLACEHOLDER", type: ContentQueryComponent, isStandalone: false, selector: "content-query-component", queries: [{ propertyName: "myRef", first: true, predicate: ["myRef"], descendants: true }, { propertyName: "myRefs", predicate: ["myRef1, myRef2, myRef3"] }], ngImport: i0, template: `
     <div #myRef></div>
     <div #myRef1></div>
   `, isInline: true });
+}
 i0.ɵɵngDeclareClassMetadata({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: ContentQueryComponent, decorators: [{
             type: Component,
             args: [{
@@ -605,7 +639,8 @@ i0.ɵɵngDeclareClassMetadata({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDE
                     template: `
     <div #myRef></div>
     <div #myRef1></div>
-  `
+  `,
+                    standalone: false
                 }]
         }], propDecorators: { myRef: [{
                 type: ContentChild,
@@ -615,10 +650,10 @@ i0.ɵɵngDeclareClassMetadata({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDE
                 args: ['myRef1, myRef2, myRef3']
             }] } });
 export class MyModule {
+    static ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule, deps: [], target: i0.ɵɵFactoryTarget.NgModule });
+    static ɵmod = i0.ɵɵngDeclareNgModule({ minVersion: "14.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule, declarations: [ContentQueryComponent] });
+    static ɵinj = i0.ɵɵngDeclareInjector({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule });
 }
-MyModule.ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule, deps: [], target: i0.ɵɵFactoryTarget.NgModule });
-MyModule.ɵmod = i0.ɵɵngDeclareNgModule({ minVersion: "14.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule, declarations: [ContentQueryComponent] });
-MyModule.ɵinj = i0.ɵɵngDeclareInjector({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule });
 i0.ɵɵngDeclareClassMetadata({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule, decorators: [{
             type: NgModule,
             args: [{ declarations: [ContentQueryComponent] }]
@@ -647,13 +682,14 @@ export declare class MyModule {
 import { Directive } from '@angular/core';
 import * as i0 from "@angular/core";
 export class SomeDirective {
+    static ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: SomeDirective, deps: [], target: i0.ɵɵFactoryTarget.Directive });
+    static ɵdir = i0.ɵɵngDeclareDirective({ minVersion: "14.0.0", version: "0.0.0-PLACEHOLDER", type: SomeDirective, isStandalone: false, selector: "[someDir]", ngImport: i0 });
 }
-SomeDirective.ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: SomeDirective, deps: [], target: i0.ɵɵFactoryTarget.Directive });
-SomeDirective.ɵdir = i0.ɵɵngDeclareDirective({ minVersion: "14.0.0", version: "0.0.0-PLACEHOLDER", type: SomeDirective, selector: "[someDir]", ngImport: i0 });
 i0.ɵɵngDeclareClassMetadata({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: SomeDirective, decorators: [{
             type: Directive,
             args: [{
                     selector: '[someDir]',
+                    standalone: false
                 }]
         }] });
 
@@ -673,18 +709,21 @@ import { Component, ContentChild, ElementRef, NgModule } from '@angular/core';
 import { SomeDirective } from './some.directive';
 import * as i0 from "@angular/core";
 export class ContentQueryComponent {
-}
-ContentQueryComponent.ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: ContentQueryComponent, deps: [], target: i0.ɵɵFactoryTarget.Component });
-ContentQueryComponent.ɵcmp = i0.ɵɵngDeclareComponent({ minVersion: "14.0.0", version: "0.0.0-PLACEHOLDER", type: ContentQueryComponent, selector: "content-query-component", queries: [{ propertyName: "someDir", first: true, predicate: SomeDirective, descendants: true, static: true }, { propertyName: "foo", first: true, predicate: ["foo"], descendants: true }], ngImport: i0, template: `
+    someDir;
+    foo;
+    static ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: ContentQueryComponent, deps: [], target: i0.ɵɵFactoryTarget.Component });
+    static ɵcmp = i0.ɵɵngDeclareComponent({ minVersion: "14.0.0", version: "0.0.0-PLACEHOLDER", type: ContentQueryComponent, isStandalone: false, selector: "content-query-component", queries: [{ propertyName: "someDir", first: true, predicate: SomeDirective, descendants: true, static: true }, { propertyName: "foo", first: true, predicate: ["foo"], descendants: true }], ngImport: i0, template: `
     <div><ng-content></ng-content></div>
   `, isInline: true });
+}
 i0.ɵɵngDeclareClassMetadata({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: ContentQueryComponent, decorators: [{
             type: Component,
             args: [{
                     selector: 'content-query-component',
                     template: `
     <div><ng-content></ng-content></div>
-  `
+  `,
+                    standalone: false
                 }]
         }], propDecorators: { someDir: [{
                 type: ContentChild,
@@ -694,13 +733,13 @@ i0.ɵɵngDeclareClassMetadata({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDE
                 args: ['foo']
             }] } });
 export class MyApp {
-}
-MyApp.ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyApp, deps: [], target: i0.ɵɵFactoryTarget.Component });
-MyApp.ɵcmp = i0.ɵɵngDeclareComponent({ minVersion: "14.0.0", version: "0.0.0-PLACEHOLDER", type: MyApp, selector: "my-app", ngImport: i0, template: `
+    static ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyApp, deps: [], target: i0.ɵɵFactoryTarget.Component });
+    static ɵcmp = i0.ɵɵngDeclareComponent({ minVersion: "14.0.0", version: "0.0.0-PLACEHOLDER", type: MyApp, isStandalone: false, selector: "my-app", ngImport: i0, template: `
     <content-query-component>
       <div someDir></div>
     </content-query-component>
   `, isInline: true, dependencies: [{ kind: "directive", type: i0.forwardRef(() => SomeDirective), selector: "[someDir]" }, { kind: "component", type: i0.forwardRef(() => ContentQueryComponent), selector: "content-query-component" }] });
+}
 i0.ɵɵngDeclareClassMetadata({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyApp, decorators: [{
             type: Component,
             args: [{
@@ -709,14 +748,15 @@ i0.ɵɵngDeclareClassMetadata({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDE
     <content-query-component>
       <div someDir></div>
     </content-query-component>
-  `
+  `,
+                    standalone: false
                 }]
         }] });
 export class MyModule {
+    static ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule, deps: [], target: i0.ɵɵFactoryTarget.NgModule });
+    static ɵmod = i0.ɵɵngDeclareNgModule({ minVersion: "14.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule, declarations: [SomeDirective, ContentQueryComponent, MyApp] });
+    static ɵinj = i0.ɵɵngDeclareInjector({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule });
 }
-MyModule.ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule, deps: [], target: i0.ɵɵFactoryTarget.NgModule });
-MyModule.ɵmod = i0.ɵɵngDeclareNgModule({ minVersion: "14.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule, declarations: [SomeDirective, ContentQueryComponent, MyApp] });
-MyModule.ɵinj = i0.ɵɵngDeclareInjector({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule });
 i0.ɵɵngDeclareClassMetadata({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule, decorators: [{
             type: NgModule,
             args: [{ declarations: [SomeDirective, ContentQueryComponent, MyApp] }]
@@ -751,13 +791,14 @@ export declare class MyModule {
 import { Directive } from '@angular/core';
 import * as i0 from "@angular/core";
 export class SomeDirective {
+    static ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: SomeDirective, deps: [], target: i0.ɵɵFactoryTarget.Directive });
+    static ɵdir = i0.ɵɵngDeclareDirective({ minVersion: "14.0.0", version: "0.0.0-PLACEHOLDER", type: SomeDirective, isStandalone: false, selector: "[someDir]", ngImport: i0 });
 }
-SomeDirective.ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: SomeDirective, deps: [], target: i0.ɵɵFactoryTarget.Directive });
-SomeDirective.ɵdir = i0.ɵɵngDeclareDirective({ minVersion: "14.0.0", version: "0.0.0-PLACEHOLDER", type: SomeDirective, selector: "[someDir]", ngImport: i0 });
 i0.ɵɵngDeclareClassMetadata({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: SomeDirective, decorators: [{
             type: Directive,
             args: [{
                     selector: '[someDir]',
+                    standalone: false
                 }]
         }] });
 
@@ -777,13 +818,17 @@ import { Component, ContentChild, ContentChildren, ElementRef, NgModule, QueryLi
 import { SomeDirective } from './some.directive';
 import * as i0 from "@angular/core";
 export class ContentQueryComponent {
-}
-ContentQueryComponent.ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: ContentQueryComponent, deps: [], target: i0.ɵɵFactoryTarget.Component });
-ContentQueryComponent.ɵcmp = i0.ɵɵngDeclareComponent({ minVersion: "14.0.0", version: "0.0.0-PLACEHOLDER", type: ContentQueryComponent, selector: "content-query-component", queries: [{ propertyName: "myRef", first: true, predicate: ["myRef"], descendants: true, read: TemplateRef }, { propertyName: "someDir", first: true, predicate: SomeDirective, descendants: true, read: ElementRef }, { propertyName: "myRefs", predicate: ["myRef1, myRef2, myRef3"], read: ElementRef }, { propertyName: "someDirs", predicate: SomeDirective, read: TemplateRef }], ngImport: i0, template: `
+    myRef;
+    myRefs;
+    someDir;
+    someDirs;
+    static ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: ContentQueryComponent, deps: [], target: i0.ɵɵFactoryTarget.Component });
+    static ɵcmp = i0.ɵɵngDeclareComponent({ minVersion: "14.0.0", version: "0.0.0-PLACEHOLDER", type: ContentQueryComponent, isStandalone: false, selector: "content-query-component", queries: [{ propertyName: "myRef", first: true, predicate: ["myRef"], descendants: true, read: TemplateRef }, { propertyName: "someDir", first: true, predicate: SomeDirective, descendants: true, read: ElementRef }, { propertyName: "myRefs", predicate: ["myRef1, myRef2, myRef3"], read: ElementRef }, { propertyName: "someDirs", predicate: SomeDirective, read: TemplateRef }], ngImport: i0, template: `
     <div someDir></div>
     <div #myRef></div>
     <div #myRef1></div>
   `, isInline: true });
+}
 i0.ɵɵngDeclareClassMetadata({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: ContentQueryComponent, decorators: [{
             type: Component,
             args: [{
@@ -792,7 +837,8 @@ i0.ɵɵngDeclareClassMetadata({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDE
     <div someDir></div>
     <div #myRef></div>
     <div #myRef1></div>
-  `
+  `,
+                    standalone: false
                 }]
         }], propDecorators: { myRef: [{
                 type: ContentChild,
@@ -808,10 +854,10 @@ i0.ɵɵngDeclareClassMetadata({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDE
                 args: [SomeDirective, { read: TemplateRef }]
             }] } });
 export class MyModule {
+    static ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule, deps: [], target: i0.ɵɵFactoryTarget.NgModule });
+    static ɵmod = i0.ɵɵngDeclareNgModule({ minVersion: "14.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule, declarations: [ContentQueryComponent] });
+    static ɵinj = i0.ɵɵngDeclareInjector({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule });
 }
-MyModule.ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule, deps: [], target: i0.ɵɵFactoryTarget.NgModule });
-MyModule.ɵmod = i0.ɵɵngDeclareNgModule({ minVersion: "14.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule, declarations: [ContentQueryComponent] });
-MyModule.ɵinj = i0.ɵɵngDeclareInjector({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule });
 i0.ɵɵngDeclareClassMetadata({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule, decorators: [{
             type: NgModule,
             args: [{ declarations: [ContentQueryComponent] }]
@@ -842,13 +888,14 @@ export declare class MyModule {
 import { Directive } from '@angular/core';
 import * as i0 from "@angular/core";
 export class SomeDirective {
+    static ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: SomeDirective, deps: [], target: i0.ɵɵFactoryTarget.Directive });
+    static ɵdir = i0.ɵɵngDeclareDirective({ minVersion: "14.0.0", version: "0.0.0-PLACEHOLDER", type: SomeDirective, isStandalone: false, selector: "[someDir]", ngImport: i0 });
 }
-SomeDirective.ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: SomeDirective, deps: [], target: i0.ɵɵFactoryTarget.Directive });
-SomeDirective.ɵdir = i0.ɵɵngDeclareDirective({ minVersion: "14.0.0", version: "0.0.0-PLACEHOLDER", type: SomeDirective, selector: "[someDir]", ngImport: i0 });
 i0.ɵɵngDeclareClassMetadata({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: SomeDirective, decorators: [{
             type: Directive,
             args: [{
                     selector: '[someDir]',
+                    standalone: false
                 }]
         }] });
 
@@ -868,12 +915,16 @@ import { Component, ContentChildren, NgModule, QueryList, ViewChildren } from '@
 import { SomeDirective } from './some.directive';
 import * as i0 from "@angular/core";
 export class ContentQueryComponent {
-}
-ContentQueryComponent.ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: ContentQueryComponent, deps: [], target: i0.ɵɵFactoryTarget.Component });
-ContentQueryComponent.ɵcmp = i0.ɵɵngDeclareComponent({ minVersion: "14.0.0", version: "0.0.0-PLACEHOLDER", type: ContentQueryComponent, selector: "content-query-component", queries: [{ propertyName: "myRefs", predicate: ["myRef"] }, { propertyName: "oldMyRefs", predicate: ["myRef"], emitDistinctChangesOnly: false }], viewQueries: [{ propertyName: "someDirs", predicate: SomeDirective, descendants: true }, { propertyName: "oldSomeDirs", predicate: SomeDirective, emitDistinctChangesOnly: false, descendants: true }], ngImport: i0, template: `
+    myRefs;
+    oldMyRefs;
+    someDirs;
+    oldSomeDirs;
+    static ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: ContentQueryComponent, deps: [], target: i0.ɵɵFactoryTarget.Component });
+    static ɵcmp = i0.ɵɵngDeclareComponent({ minVersion: "14.0.0", version: "0.0.0-PLACEHOLDER", type: ContentQueryComponent, isStandalone: false, selector: "content-query-component", queries: [{ propertyName: "myRefs", predicate: ["myRef"] }, { propertyName: "oldMyRefs", predicate: ["myRef"], emitDistinctChangesOnly: false }], viewQueries: [{ propertyName: "someDirs", predicate: SomeDirective, descendants: true }, { propertyName: "oldSomeDirs", predicate: SomeDirective, emitDistinctChangesOnly: false, descendants: true }], ngImport: i0, template: `
     <div someDir></div>
     <div #myRef></div>
   `, isInline: true });
+}
 i0.ɵɵngDeclareClassMetadata({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: ContentQueryComponent, decorators: [{
             type: Component,
             args: [{
@@ -881,7 +932,8 @@ i0.ɵɵngDeclareClassMetadata({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDE
                     template: `
     <div someDir></div>
     <div #myRef></div>
-  `
+  `,
+                    standalone: false
                 }]
         }], propDecorators: { myRefs: [{
                 type: ContentChildren,
@@ -897,10 +949,10 @@ i0.ɵɵngDeclareClassMetadata({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDE
                 args: [SomeDirective, { emitDistinctChangesOnly: false }]
             }] } });
 export class MyModule {
+    static ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule, deps: [], target: i0.ɵɵFactoryTarget.NgModule });
+    static ɵmod = i0.ɵɵngDeclareNgModule({ minVersion: "14.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule, declarations: [ContentQueryComponent] });
+    static ɵinj = i0.ɵɵngDeclareInjector({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule });
 }
-MyModule.ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule, deps: [], target: i0.ɵɵFactoryTarget.NgModule });
-MyModule.ɵmod = i0.ɵɵngDeclareNgModule({ minVersion: "14.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule, declarations: [ContentQueryComponent] });
-MyModule.ɵinj = i0.ɵɵngDeclareInjector({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule });
 i0.ɵɵngDeclareClassMetadata({ minVersion: "12.0.0", version: "0.0.0-PLACEHOLDER", ngImport: i0, type: MyModule, decorators: [{
             type: NgModule,
             args: [{ declarations: [ContentQueryComponent] }]

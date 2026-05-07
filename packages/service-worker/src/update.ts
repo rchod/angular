@@ -6,9 +6,10 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
-import {Injectable} from '@angular/core';
+import {Injectable, ɵRuntimeError as RuntimeError} from '@angular/core';
 import {NEVER, Observable} from 'rxjs';
 
+import {RuntimeErrorCode} from './errors';
 import {
   ERR_SW_NOT_SUPPORTED,
   NgswCommChannel,
@@ -20,7 +21,7 @@ import {
  * Subscribe to update notifications from the Service Worker, trigger update
  * checks, and forcibly activate updates.
  *
- * @see {@link ecosystem/service-workers/communications Service worker communication guide}
+ * @see {@link /ecosystem/service-workers/communications Service Worker Communication Guide}
  *
  * @publicApi
  */
@@ -34,6 +35,9 @@ export class SwUpdate {
    *
    * Emits a `VersionReadyEvent` event whenever a new version has been downloaded and is ready for
    * activation.
+   *
+   * @see [Version updates](ecosystem/service-workers/communications#version-updates)
+   *
    */
   readonly versionUpdates: Observable<VersionEvent>;
 
@@ -51,6 +55,8 @@ export class SwUpdate {
   get isEnabled(): boolean {
     return this.sw.isEnabled;
   }
+
+  private ongoingCheckForUpdate: Promise<boolean> | null = null;
 
   constructor(private sw: NgswCommChannel) {
     if (!sw.isEnabled) {
@@ -80,8 +86,16 @@ export class SwUpdate {
     if (!this.sw.isEnabled) {
       return Promise.reject(new Error(ERR_SW_NOT_SUPPORTED));
     }
+    if (this.ongoingCheckForUpdate) {
+      return this.ongoingCheckForUpdate;
+    }
     const nonce = this.sw.generateNonce();
-    return this.sw.postMessageWithOperation('CHECK_FOR_UPDATES', {nonce}, nonce);
+    this.ongoingCheckForUpdate = this.sw
+      .postMessageWithOperation('CHECK_FOR_UPDATES', {nonce}, nonce)
+      .finally(() => {
+        this.ongoingCheckForUpdate = null;
+      });
+    return this.ongoingCheckForUpdate;
   }
 
   /**
@@ -91,7 +105,7 @@ export class SwUpdate {
    * In most cases, you should not use this method and instead should update a client by reloading
    * the page.
    *
-   * <div class="alert is-important">
+   * <div class="docs-alert docs-alert-important">
    *
    * Updating a client without reloading can easily result in a broken application due to a version
    * mismatch between the application shell and other page resources,
@@ -110,7 +124,12 @@ export class SwUpdate {
    */
   activateUpdate(): Promise<boolean> {
     if (!this.sw.isEnabled) {
-      return Promise.reject(new Error(ERR_SW_NOT_SUPPORTED));
+      return Promise.reject(
+        new RuntimeError(
+          RuntimeErrorCode.SERVICE_WORKER_DISABLED_OR_NOT_SUPPORTED_BY_THIS_BROWSER,
+          (typeof ngDevMode === 'undefined' || ngDevMode) && ERR_SW_NOT_SUPPORTED,
+        ),
+      );
     }
     const nonce = this.sw.generateNonce();
     return this.sw.postMessageWithOperation('ACTIVATE_UPDATE', {nonce}, nonce);

@@ -10,10 +10,12 @@ import * as o from '../../../../output/output_ast';
 import type {ParseSourceSpan} from '../../../../parse_util';
 
 import * as t from '../../../../render3/r3_ast';
+import {CONTEXT_NAME} from '../../../../render3/view/util';
 import {ExpressionKind, OpKind} from './enums';
 import {SlotHandle} from './handle';
-import type {XrefId} from './operations';
+import {OpList, type XrefId} from './operations';
 import type {CreateOp} from './ops/create';
+import {createStatementOp} from './ops/shared';
 import {Interpolation, type UpdateOp} from './ops/update';
 import {
   ConsumesVarsTrait,
@@ -41,7 +43,7 @@ export type Expression =
   | PipeBindingVariadicExpr
   | SafePropertyReadExpr
   | SafeKeyedReadExpr
-  | SafeInvokeFunctionExpr
+  | SafeNavigationMigrationExpr
   | EmptyExpr
   | AssignTemporaryExpr
   | ReadTemporaryExpr
@@ -50,7 +52,9 @@ export type Expression =
   | ConstCollectedExpr
   | TwoWayBindingSetExpr
   | ContextLetReferenceExpr
-  | StoreLetExpr;
+  | StoreLetExpr
+  | TrackContextExpr
+  | ArrowFunctionExpr;
 
 /**
  * Transformer type which converts expressions into general `o.Expression`s (which may be an
@@ -274,10 +278,6 @@ export class NextContextExpr extends ExpressionBase {
   override readonly kind = ExpressionKind.NextContext;
 
   steps = 1;
-
-  constructor() {
-    super();
-  }
 
   override visitExpression(): void {}
 
@@ -767,46 +767,42 @@ export class SafeKeyedReadExpr extends ExpressionBase {
   }
 }
 
-export class SafeInvokeFunctionExpr extends ExpressionBase {
-  override readonly kind = ExpressionKind.SafeInvokeFunction;
+/**
+ * Wraps an expression to indicate that it should be evaluated with legacy null-safe navigation semantics.
+ * This is used to implement the `$safeNavigationMigration` builtin function.
+ */
+export class SafeNavigationMigrationExpr extends ExpressionBase {
+  override readonly kind = ExpressionKind.SafeNavigationMigration;
 
-  constructor(
-    public receiver: o.Expression,
-    public args: o.Expression[],
-  ) {
+  constructor(public expr: o.Expression) {
     super();
   }
 
-  override visitExpression(visitor: o.ExpressionVisitor, context: any): any {
-    this.receiver.visitExpression(visitor, context);
-    for (const a of this.args) {
-      a.visitExpression(visitor, context);
-    }
+  override visitExpression(visitor: o.ExpressionVisitor, context: any): void {
+    this.expr.visitExpression(visitor, context);
   }
 
-  override isEquivalent(): boolean {
-    return false;
+  override isEquivalent(e: o.Expression): boolean {
+    return e instanceof SafeNavigationMigrationExpr && this.expr.isEquivalent(e.expr);
   }
 
   override isConstant(): boolean {
-    return false;
+    return this.expr.isConstant();
   }
 
   override transformInternalExpressions(
     transform: ExpressionTransform,
     flags: VisitorContextFlag,
   ): void {
-    this.receiver = transformExpressionsInExpression(this.receiver, transform, flags);
-    for (let i = 0; i < this.args.length; i++) {
-      this.args[i] = transformExpressionsInExpression(this.args[i], transform, flags);
-    }
+    this.expr = transformExpressionsInExpression(
+      this.expr,
+      transform,
+      flags | VisitorContextFlag.InSafeNavigationMigration,
+    );
   }
 
-  override clone(): SafeInvokeFunctionExpr {
-    return new SafeInvokeFunctionExpr(
-      this.receiver.clone(),
-      this.args.map((a) => a.clone()),
-    );
+  override clone(): SafeNavigationMigrationExpr {
+    return new SafeNavigationMigrationExpr(this.expr.clone());
   }
 }
 
@@ -1038,6 +1034,71 @@ export class ConstCollectedExpr extends ExpressionBase {
   }
 }
 
+export class ArrowFunctionExpr
+  extends ExpressionBase
+  implements ConsumesVarsTrait, UsesVarOffsetTrait
+{
+  override readonly kind = ExpressionKind.ArrowFunction;
+  readonly [ConsumesVarsTrait] = true;
+  readonly [UsesVarOffset] = true;
+  readonly contextName = CONTEXT_NAME;
+  readonly currentViewName = 'view';
+
+  varOffset: number | null = null;
+
+  ops: OpList<UpdateOp>;
+
+  constructor(
+    readonly parameters: o.FnParam[],
+    readonly body: o.Expression,
+  ) {
+    super();
+    this.ops = new OpList();
+    this.ops.push([createStatementOp(new o.ReturnStatement(body, body.sourceSpan))]);
+  }
+
+  override visitExpression(visitor: o.ExpressionVisitor, context: any): void {
+    for (const op of this.ops) {
+      visitExpressionsInOp(op, (expr) => {
+        expr.visitExpression(visitor, context);
+      });
+    }
+  }
+
+  override isEquivalent(e: o.Expression): boolean {
+    return (
+      e instanceof ArrowFunctionExpr &&
+      e.parameters.length === this.parameters.length &&
+      e.parameters.every((param, index) => param.isEquivalent(this.parameters[index])) &&
+      e.body.isEquivalent(this.body)
+    );
+  }
+
+  override isConstant(): boolean {
+    return false;
+  }
+
+  override transformInternalExpressions(
+    transform: ExpressionTransform,
+    flags: VisitorContextFlag,
+  ): void {
+    for (const op of this.ops) {
+      transformExpressionsInOp(
+        op,
+        transform,
+        flags | (VisitorContextFlag.InChildOperation | VisitorContextFlag.InArrowFunctionOperation),
+      );
+    }
+  }
+
+  override clone(): ArrowFunctionExpr {
+    const expr = new ArrowFunctionExpr(this.parameters, this.body);
+    expr.varOffset = this.varOffset;
+    expr.ops = this.ops;
+    return expr;
+  }
+}
+
 /**
  * Visits all `Expression`s in the AST of `op` with the `visitor` function.
  */
@@ -1058,6 +1119,8 @@ export function visitExpressionsInOp(
 export enum VisitorContextFlag {
   None = 0b0000,
   InChildOperation = 0b0001,
+  InArrowFunctionOperation = 0b0010,
+  InSafeNavigationMigration = 0b0100,
 }
 
 function transformExpressionsInInterpolation(
@@ -1090,6 +1153,8 @@ export function transformExpressionsInOp(
     case OpKind.StyleMap:
     case OpKind.ClassProp:
     case OpKind.ClassMap:
+    case OpKind.AnimationString:
+    case OpKind.AnimationBinding:
     case OpKind.Binding:
       if (op.expression instanceof Interpolation) {
         transformExpressionsInInterpolation(op.expression, transform, flags);
@@ -1098,7 +1163,7 @@ export function transformExpressionsInOp(
       }
       break;
     case OpKind.Property:
-    case OpKind.HostProperty:
+    case OpKind.DomProperty:
     case OpKind.Attribute:
       if (op.expression instanceof Interpolation) {
         transformExpressionsInInterpolation(op.expression, transform, flags);
@@ -1140,6 +1205,8 @@ export function transformExpressionsInOp(
         op.contextValue = transformExpressionsInExpression(op.contextValue, transform, flags);
       }
       break;
+    case OpKind.Animation:
+    case OpKind.AnimationListener:
     case OpKind.Listener:
     case OpKind.TwoWayListener:
       for (const innerOp of op.handlerOps) {
@@ -1153,7 +1220,13 @@ export function transformExpressionsInOp(
         op.trustedValueFn && transformExpressionsInExpression(op.trustedValueFn, transform, flags);
       break;
     case OpKind.RepeaterCreate:
-      op.track = transformExpressionsInExpression(op.track, transform, flags);
+      if (op.trackByOps === null) {
+        op.track = transformExpressionsInExpression(op.track, transform, flags);
+      } else {
+        for (const innerOp of op.trackByOps) {
+          transformExpressionsInOp(innerOp, transform, flags | VisitorContextFlag.InChildOperation);
+        }
+      }
       if (op.trackByFn !== null) {
         op.trackByFn = transformExpressionsInExpression(op.trackByFn, transform, flags);
       }
@@ -1214,11 +1287,17 @@ export function transformExpressionsInOp(
     case OpKind.Pipe:
     case OpKind.Projection:
     case OpKind.ProjectionDef:
+    case OpKind.EnableIncrementalHydrationRuntime:
     case OpKind.Template:
     case OpKind.Text:
     case OpKind.I18nAttributes:
     case OpKind.IcuPlaceholder:
     case OpKind.DeclareLet:
+    case OpKind.SourceLocation:
+    case OpKind.ConditionalCreate:
+    case OpKind.ConditionalBranchCreate:
+    case OpKind.Control:
+    case OpKind.ControlCreate:
       // These operations contain no expressions.
       break;
     default:
@@ -1249,13 +1328,6 @@ export function transformExpressionsInExpression(
   } else if (expr instanceof o.ReadKeyExpr) {
     expr.receiver = transformExpressionsInExpression(expr.receiver, transform, flags);
     expr.index = transformExpressionsInExpression(expr.index, transform, flags);
-  } else if (expr instanceof o.WritePropExpr) {
-    expr.receiver = transformExpressionsInExpression(expr.receiver, transform, flags);
-    expr.value = transformExpressionsInExpression(expr.value, transform, flags);
-  } else if (expr instanceof o.WriteKeyExpr) {
-    expr.receiver = transformExpressionsInExpression(expr.receiver, transform, flags);
-    expr.index = transformExpressionsInExpression(expr.index, transform, flags);
-    expr.value = transformExpressionsInExpression(expr.value, transform, flags);
   } else if (expr instanceof o.InvokeFunctionExpr) {
     expr.fn = transformExpressionsInExpression(expr.fn, transform, flags);
     for (let i = 0; i < expr.args.length; i++) {
@@ -1266,12 +1338,12 @@ export function transformExpressionsInExpression(
       expr.entries[i] = transformExpressionsInExpression(expr.entries[i], transform, flags);
     }
   } else if (expr instanceof o.LiteralMapExpr) {
-    for (let i = 0; i < expr.entries.length; i++) {
-      expr.entries[i].value = transformExpressionsInExpression(
-        expr.entries[i].value,
-        transform,
-        flags,
-      );
+    for (const entry of expr.entries) {
+      if (entry instanceof o.LiteralMapSpreadAssignment) {
+        entry.expression = transformExpressionsInExpression(entry.expression, transform, flags);
+      } else {
+        entry.value = transformExpressionsInExpression(entry.value, transform, flags);
+      }
     }
   } else if (expr instanceof o.ConditionalExpr) {
     expr.condition = transformExpressionsInExpression(expr.condition, transform, flags);
@@ -1281,15 +1353,15 @@ export function transformExpressionsInExpression(
     }
   } else if (expr instanceof o.TypeofExpr) {
     expr.expr = transformExpressionsInExpression(expr.expr, transform, flags);
-  } else if (expr instanceof o.WriteVarExpr) {
-    expr.value = transformExpressionsInExpression(expr.value, transform, flags);
+  } else if (expr instanceof o.VoidExpr) {
+    expr.expr = transformExpressionsInExpression(expr.expr, transform, flags);
   } else if (expr instanceof o.LocalizedString) {
     for (let i = 0; i < expr.expressions.length; i++) {
       expr.expressions[i] = transformExpressionsInExpression(expr.expressions[i], transform, flags);
     }
   } else if (expr instanceof o.NotExpr) {
     expr.condition = transformExpressionsInExpression(expr.condition, transform, flags);
-  } else if (expr instanceof o.TaggedTemplateExpr) {
+  } else if (expr instanceof o.TaggedTemplateLiteralExpr) {
     expr.tag = transformExpressionsInExpression(expr.tag, transform, flags);
     expr.template.expressions = expr.template.expressions.map((e) =>
       transformExpressionsInExpression(e, transform, flags),
@@ -1297,17 +1369,34 @@ export function transformExpressionsInExpression(
   } else if (expr instanceof o.ArrowFunctionExpr) {
     if (Array.isArray(expr.body)) {
       for (let i = 0; i < expr.body.length; i++) {
-        transformExpressionsInStatement(expr.body[i], transform, flags);
+        transformExpressionsInStatement(
+          expr.body[i],
+          transform,
+          flags | VisitorContextFlag.InChildOperation,
+        );
       }
     } else {
-      expr.body = transformExpressionsInExpression(expr.body, transform, flags);
+      expr.body = transformExpressionsInExpression(
+        expr.body,
+        transform,
+        flags | VisitorContextFlag.InChildOperation,
+      );
     }
   } else if (expr instanceof o.WrappedNodeExpr) {
     // TODO: Do we need to transform any TS nodes nested inside of this expression?
+  } else if (expr instanceof o.TemplateLiteralExpr) {
+    for (let i = 0; i < expr.expressions.length; i++) {
+      expr.expressions[i] = transformExpressionsInExpression(expr.expressions[i], transform, flags);
+    }
+  } else if (expr instanceof o.ParenthesizedExpr) {
+    expr.expr = transformExpressionsInExpression(expr.expr, transform, flags);
+  } else if (expr instanceof o.SpreadElementExpr) {
+    expr.expression = transformExpressionsInExpression(expr.expression, transform, flags);
   } else if (
     expr instanceof o.ReadVarExpr ||
     expr instanceof o.ExternalExpr ||
-    expr instanceof o.LiteralExpr
+    expr instanceof o.LiteralExpr ||
+    expr instanceof o.RegularExpressionLiteralExpr
   ) {
     // No action for these types.
   } else {

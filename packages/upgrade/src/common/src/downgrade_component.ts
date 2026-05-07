@@ -6,7 +6,7 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
-import {ComponentFactory, ComponentFactoryResolver, Injector, NgZone, Type} from '@angular/core';
+import {EnvironmentInjector, Injector, NgZone, Type} from '@angular/core';
 
 import {
   IAnnotatedFunction,
@@ -78,10 +78,9 @@ import {
  *   <br />
  *   (This option is only necessary when using `downgradeModule()` to downgrade more than one
  *   Angular module.)
- * - `propagateDigest?: boolean`: Whether to perform {@link ChangeDetectorRef#detectChanges} on the
- * component on every
- *   [$digest](https://docs.angularjs.org/api/ng/type/$rootScope.Scope#$digest). If set to `false`,
- *   change detection will still be performed when any of the component's inputs changes.
+ * - `propagateDigest?: boolean`: Whether to perform {@link /api/core/ChangeDetectorRef#detectChanges detectChanges} on the
+ * component on every {@link https://docs.angularjs.org/api/ng/type/$rootScope.Scope#$digest $digest}.
+ *   If set to `false`, change detection will still be performed when any of the component's inputs changes.
  *   (Default: true)
  *
  * @returns a factory function that can be used to register the component in an
@@ -196,27 +195,17 @@ export function downgradeComponent(info: {
         const finalModuleInjector = moduleInjector || parentInjector!;
 
         const doDowngrade = (injector: Injector, moduleInjector: Injector) => {
-          // Retrieve `ComponentFactoryResolver` from the injector tied to the `NgModule` this
-          // component belongs to.
-          const componentFactoryResolver: ComponentFactoryResolver =
-            moduleInjector.get(ComponentFactoryResolver);
-          const componentFactory: ComponentFactory<any> =
-            componentFactoryResolver.resolveComponentFactory(info.component)!;
-
-          if (!componentFactory) {
-            throw new Error(`Expecting ComponentFactory for: ${getTypeName(info.component)}`);
-          }
-
           const injectorPromise = new ParentInjectorPromise(element);
           const facade = new DowngradeComponentAdapter(
             element,
             attrs,
             scope,
             ngModel,
+            moduleInjector.get(EnvironmentInjector),
             injector,
             $compile,
             $parse,
-            componentFactory,
+            info.component,
             wrapCallback,
             unsafelyOverwriteSignalInputs,
           );

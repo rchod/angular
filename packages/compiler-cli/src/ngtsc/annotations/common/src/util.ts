@@ -107,8 +107,32 @@ export function isAngularCore(decorator: Decorator): decorator is Decorator & {i
   return decorator.import !== null && decorator.import.from === CORE_MODULE;
 }
 
-export function isAngularCoreReference(reference: Reference, symbolName: string): boolean {
-  return reference.ownedByModuleGuess === CORE_MODULE && reference.debugName === symbolName;
+/**
+ * This function is used for verifying that a given reference is declared
+ * inside `@angular/core` and corresponds to the given symbol name.
+ *
+ * In some cases, due to the compiler face duplicating many symbols as
+ * an independent bridge between core and the compiler, the dts bundler may
+ * decide to alias declarations in the `.d.ts`, to avoid conflicts.
+ *
+ * e.g.
+ *
+ * ```
+ * declare enum ViewEncapsulation {} // from the facade
+ * declare enum ViewEncapsulation$1 {} // the real one exported to users.
+ * ```
+ *
+ * This function accounts for such potential re-namings.
+ */
+export function isAngularCoreReferenceWithPotentialAliasing(
+  reference: Reference,
+  symbolName: string,
+  isCore: boolean,
+): boolean {
+  return (
+    (reference.ownedByModuleGuess === CORE_MODULE || isCore) &&
+    reference.debugName?.replace(/\$\d+$/, '') === symbolName
+  );
 }
 
 export function findAngularDecorator(
@@ -225,22 +249,22 @@ export function tryUnwrapForwardRef(
  * @param args the arguments to the invocation of the forwardRef expression
  * @returns an unwrapped argument if `ref` pointed to forwardRef, or null otherwise
  */
-export const forwardRefResolver: ForeignFunctionResolver = (
-  fn,
-  callExpr,
-  resolve,
-  unresolvable,
-) => {
-  if (!isAngularCoreReference(fn, 'forwardRef') || callExpr.arguments.length !== 1) {
-    return unresolvable;
-  }
-  const expanded = expandForwardRef(callExpr.arguments[0]);
-  if (expanded !== null) {
-    return resolve(expanded);
-  } else {
-    return unresolvable;
-  }
-};
+export function createForwardRefResolver(isCore: boolean): ForeignFunctionResolver {
+  return (fn, callExpr, resolve, unresolvable) => {
+    if (
+      !isAngularCoreReferenceWithPotentialAliasing(fn, 'forwardRef', isCore) ||
+      callExpr.arguments.length !== 1
+    ) {
+      return unresolvable;
+    }
+    const expanded = expandForwardRef(callExpr.arguments[0]);
+    if (expanded !== null) {
+      return resolve(expanded);
+    } else {
+      return unresolvable;
+    }
+  };
+}
 
 /**
  * Combines an array of resolver functions into a one.
@@ -381,7 +405,7 @@ export function resolveProvidersRequiringFactory(
  * The `value` is the exported declaration of the class from its source file.
  * The `type` is an expression that would be used in the typings (.d.ts) files.
  */
-export function wrapTypeReference(reflector: ReflectionHost, clazz: ClassDeclaration): R3Reference {
+export function wrapTypeReference(clazz: ClassDeclaration): R3Reference {
   const value = new WrappedNodeExpr(clazz.name);
   const type = value;
   return {value, type};
@@ -413,6 +437,7 @@ export function compileResults(
   additionalFields: CompileResult[] | null,
   deferrableImports: Set<ts.ImportDeclaration> | null,
   debugInfo: Statement | null = null,
+  hmrInitializer: Statement | null = null,
 ): CompileResult[] {
   const statements = def.statements;
 
@@ -422,6 +447,10 @@ export function compileResults(
 
   if (debugInfo !== null) {
     statements.push(debugInfo);
+  }
+
+  if (hmrInitializer !== null) {
+    statements.push(hmrInitializer);
   }
 
   const results = [

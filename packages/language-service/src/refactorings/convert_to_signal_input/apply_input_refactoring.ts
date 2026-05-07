@@ -6,20 +6,20 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
-import {CompilerOptions} from '@angular/compiler-cli';
-import {getFileSystem} from '@angular/compiler-cli/src/ngtsc/file_system';
-import {NgCompiler} from '@angular/compiler-cli/src/ngtsc/core';
-import ts from 'typescript';
+import {CompilerOptions, NgCompiler, getFileSystem} from '@angular/compiler-cli';
+
+import type ts from 'typescript';
 import {
   getMessageForClassIncompatibility,
-  getMessageForInputIncompatibility,
-  InputIncompatibilityReason,
+  getMessageForFieldIncompatibility,
+  FieldIncompatibilityReason,
   KnownInputInfo,
   MigrationConfig,
-  nonIgnorableInputIncompatibilities,
+  nonIgnorableFieldIncompatibilities,
   SignalInputMigration,
 } from '@angular/core/schematics/migrations/signal-migration/src';
 import {groupReplacementsByFile} from '@angular/core/schematics/utils/tsurge/helpers/group_replacements';
+import {getProgramInfoFromBaseInfo} from '@angular/core/schematics/utils/tsurge';
 import {ApplyRefactoringProgressFn, ApplyRefactoringResult} from '../../../api';
 
 export async function applySignalInputRefactoring(
@@ -42,15 +42,15 @@ export async function applySignalInputRefactoring(
   });
 
   await migration.analyze(
-    migration.prepareProgram({
+    getProgramInfoFromBaseInfo({
       ngCompiler: compiler,
       program: compiler.getCurrentProgram(),
       userOptions: compilerOptions,
-      programAbsoluteRootFileNames: [],
       host: {
         getCanonicalFileName: (file) => project.projectService.toCanonicalFileName(file),
         getCurrentDirectory: () => project.getCurrentDirectory(),
       },
+      __programAbsoluteRootFileNames: [],
     }),
   );
 
@@ -72,7 +72,7 @@ export async function applySignalInputRefactoring(
   }
 
   const incompatibilityMessages = new Map<string, string>();
-  const incompatibilityReasons = new Set<InputIncompatibilityReason>();
+  const incompatibilityReasons = new Set<FieldIncompatibilityReason>();
 
   for (const incompatibleInput of targetInputs.filter((i) => i.isIncompatible())) {
     const {container, descriptor} = incompatibleInput;
@@ -80,14 +80,20 @@ export async function applySignalInputRefactoring(
     const classIncompatibility = container.incompatible;
 
     if (memberIncompatibility !== undefined) {
-      const {short, extra} = getMessageForInputIncompatibility(memberIncompatibility.reason);
+      const {short, extra} = getMessageForFieldIncompatibility(memberIncompatibility.reason, {
+        single: 'input',
+        plural: 'inputs',
+      });
       incompatibilityMessages.set(descriptor.node.name.text, `${short}\n${extra}`);
       incompatibilityReasons.add(memberIncompatibility.reason);
       continue;
     }
 
     if (classIncompatibility !== null) {
-      const {short, extra} = getMessageForClassIncompatibility(classIncompatibility);
+      const {short, extra} = getMessageForClassIncompatibility(classIncompatibility, {
+        single: 'input',
+        plural: 'inputs',
+      });
       incompatibilityMessages.set(descriptor.node.name.text, `${short}\n${extra}`);
       continue;
     }
@@ -114,7 +120,7 @@ export async function applySignalInputRefactoring(
   // Only suggest the "force ignoring" option if there are actually
   // ignorable incompatibilities.
   const canBeForciblyIgnored = Array.from(incompatibilityReasons).some(
-    (r) => !nonIgnorableInputIncompatibilities.includes(r),
+    (r) => !nonIgnorableFieldIncompatibilities.includes(r),
   );
   if (!config.bestEffortMode && canBeForciblyIgnored) {
     message += `Use the "(forcibly, ignoring errors)" action to forcibly convert.\n`;

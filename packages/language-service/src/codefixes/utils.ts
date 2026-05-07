@@ -6,11 +6,11 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
-import {absoluteFrom} from '@angular/compiler-cli';
-import {NgCompiler} from '@angular/compiler-cli/src/ngtsc/core';
-import tss from 'typescript';
+import {NgCompiler, absoluteFrom} from '@angular/compiler-cli';
 
-import {TemplateInfo} from '../utils';
+import type ts from 'typescript';
+
+import {TypeCheckInfo} from '../utils';
 
 /**
  * This context is the info includes the `errorCode` at the given span the user selected in the
@@ -20,15 +20,15 @@ import {TemplateInfo} from '../utils';
  * context will be provided to the `CodeActionMeta` which could handle the `errorCode`.
  */
 export interface CodeActionContext {
-  templateInfo: TemplateInfo;
+  typeCheckInfo: TypeCheckInfo | null;
   fileName: string;
   compiler: NgCompiler;
   start: number;
   end: number;
   errorCode: number;
-  formatOptions: tss.FormatCodeSettings;
-  preferences: tss.UserPreferences;
-  tsLs: tss.LanguageService;
+  formatOptions: ts.FormatCodeSettings;
+  preferences: ts.UserPreferences;
+  tsLs: ts.LanguageService;
 }
 
 /**
@@ -39,50 +39,50 @@ export interface CodeActionContext {
  * `scope`, this context will be provided to the `CodeActionMeta` which could handle the `fixId`.
  */
 export interface CodeFixAllContext {
-  scope: tss.CombinedCodeFixScope;
+  scope: ts.CombinedCodeFixScope;
   compiler: NgCompiler;
   // https://github.com/microsoft/TypeScript/blob/5c4caafc2a2d0fceb03fce80fb14d3ee4407d918/src/services/types.ts#L781-L785
   fixId: string;
-  formatOptions: tss.FormatCodeSettings;
-  preferences: tss.UserPreferences;
-  tsLs: tss.LanguageService;
-  diagnostics: tss.Diagnostic[];
+  formatOptions: ts.FormatCodeSettings;
+  preferences: ts.UserPreferences;
+  tsLs: ts.LanguageService;
+  diagnostics: ts.Diagnostic[];
 }
 
 export interface CodeActionMeta {
   errorCodes: Array<number>;
-  getCodeActions: (context: CodeActionContext) => readonly tss.CodeFixAction[];
+  getCodeActions: (context: CodeActionContext) => readonly ts.CodeFixAction[];
   fixIds: FixIdForCodeFixesAll[];
-  getAllCodeActions: (context: CodeFixAllContext) => tss.CombinedCodeActions;
+  getAllCodeActions: (context: CodeFixAllContext) => ts.CombinedCodeActions;
 }
 
 /**
  * Convert the span of `textChange` in the TCB to the span of the template.
  */
 export function convertFileTextChangeInTcb(
-  changes: readonly tss.FileTextChanges[],
+  changes: readonly ts.FileTextChanges[],
   compiler: NgCompiler,
-): tss.FileTextChanges[] {
+): ts.FileTextChanges[] {
   const ttc = compiler.getTemplateTypeChecker();
-  const fileTextChanges: tss.FileTextChanges[] = [];
+  const fileTextChanges: ts.FileTextChanges[] = [];
   for (const fileTextChange of changes) {
     if (!ttc.isTrackedTypeCheckFile(absoluteFrom(fileTextChange.fileName))) {
       fileTextChanges.push(fileTextChange);
       continue;
     }
-    const textChanges: tss.TextChange[] = [];
+    const textChanges: ts.TextChange[] = [];
     let fileName: string | undefined;
     const seenTextChangeInTemplate = new Set<string>();
     for (const textChange of fileTextChange.textChanges) {
-      const templateMap = ttc.getTemplateMappingAtTcbLocation({
+      const sourceLocation = ttc.getSourceMappingAtTcbLocation({
         tcbPath: absoluteFrom(fileTextChange.fileName),
         isShimFile: true,
         positionInFile: textChange.span.start,
       });
-      if (templateMap === null) {
+      if (sourceLocation === null) {
         continue;
       }
-      const mapping = templateMap.templateSourceMapping;
+      const mapping = sourceLocation.sourceMapping;
       if (mapping.type === 'external') {
         fileName = mapping.templateUrl;
       } else if (mapping.type === 'direct') {
@@ -90,8 +90,8 @@ export function convertFileTextChangeInTcb(
       } else {
         continue;
       }
-      const start = templateMap.span.start.offset;
-      const length = templateMap.span.end.offset - templateMap.span.start.offset;
+      const start = sourceLocation.span.start.offset;
+      const length = sourceLocation.span.end.offset - sourceLocation.span.start.offset;
       const changeSpanKey = `${start},${length}`;
       if (seenTextChangeInTemplate.has(changeSpanKey)) {
         continue;
@@ -121,7 +121,7 @@ export function convertFileTextChangeInTcb(
  * 'fix all' is only available when there are multiple diagnostics that the code action meta
  * indicates it can fix.
  */
-export function isFixAllAvailable(meta: CodeActionMeta, diagnostics: tss.Diagnostic[]) {
+export function isFixAllAvailable(meta: CodeActionMeta, diagnostics: ts.Diagnostic[]) {
   const errorCodes = meta.errorCodes;
   let maybeFixableDiagnostics = 0;
   for (const diag of diagnostics) {
@@ -138,4 +138,5 @@ export enum FixIdForCodeFixesAll {
   FIX_INVALID_BANANA_IN_BOX = 'fixInvalidBananaInBox',
   FIX_MISSING_IMPORT = 'fixMissingImport',
   FIX_UNUSED_STANDALONE_IMPORTS = 'fixUnusedStandaloneImports',
+  FIX_MISSING_REQUIRED_INPUTS = 'fixMissingRequiredInputs',
 }

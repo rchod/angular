@@ -14,7 +14,6 @@ import {
   Directive,
   ElementRef,
   EventEmitter,
-  forwardRef,
   inject,
   Inject,
   InjectionToken,
@@ -22,22 +21,53 @@ import {
   OnChanges,
   OnInit,
   Output,
+  provideZoneChangeDetection,
   SimpleChanges,
   Type,
   ViewChild,
   ViewContainerRef,
-} from '@angular/core';
-import {TestBed} from '@angular/core/testing';
+  ɵɵdefineDirective,
+  ɵɵHostDirectivesFeature,
+  ChangeDetectionStrategy,
+} from '../../src/core';
+import {TestBed} from '../../testing';
 import {By} from '@angular/platform-browser';
 
 import {getComponent, getDirectives} from '../../src/render3/util/discovery_utils';
 
 describe('host directives', () => {
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [provideZoneChangeDetection()],
+    });
+  });
+
+  function createRootComponent<T>(componentType: Type<T>) {
+    @Component({
+      template: '<ng-container #insertionPoint></ng-container>',
+      standalone: false,
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
+    class App {
+      @ViewChild('insertionPoint', {read: ViewContainerRef}) insertionPoint!: ViewContainerRef;
+    }
+
+    TestBed.configureTestingModule({
+      declarations: [App, componentType],
+      errorOnUnknownProperties: true,
+    });
+
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+    const ref = fixture.componentInstance.insertionPoint.createComponent(componentType);
+
+    return {ref, fixture};
+  }
+
   it('should apply a basic host directive', () => {
     const logs: string[] = [];
 
     @Directive({
-      standalone: true,
       host: {'host-dir-attr': '', 'class': 'host-dir', 'style': 'height: 50px'},
     })
     class HostDir {
@@ -50,6 +80,7 @@ describe('host directives', () => {
       selector: '[dir]',
       host: {'host-attr': '', 'class': 'dir', 'style': 'width: 50px'},
       hostDirectives: [HostDir],
+      standalone: false,
     })
     class Dir {
       constructor() {
@@ -57,7 +88,12 @@ describe('host directives', () => {
       }
     }
 
-    @Component({template: '<div dir></div>'})
+    @Component({
+      template: '<div dir></div>',
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
     class App {}
 
     TestBed.configureTestingModule({declarations: [App, Dir]});
@@ -74,31 +110,48 @@ describe('host directives', () => {
   it('should apply a host directive referenced through a forwardRef', () => {
     const logs: string[] = [];
 
-    @Directive({
-      selector: '[dir]',
-      hostDirectives: [forwardRef(() => HostDir), {directive: forwardRef(() => OtherHostDir)}],
-    })
+    // This directive was "compiled" manually, because our tests are JIT-compiled and the JIT
+    // compiler doesn't produce the callback-based variant of the `ɵɵHostDirectivesFeature`.
+    // This represents the following metadata:
+    // @Directive({
+    //   selector: '[dir]',
+    //   hostDirectives: [forwardRef(() => HostDir), {directive: forwardRef(() => OtherHostDir)}],
+    //   standalone: false,
+    // })
     class Dir {
+      static ɵfac = () => new Dir();
+      static ɵdir = ɵɵdefineDirective({
+        type: Dir,
+        selectors: [['', 'dir', '']],
+        standalone: false,
+        features: [ɵɵHostDirectivesFeature(() => [HostDir, {directive: OtherHostDir}])],
+      });
+
       constructor() {
         logs.push('Dir');
       }
     }
 
-    @Directive({standalone: true})
-    class HostDir {
-      constructor() {
-        logs.push('HostDir');
-      }
-    }
-
-    @Directive({standalone: true})
+    @Directive()
     class OtherHostDir {
       constructor() {
         logs.push('OtherHostDir');
       }
     }
 
-    @Component({template: '<div dir></div>'})
+    @Directive()
+    class HostDir {
+      constructor() {
+        logs.push('HostDir');
+      }
+    }
+
+    @Component({
+      template: '<div dir></div>',
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
     class App {}
 
     TestBed.configureTestingModule({declarations: [App, Dir]});
@@ -106,6 +159,61 @@ describe('host directives', () => {
     fixture.detectChanges();
 
     expect(logs).toEqual(['HostDir', 'OtherHostDir', 'Dir']);
+  });
+
+  it('should apply a directive that references host directives through a forwardRef and is injected by its host directives', () => {
+    // This directive was "compiled" manually, because our tests are JIT-compiled and the JIT
+    // compiler doesn't produce the callback-based variant of the `ɵɵHostDirectivesFeature`.
+    // This represents the following metadata:
+    // @Directive({
+    //   selector: '[dir]',
+    //   hostDirectives: [forwardRef(() => HostDir), {directive: forwardRef(() => OtherHostDir)}],
+    //   standalone: false,
+    //   host: {'one': 'override', 'two': 'override'}
+    // })
+    class Dir {
+      static ɵfac = () => new Dir();
+      static ɵdir = ɵɵdefineDirective({
+        type: Dir,
+        selectors: [['', 'dir', '']],
+        standalone: false,
+        hostAttrs: ['one', 'override', 'two', 'override'],
+        features: [ɵɵHostDirectivesFeature(() => [HostDir, {directive: OtherHostDir}])],
+      });
+    }
+
+    @Directive({host: {'one': 'base'}})
+    class OtherHostDir {
+      constructor() {
+        inject(Dir);
+      }
+    }
+
+    @Directive({host: {'two': 'base'}})
+    class HostDir {
+      constructor() {
+        inject(Dir);
+      }
+    }
+
+    @Component({
+      template: '<div dir></div>',
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
+    class App {}
+
+    TestBed.configureTestingModule({declarations: [App, Dir]});
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+
+    // Note: we can't use the constructor call order here to determine the initialization order,
+    // because the act of injecting `Dir` will cause it to be created earlier than its host bindings
+    // will be invoked. Instead we check that the host bindings apply in the right order.
+    const host = fixture.nativeElement.querySelector('[dir]');
+    expect(host.getAttribute('one')).toBe('override');
+    expect(host.getAttribute('two')).toBe('override');
   });
 
   it('should apply a chain of host directives', () => {
@@ -119,7 +227,6 @@ describe('host directives', () => {
         'id': 'leaf-id',
       },
       providers: [{provide: token, useValue: 'leaf value'}],
-      standalone: true,
     })
     class Chain1_3 {
       constructor(@Inject(token) tokenValue: string) {
@@ -129,7 +236,6 @@ describe('host directives', () => {
     }
 
     @Directive({
-      standalone: true,
       hostDirectives: [Chain1_3],
     })
     class Chain1_2 {
@@ -139,7 +245,6 @@ describe('host directives', () => {
     }
 
     @Directive({
-      standalone: true,
       hostDirectives: [Chain1_2],
     })
     class Chain1 {
@@ -149,7 +254,6 @@ describe('host directives', () => {
     }
 
     @Directive({
-      standalone: true,
       host: {
         'class': 'middle',
         'id': 'middle-id',
@@ -163,7 +267,6 @@ describe('host directives', () => {
     }
 
     @Directive({
-      standalone: true,
       hostDirectives: [Chain2_2],
     })
     class Chain2 {
@@ -172,14 +275,14 @@ describe('host directives', () => {
       }
     }
 
-    @Directive({standalone: true})
+    @Directive()
     class Chain3_2 {
       constructor() {
         logs.push('Chain3 - level 2');
       }
     }
 
-    @Directive({standalone: true, hostDirectives: [Chain3_2]})
+    @Directive({hostDirectives: [Chain3_2]})
     class Chain3 {
       constructor() {
         logs.push('Chain3 - level 1');
@@ -195,6 +298,9 @@ describe('host directives', () => {
       template: '',
       hostDirectives: [Chain1, Chain2, Chain3],
       providers: [{provide: token, useValue: 'host value'}],
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
     })
     class MyComp {
       constructor() {
@@ -202,7 +308,7 @@ describe('host directives', () => {
       }
     }
 
-    @Directive({standalone: true})
+    @Directive()
     class SelectorMatchedHostDir {
       constructor() {
         logs.push('SelectorMatchedHostDir');
@@ -212,6 +318,7 @@ describe('host directives', () => {
     @Directive({
       selector: '[selector-matched-dir]',
       hostDirectives: [SelectorMatchedHostDir],
+      standalone: false,
     })
     class SelectorMatchedDir {
       constructor() {
@@ -219,7 +326,12 @@ describe('host directives', () => {
       }
     }
 
-    @Component({template: '<my-comp selector-matched-dir></my-comp>'})
+    @Component({
+      template: '<my-comp selector-matched-dir></my-comp>',
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
     class App {}
 
     TestBed.configureTestingModule({declarations: [App, MyComp, SelectorMatchedDir]});
@@ -249,28 +361,37 @@ describe('host directives', () => {
     let firstHostDirInstance!: FirstHostDir;
     let secondHostDirInstance!: SecondHostDir;
 
-    @Directive({standalone: true})
+    @Directive()
     class SecondHostDir {
       constructor() {
         secondHostDirInstance = this;
       }
     }
 
-    @Directive({standalone: true, hostDirectives: [SecondHostDir]})
+    @Directive({hostDirectives: [SecondHostDir]})
     class FirstHostDir {
       constructor() {
         firstHostDirInstance = this;
       }
     }
 
-    @Directive({selector: '[dir]', hostDirectives: [FirstHostDir]})
+    @Directive({
+      selector: '[dir]',
+      hostDirectives: [FirstHostDir],
+      standalone: false,
+    })
     class Host {
       constructor() {
         hostInstance = this;
       }
     }
 
-    @Component({template: '<div dir></div>'})
+    @Component({
+      template: '<div dir></div>',
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
     class App {
       @ViewChild(FirstHostDir) firstHost!: FirstHostDir;
       @ViewChild(SecondHostDir) secondHost!: SecondHostDir;
@@ -289,26 +410,32 @@ describe('host directives', () => {
   });
 
   it('should be able to reference exported host directives', () => {
-    @Directive({standalone: true, exportAs: 'secondHost'})
+    @Directive({exportAs: 'secondHost'})
     class SecondHostDir {
       name = 'SecondHost';
     }
 
-    @Directive({standalone: true, hostDirectives: [SecondHostDir], exportAs: 'firstHost'})
+    @Directive({hostDirectives: [SecondHostDir], exportAs: 'firstHost'})
     class FirstHostDir {
       name = 'FirstHost';
     }
 
-    @Directive({selector: '[dir]', hostDirectives: [FirstHostDir]})
+    @Directive({
+      selector: '[dir]',
+      hostDirectives: [FirstHostDir],
+      standalone: false,
+    })
     class Host {}
 
     @Component({
       template: `
-        <div
-          dir
-          #firstHost="firstHost"
-          #secondHost="secondHost">{{firstHost.name}} | {{secondHost.name}}</div>
+        <div dir #firstHost="firstHost" #secondHost="secondHost">
+          {{ firstHost.name }} | {{ secondHost.name }}
+        </div>
       `,
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
     })
     class App {}
 
@@ -322,42 +449,42 @@ describe('host directives', () => {
   it('should execute inherited host directives in the correct order', () => {
     const logs: string[] = [];
 
-    @Directive({standalone: true})
+    @Directive()
     class HostGrandparent_1 {
       constructor() {
         logs.push('HostGrandparent_1');
       }
     }
 
-    @Directive({standalone: true})
+    @Directive()
     class HostGrandparent_2 {
       constructor() {
         logs.push('HostGrandparent_2');
       }
     }
 
-    @Directive({standalone: true, hostDirectives: [HostGrandparent_1, HostGrandparent_2]})
+    @Directive({hostDirectives: [HostGrandparent_1, HostGrandparent_2]})
     class Grandparent {
       constructor() {
         logs.push('Grandparent');
       }
     }
 
-    @Directive({standalone: true})
+    @Directive()
     class HostParent_1 {
       constructor() {
         logs.push('HostParent_1');
       }
     }
 
-    @Directive({standalone: true})
+    @Directive()
     class HostParent_2 {
       constructor() {
         logs.push('HostParent_2');
       }
     }
 
-    @Directive({standalone: true, hostDirectives: [HostParent_1, HostParent_2]})
+    @Directive({hostDirectives: [HostParent_1, HostParent_2]})
     class Parent extends Grandparent {
       constructor() {
         super();
@@ -365,21 +492,25 @@ describe('host directives', () => {
       }
     }
 
-    @Directive({standalone: true})
+    @Directive()
     class HostDir_1 {
       constructor() {
         logs.push('HostDir_1');
       }
     }
 
-    @Directive({standalone: true})
+    @Directive()
     class HostDir_2 {
       constructor() {
         logs.push('HostDir_2');
       }
     }
 
-    @Directive({selector: '[dir]', hostDirectives: [HostDir_1, HostDir_2]})
+    @Directive({
+      selector: '[dir]',
+      hostDirectives: [HostDir_1, HostDir_2],
+      standalone: false,
+    })
     class Dir extends Parent {
       constructor() {
         super();
@@ -387,7 +518,12 @@ describe('host directives', () => {
       }
     }
 
-    @Component({template: '<div dir></div>'})
+    @Component({
+      template: '<div dir></div>',
+      standalone: false,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
     class App {}
 
     TestBed.configureTestingModule({declarations: [App, Dir]});
@@ -411,7 +547,7 @@ describe('host directives', () => {
     it('should invoke lifecycle hooks from the host directives', () => {
       const logs: string[] = [];
 
-      @Directive({standalone: true})
+      @Directive()
       class HostDir implements OnInit, AfterViewInit, AfterViewChecked {
         ngOnInit() {
           logs.push('HostDir - ngOnInit');
@@ -426,7 +562,7 @@ describe('host directives', () => {
         }
       }
 
-      @Directive({standalone: true})
+      @Directive()
       class OtherHostDir implements OnInit, AfterViewInit, AfterViewChecked {
         ngOnInit() {
           logs.push('OtherHostDir - ngOnInit');
@@ -441,7 +577,11 @@ describe('host directives', () => {
         }
       }
 
-      @Directive({selector: '[dir]', hostDirectives: [HostDir, OtherHostDir]})
+      @Directive({
+        selector: '[dir]',
+        hostDirectives: [HostDir, OtherHostDir],
+        standalone: false,
+      })
       class Dir implements OnInit, AfterViewInit, AfterViewChecked {
         ngOnInit() {
           logs.push('Dir - ngOnInit');
@@ -456,7 +596,11 @@ describe('host directives', () => {
         }
       }
 
-      @Component({template: '<div dir></div>'})
+      @Component({
+        template: '<div dir></div>',
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {}
 
       TestBed.configureTestingModule({declarations: [App, Dir]});
@@ -483,7 +627,7 @@ describe('host directives', () => {
       const logs: string[] = [];
 
       // Utility so we don't have to repeat the logging code.
-      @Directive({standalone: true})
+      @Directive()
       abstract class LogsLifecycles implements OnInit, AfterViewInit {
         abstract name: string;
 
@@ -496,12 +640,12 @@ describe('host directives', () => {
         }
       }
 
-      @Directive({standalone: true})
+      @Directive()
       class ChildHostDir extends LogsLifecycles {
         override name = 'ChildHostDir';
       }
 
-      @Directive({standalone: true})
+      @Directive()
       class OtherChildHostDir extends LogsLifecycles {
         override name = 'OtherChildHostDir';
       }
@@ -509,17 +653,19 @@ describe('host directives', () => {
       @Component({
         selector: 'child',
         hostDirectives: [ChildHostDir, OtherChildHostDir],
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class Child extends LogsLifecycles {
         override name = 'Child';
       }
 
-      @Directive({standalone: true})
+      @Directive()
       class ParentHostDir extends LogsLifecycles {
         override name = 'ParentHostDir';
       }
 
-      @Directive({standalone: true})
+      @Directive()
       class OtherParentHostDir extends LogsLifecycles {
         override name = 'OtherParentHostDir';
       }
@@ -528,17 +674,26 @@ describe('host directives', () => {
         selector: 'parent',
         hostDirectives: [ParentHostDir, OtherParentHostDir],
         template: '<child plain-dir="PlainDir on child"></child>',
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class Parent extends LogsLifecycles {
         override name = 'Parent';
       }
 
-      @Directive({selector: '[plain-dir]'})
+      @Directive({
+        selector: '[plain-dir]',
+        standalone: false,
+      })
       class PlainDir extends LogsLifecycles {
         @Input('plain-dir') override name = '';
       }
 
-      @Component({template: '<parent plain-dir="PlainDir on parent"></parent>'})
+      @Component({
+        template: '<parent plain-dir="PlainDir on parent"></parent>',
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {}
 
       TestBed.configureTestingModule({declarations: [App, Parent, Child, PlainDir]});
@@ -569,7 +724,7 @@ describe('host directives', () => {
       let logs: string[] = [];
 
       // Utility so we don't have to repeat the logging code.
-      @Directive({standalone: true})
+      @Directive()
       abstract class LogsLifecycles implements OnChanges {
         @Input() someInput: any;
         abstract name: string;
@@ -579,12 +734,12 @@ describe('host directives', () => {
         }
       }
 
-      @Directive({standalone: true})
+      @Directive()
       class HostDir extends LogsLifecycles {
         override name = 'HostDir';
       }
 
-      @Directive({standalone: true})
+      @Directive()
       class OtherHostDir extends LogsLifecycles {
         override name = 'OtherHostDir';
       }
@@ -595,18 +750,25 @@ describe('host directives', () => {
           {directive: HostDir, inputs: ['someInput']},
           {directive: OtherHostDir, inputs: ['someInput']},
         ],
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class HostComp extends LogsLifecycles {
         override name = 'HostComp';
       }
 
-      @Directive({selector: '[plain-dir]'})
+      @Directive({
+        selector: '[plain-dir]',
+        standalone: false,
+      })
       class PlainDir extends LogsLifecycles {
         override name = 'PlainDir';
       }
 
       @Component({
         template: '<host-comp plain-dir="PlainDir" [someInput]="inputValue"></host-comp>',
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class App {
         inputValue = 'hello';
@@ -640,7 +802,7 @@ describe('host directives', () => {
     it('should apply the host bindings from all host directives', () => {
       const clicks: string[] = [];
 
-      @Directive({standalone: true, host: {'host-dir-attr': 'true', '(click)': 'handleClick()'}})
+      @Directive({host: {'host-dir-attr': 'true', '(click)': 'handleClick()'}})
       class HostDir {
         handleClick() {
           clicks.push('HostDir');
@@ -648,7 +810,6 @@ describe('host directives', () => {
       }
 
       @Directive({
-        standalone: true,
         host: {'other-host-dir-attr': 'true', '(click)': 'handleClick()'},
       })
       class OtherHostDir {
@@ -661,6 +822,7 @@ describe('host directives', () => {
         selector: '[dir]',
         host: {'host-attr': 'true', '(click)': 'handleClick()'},
         hostDirectives: [HostDir, OtherHostDir],
+        standalone: false,
       })
       class Dir {
         handleClick() {
@@ -668,7 +830,11 @@ describe('host directives', () => {
         }
       }
 
-      @Component({template: '<button dir></button>'})
+      @Component({
+        template: '<button dir></button>',
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {}
 
       TestBed.configureTestingModule({declarations: [App, Dir]});
@@ -688,16 +854,25 @@ describe('host directives', () => {
     });
 
     it('should have the host bindings take precedence over the ones from the host directives', () => {
-      @Directive({standalone: true, host: {'id': 'host-dir'}})
+      @Directive({host: {'id': 'host-dir'}})
       class HostDir {}
 
-      @Directive({standalone: true, host: {'id': 'other-host-dir'}})
+      @Directive({host: {'id': 'other-host-dir'}})
       class OtherHostDir {}
 
-      @Directive({selector: '[dir]', host: {'id': 'host'}, hostDirectives: [HostDir, OtherHostDir]})
+      @Directive({
+        selector: '[dir]',
+        host: {'id': 'host'},
+        hostDirectives: [HostDir, OtherHostDir],
+        standalone: false,
+      })
       class Dir {}
 
-      @Component({template: '<div dir></div>'})
+      @Component({
+        template: '<div dir></div>',
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {}
 
       TestBed.configureTestingModule({declarations: [App, Dir]});
@@ -714,21 +889,25 @@ describe('host directives', () => {
       let firstHostDirInstance!: FirstHostDir;
       let secondHostDirInstance!: SecondHostDir;
 
-      @Directive({standalone: true})
+      @Directive()
       class SecondHostDir {
         constructor() {
           secondHostDirInstance = this;
         }
       }
 
-      @Directive({standalone: true, hostDirectives: [SecondHostDir]})
+      @Directive({hostDirectives: [SecondHostDir]})
       class FirstHostDir {
         constructor() {
           firstHostDirInstance = this;
         }
       }
 
-      @Directive({selector: '[dir]', hostDirectives: [FirstHostDir]})
+      @Directive({
+        selector: '[dir]',
+        hostDirectives: [FirstHostDir],
+        standalone: false,
+      })
       class Host {
         firstHostDir = inject(FirstHostDir);
         secondHostDir = inject(SecondHostDir);
@@ -738,7 +917,11 @@ describe('host directives', () => {
         }
       }
 
-      @Component({template: '<div dir></div>'})
+      @Component({
+        template: '<div dir></div>',
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {}
 
       TestBed.configureTestingModule({declarations: [App, Host]});
@@ -756,12 +939,17 @@ describe('host directives', () => {
     it('should be able to inject a host directive into a child component', () => {
       let hostDirectiveInstance!: HostDir;
 
-      @Component({selector: 'child', template: ''})
+      @Component({
+        selector: 'child',
+        template: '',
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class Child {
         hostDir = inject(HostDir);
       }
 
-      @Directive({standalone: true})
+      @Directive()
       class HostDir {
         constructor() {
           hostDirectiveInstance = this;
@@ -772,12 +960,18 @@ describe('host directives', () => {
         selector: 'host',
         template: '<child></child>',
         hostDirectives: [HostDir],
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class Host {
         @ViewChild(Child) child!: Child;
       }
 
-      @Component({template: '<host></host>'})
+      @Component({
+        template: '<host></host>',
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {
         @ViewChild(Host) host!: Host;
       }
@@ -796,7 +990,7 @@ describe('host directives', () => {
       let firstHostDirInstance!: FirstHostDir;
       let secondHostDirInstance!: SecondHostDir;
 
-      @Directive({standalone: true})
+      @Directive()
       class SecondHostDir {
         host = inject(Host);
 
@@ -805,7 +999,7 @@ describe('host directives', () => {
         }
       }
 
-      @Directive({standalone: true, hostDirectives: [SecondHostDir]})
+      @Directive({hostDirectives: [SecondHostDir]})
       class FirstHostDir {
         host = inject(Host);
 
@@ -814,14 +1008,22 @@ describe('host directives', () => {
         }
       }
 
-      @Directive({selector: '[dir]', hostDirectives: [FirstHostDir]})
+      @Directive({
+        selector: '[dir]',
+        hostDirectives: [FirstHostDir],
+        standalone: false,
+      })
       class Host {
         constructor() {
           hostInstance = this;
         }
       }
 
-      @Component({template: '<div dir></div>'})
+      @Component({
+        template: '<div dir></div>',
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {}
 
       TestBed.configureTestingModule({declarations: [App, Host]});
@@ -842,7 +1044,7 @@ describe('host directives', () => {
       let firstHostDirInstance!: FirstHostDir;
       let secondHostDirInstance!: SecondHostDir;
 
-      @Directive({standalone: true, providers: [{provide: token, useValue: 'SecondDir'}]})
+      @Directive({providers: [{provide: token, useValue: 'SecondDir'}]})
       class SecondHostDir {
         tokenValue = inject(token);
 
@@ -852,7 +1054,6 @@ describe('host directives', () => {
       }
 
       @Directive({
-        standalone: true,
         hostDirectives: [SecondHostDir],
         providers: [{provide: token, useValue: 'FirstDir'}],
       })
@@ -868,6 +1069,7 @@ describe('host directives', () => {
         selector: '[dir]',
         hostDirectives: [FirstHostDir],
         providers: [{provide: token, useValue: 'HostDir'}],
+        standalone: false,
       })
       class Host {
         tokenValue = inject(token);
@@ -877,7 +1079,11 @@ describe('host directives', () => {
         }
       }
 
-      @Component({template: '<div dir></div>'})
+      @Component({
+        template: '<div dir></div>',
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {}
 
       TestBed.configureTestingModule({declarations: [App, Host]});
@@ -897,23 +1103,30 @@ describe('host directives', () => {
       const firstToken = new InjectionToken<string>('firstToken');
       const secondToken = new InjectionToken<string>('secondToken');
 
-      @Directive({standalone: true, providers: [{provide: secondToken, useValue: 'SecondDir'}]})
+      @Directive({providers: [{provide: secondToken, useValue: 'SecondDir'}]})
       class SecondHostDir {}
 
       @Directive({
-        standalone: true,
         hostDirectives: [SecondHostDir],
         providers: [{provide: firstToken, useValue: 'FirstDir'}],
       })
       class FirstHostDir {}
 
-      @Directive({selector: '[dir]', hostDirectives: [FirstHostDir]})
+      @Directive({
+        selector: '[dir]',
+        hostDirectives: [FirstHostDir],
+        standalone: false,
+      })
       class Host {
         firstTokenValue = inject(firstToken);
         secondTokenValue = inject(secondToken);
       }
 
-      @Component({template: '<div dir></div>'})
+      @Component({
+        template: '<div dir></div>',
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {
         @ViewChild(Host) host!: Host;
       }
@@ -930,7 +1143,7 @@ describe('host directives', () => {
       const token = new InjectionToken<string>('token');
       let tokenValue: string | undefined;
 
-      @Directive({standalone: true, providers: [{provide: token, useValue: 'host-dir'}]})
+      @Directive({providers: [{provide: token, useValue: 'host-dir'}]})
       class HostDir {}
 
       @Component({
@@ -938,17 +1151,26 @@ describe('host directives', () => {
         hostDirectives: [HostDir],
         providers: [{provide: token, useValue: 'host'}],
         template: '<span child></span>',
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class Host {}
 
-      @Directive({selector: '[child]'})
+      @Directive({
+        selector: '[child]',
+        standalone: false,
+      })
       class Child {
         constructor() {
           tokenValue = inject(token);
         }
       }
 
-      @Component({template: '<host></host>'})
+      @Component({
+        template: '<host></host>',
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {}
 
       TestBed.configureTestingModule({declarations: [App, Host, Child]});
@@ -962,7 +1184,7 @@ describe('host directives', () => {
       const token = new InjectionToken<string>('token');
       let tokenValue: string | null = null;
 
-      @Directive({standalone: true})
+      @Directive()
       class HostDir {
         constructor() {
           tokenValue = inject(token, {optional: true});
@@ -974,10 +1196,16 @@ describe('host directives', () => {
         hostDirectives: [HostDir],
         viewProviders: [{provide: token, useValue: 'host'}],
         template: '',
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class Host {}
 
-      @Component({template: '<host></host>'})
+      @Component({
+        template: '<host></host>',
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {}
 
       TestBed.configureTestingModule({declarations: [App, Host]});
@@ -988,39 +1216,57 @@ describe('host directives', () => {
     });
 
     it('should throw a circular dependency error if a host and a host directive inject each other', () => {
-      @Directive({standalone: true})
+      @Directive()
       class HostDir {
         host = inject(Host);
       }
 
-      @Directive({selector: '[dir]', hostDirectives: [HostDir]})
+      @Directive({
+        selector: '[dir]',
+        hostDirectives: [HostDir],
+        standalone: false,
+      })
       class Host {
         hostDir = inject(HostDir);
       }
 
-      @Component({template: '<div dir></div>'})
+      @Component({
+        template: '<div dir></div>',
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {}
 
       TestBed.configureTestingModule({declarations: [App, Host]});
       expect(() => TestBed.createComponent(App)).toThrowError(
-        /NG0200: Circular dependency in DI detected for HostDir/,
+        /NG0200: Circular dependency detected for `HostDir`/,
       );
     });
 
     it('should inject a valid ChangeDetectorRef when attached to a component', () => {
       type InternalChangeDetectorRef = ChangeDetectorRef & {_lView: unknown};
 
-      @Directive({standalone: true})
+      @Directive()
       class HostDir {
         changeDetectorRef = inject(ChangeDetectorRef) as InternalChangeDetectorRef;
       }
 
-      @Component({selector: 'my-comp', hostDirectives: [HostDir], template: ''})
+      @Component({
+        selector: 'my-comp',
+        hostDirectives: [HostDir],
+        template: '',
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class Comp {
         changeDetectorRef = inject(ChangeDetectorRef) as InternalChangeDetectorRef;
       }
 
-      @Component({template: '<my-comp></my-comp>'})
+      @Component({
+        template: '<my-comp></my-comp>',
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {
         @ViewChild(HostDir) hostDir!: HostDir;
         @ViewChild(Comp) comp!: Comp;
@@ -1044,13 +1290,59 @@ describe('host directives', () => {
         hostDirectiveCdr.detectChanges();
       }).not.toThrow();
     });
+
+    // See #65724.
+    it('should be able to inject host tokens defined through `viewProviders` in a component using host directives', () => {
+      const token = new InjectionToken<ProvidesExisting>('token');
+      let value: ProvidesExisting | undefined | null;
+
+      @Directive({
+        // These providers aren't injected, but they help hit the relevant code path.
+        providers: [{provide: new InjectionToken('unusedToken'), useValue: true}],
+      })
+      class HostDirective {}
+
+      @Directive({selector: '[injectsExisting]'})
+      class InjectsExisting {
+        constructor() {
+          value = inject(token, {host: true, optional: true});
+        }
+      }
+
+      @Directive({selector: '[providesExisting]'})
+      class ProvidesExisting {}
+
+      @Component({
+        selector: 'comp-with-host-directive',
+        template: '<div injectsExisting></div>',
+        imports: [InjectsExisting],
+        hostDirectives: [HostDirective],
+        viewProviders: [{provide: token, useExisting: ProvidesExisting}],
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
+      class CompWithHostDirective {}
+
+      @Component({
+        selector: 'app-root',
+        template: '<comp-with-host-directive providesExisting/>',
+        imports: [ProvidesExisting, CompWithHostDirective],
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
+      class App {}
+
+      const fixture = TestBed.createComponent(App);
+      fixture.detectChanges();
+
+      expect(value).toBeTruthy();
+      expect(value instanceof ProvidesExisting).toBe(true);
+    });
   });
 
   describe('outputs', () => {
     it('should not emit to an output of a host directive that has not been exposed', () => {
       let hostDirectiveInstance: HostDir | undefined;
 
-      @Directive({standalone: true, host: {'(click)': 'hasBeenClicked.emit()'}})
+      @Directive({host: {'(click)': 'hasBeenClicked.emit()'}})
       class HostDir {
         @Output() hasBeenClicked = new EventEmitter<void>();
 
@@ -1059,10 +1351,18 @@ describe('host directives', () => {
         }
       }
 
-      @Directive({selector: '[dir]', hostDirectives: [HostDir]})
+      @Directive({
+        selector: '[dir]',
+        hostDirectives: [HostDir],
+        standalone: false,
+      })
       class Dir {}
 
-      @Component({template: '<button dir (hasBeenClicked)="spy()"></button>'})
+      @Component({
+        template: '<button dir (hasBeenClicked)="spy()"></button>',
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {
         spy = jasmine.createSpy('click spy');
       }
@@ -1079,7 +1379,7 @@ describe('host directives', () => {
     });
 
     it('should emit to an output of a host directive that has been exposed', () => {
-      @Directive({standalone: true, host: {'(click)': 'hasBeenClicked.emit("hello")'}})
+      @Directive({host: {'(click)': 'hasBeenClicked.emit("hello")'}})
       class HostDir {
         @Output() hasBeenClicked = new EventEmitter<string>();
       }
@@ -1092,10 +1392,15 @@ describe('host directives', () => {
             outputs: ['hasBeenClicked'],
           },
         ],
+        standalone: false,
       })
       class Dir {}
 
-      @Component({template: '<button dir (hasBeenClicked)="spy($event)"></button>'})
+      @Component({
+        template: '<button dir (hasBeenClicked)="spy($event)"></button>',
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {
         spy = jasmine.createSpy('click spy');
       }
@@ -1111,7 +1416,7 @@ describe('host directives', () => {
     });
 
     it('should emit to an output of a host directive that has been exposed under an alias', () => {
-      @Directive({standalone: true, host: {'(click)': 'hasBeenClicked.emit("hello")'}})
+      @Directive({host: {'(click)': 'hasBeenClicked.emit("hello")'}})
       class HostDir {
         @Output() hasBeenClicked = new EventEmitter<string>();
       }
@@ -1119,12 +1424,18 @@ describe('host directives', () => {
       @Directive({
         selector: '[dir]',
         hostDirectives: [{directive: HostDir, outputs: ['hasBeenClicked: wasClicked']}],
+        standalone: false,
       })
       class Dir {}
 
       @Component({
-        template: `
-          <button dir (wasClicked)="validSpy($event)" (hasBeenClicked)="invalidSpy($event)"></button>`,
+        template: ` <button
+          dir
+          (wasClicked)="validSpy($event)"
+          (hasBeenClicked)="invalidSpy($event)"
+        ></button>`,
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class App {
         validSpy = jasmine.createSpy('valid spy');
@@ -1143,7 +1454,7 @@ describe('host directives', () => {
     });
 
     it('should alias to the public name of the host directive output, not the private one', () => {
-      @Directive({standalone: true, host: {'(click)': 'hasBeenClicked.emit("hello")'}})
+      @Directive({host: {'(click)': 'hasBeenClicked.emit("hello")'}})
       class HostDir {
         @Output('wasClicked') hasBeenClicked = new EventEmitter<string>();
       }
@@ -1151,15 +1462,18 @@ describe('host directives', () => {
       @Directive({
         selector: '[dir]',
         hostDirectives: [{directive: HostDir, outputs: ['wasClicked: clickOccurred']}],
+        standalone: false,
       })
       class Dir {}
 
       @Component({
-        template: `
-          <button
-            dir
-            (clickOccurred)="validSpy($event)"
-            (hasBeenClicked)="invalidSpy($event)"></button>`,
+        template: ` <button
+          dir
+          (clickOccurred)="validSpy($event)"
+          (hasBeenClicked)="invalidSpy($event)"
+        ></button>`,
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class App {
         validSpy = jasmine.createSpy('valid spy');
@@ -1178,7 +1492,7 @@ describe('host directives', () => {
     });
 
     it('should emit to an output of a host that has the same name as a non-exposed output of a host directive', () => {
-      @Directive({standalone: true, host: {'(click)': 'hasBeenClicked.emit("HostDir")'}})
+      @Directive({host: {'(click)': 'hasBeenClicked.emit("HostDir")'}})
       class HostDir {
         @Output() hasBeenClicked = new EventEmitter<string>();
       }
@@ -1187,12 +1501,17 @@ describe('host directives', () => {
         selector: '[dir]',
         hostDirectives: [HostDir],
         host: {'(click)': 'hasBeenClicked.emit("Dir")'},
+        standalone: false,
       })
       class Dir {
         @Output() hasBeenClicked = new EventEmitter<string>();
       }
 
-      @Component({template: '<button dir (hasBeenClicked)="spy($event)"></button>'})
+      @Component({
+        template: '<button dir (hasBeenClicked)="spy($event)"></button>',
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {
         spy = jasmine.createSpy('click spy');
       }
@@ -1208,7 +1527,7 @@ describe('host directives', () => {
     });
 
     it('should emit to an output of a host that has the same name as an exposed output of a host directive', () => {
-      @Directive({standalone: true, host: {'(click)': 'hasBeenClicked.emit("HostDir")'}})
+      @Directive({host: {'(click)': 'hasBeenClicked.emit("HostDir")'}})
       class HostDir {
         @Output() hasBeenClicked = new EventEmitter<string>();
       }
@@ -1217,12 +1536,17 @@ describe('host directives', () => {
         selector: '[dir]',
         hostDirectives: [{directive: HostDir, outputs: ['hasBeenClicked']}],
         host: {'(click)': 'hasBeenClicked.emit("Dir")'},
+        standalone: false,
       })
       class Dir {
         @Output() hasBeenClicked = new EventEmitter<string>();
       }
 
-      @Component({template: '<button dir (hasBeenClicked)="spy($event)"></button>'})
+      @Component({
+        template: '<button dir (hasBeenClicked)="spy($event)"></button>',
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {
         spy = jasmine.createSpy('click spy');
       }
@@ -1240,7 +1564,7 @@ describe('host directives', () => {
     });
 
     it('should emit to an output of a host that has the same name as the alias of a host directive output', () => {
-      @Directive({standalone: true, host: {'(click)': 'hasBeenClicked.emit("HostDir")'}})
+      @Directive({host: {'(click)': 'hasBeenClicked.emit("HostDir")'}})
       class HostDir {
         @Output() hasBeenClicked = new EventEmitter<string>();
       }
@@ -1249,12 +1573,17 @@ describe('host directives', () => {
         selector: '[dir]',
         hostDirectives: [{directive: HostDir, outputs: ['hasBeenClicked: wasClicked']}],
         host: {'(click)': 'wasClicked.emit("Dir")'},
+        standalone: false,
       })
       class Dir {
         @Output() wasClicked = new EventEmitter<string>();
       }
 
-      @Component({template: '<button dir (wasClicked)="spy($event)"></button>'})
+      @Component({
+        template: '<button dir (wasClicked)="spy($event)"></button>',
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {
         spy = jasmine.createSpy('click spy');
       }
@@ -1272,7 +1601,7 @@ describe('host directives', () => {
     });
 
     it('should not expose the same output more than once', () => {
-      @Directive({standalone: true, host: {'(click)': 'hasBeenClicked.emit()'}})
+      @Directive({host: {'(click)': 'hasBeenClicked.emit()'}})
       class HostDir {
         @Output() hasBeenClicked = new EventEmitter<void>();
       }
@@ -1280,10 +1609,15 @@ describe('host directives', () => {
       @Directive({
         selector: '[dir]',
         hostDirectives: [{directive: HostDir, outputs: ['hasBeenClicked', 'hasBeenClicked']}],
+        standalone: false,
       })
       class Dir {}
 
-      @Component({template: '<button dir (hasBeenClicked)="spy($event)"></button>'})
+      @Component({
+        template: '<button dir (hasBeenClicked)="spy($event)"></button>',
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {
         spy = jasmine.createSpy('click spy');
       }
@@ -1299,21 +1633,29 @@ describe('host directives', () => {
     });
 
     it('should emit to an inherited output of a host directive', () => {
-      @Directive({host: {'(click)': 'hasBeenClicked.emit("hello")'}})
+      @Directive({
+        host: {'(click)': 'hasBeenClicked.emit("hello")'},
+        standalone: false,
+      })
       class ParentDir {
         @Output() hasBeenClicked = new EventEmitter<string>();
       }
 
-      @Directive({standalone: true})
+      @Directive()
       class HostDir extends ParentDir {}
 
       @Directive({
         selector: '[dir]',
         hostDirectives: [{directive: HostDir, outputs: ['hasBeenClicked']}],
+        standalone: false,
       })
       class Dir {}
 
-      @Component({template: '<button dir (hasBeenClicked)="spy($event)"></button>'})
+      @Component({
+        template: '<button dir (hasBeenClicked)="spy($event)"></button>',
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {
         spy = jasmine.createSpy('click spy');
       }
@@ -1329,12 +1671,12 @@ describe('host directives', () => {
     });
 
     it('should emit to an output that was exposed from one host directive, but not another', () => {
-      @Directive({standalone: true, host: {'(click)': 'hasBeenClicked.emit("ExposedHostDir")'}})
+      @Directive({host: {'(click)': 'hasBeenClicked.emit("ExposedHostDir")'}})
       class ExposedHostDir {
         @Output() hasBeenClicked = new EventEmitter<string>();
       }
 
-      @Directive({standalone: true, host: {'(click)': 'hasBeenClicked.emit("UnExposedHostDir")'}})
+      @Directive({host: {'(click)': 'hasBeenClicked.emit("UnExposedHostDir")'}})
       class UnExposedHostDir {
         @Output() hasBeenClicked = new EventEmitter<string>();
       }
@@ -1345,10 +1687,15 @@ describe('host directives', () => {
           {directive: ExposedHostDir, outputs: ['hasBeenClicked']},
           UnExposedHostDir,
         ],
+        standalone: false,
       })
       class Dir {}
 
-      @Component({template: '<button dir (hasBeenClicked)="spy($event)"></button>'})
+      @Component({
+        template: '<button dir (hasBeenClicked)="spy($event)"></button>',
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {
         spy = jasmine.createSpy('click spy');
       }
@@ -1366,7 +1713,6 @@ describe('host directives', () => {
 
     it('should emit to outputs from different host directives that have been aliased to the same name', () => {
       @Directive({
-        standalone: true,
         host: {'(click)': 'firstHasBeenClicked.emit("FirstHostDir")'},
       })
       class FirstHostDir {
@@ -1374,7 +1720,6 @@ describe('host directives', () => {
       }
 
       @Directive({
-        standalone: true,
         host: {'(click)': 'secondHasBeenClicked.emit("SecondHostDir")'},
       })
       class SecondHostDir {
@@ -1387,10 +1732,15 @@ describe('host directives', () => {
           {directive: FirstHostDir, outputs: ['firstHasBeenClicked: wasClicked']},
           {directive: SecondHostDir, outputs: ['secondHasBeenClicked: wasClicked']},
         ],
+        standalone: false,
       })
       class Dir {}
 
-      @Component({template: '<button dir (wasClicked)="spy($event)"></button>'})
+      @Component({
+        template: '<button dir (wasClicked)="spy($event)"></button>',
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {
         spy = jasmine.createSpy('click spy');
       }
@@ -1408,7 +1758,7 @@ describe('host directives', () => {
     });
 
     it('should emit to an output of an inherited host directive that has been exposed', () => {
-      @Directive({standalone: true, host: {'(click)': 'hasBeenClicked.emit("hello")'}})
+      @Directive({host: {'(click)': 'hasBeenClicked.emit("hello")'}})
       class HostDir {
         @Output() hasBeenClicked = new EventEmitter<string>();
       }
@@ -1420,13 +1770,21 @@ describe('host directives', () => {
             outputs: ['hasBeenClicked'],
           },
         ],
+        standalone: false,
       })
       class Parent {}
 
-      @Directive({selector: '[dir]'})
+      @Directive({
+        selector: '[dir]',
+        standalone: false,
+      })
       class Dir extends Parent {}
 
-      @Component({template: '<button dir (hasBeenClicked)="spy($event)"></button>'})
+      @Component({
+        template: '<button dir (hasBeenClicked)="spy($event)"></button>',
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {
         spy = jasmine.createSpy('click spy');
       }
@@ -1444,15 +1802,23 @@ describe('host directives', () => {
 
   describe('inputs', () => {
     it('should not set an input of a host directive that has not been exposed', () => {
-      @Directive({standalone: true})
+      @Directive()
       class HostDir {
         @Input() color?: string;
       }
 
-      @Directive({selector: '[dir]', hostDirectives: [HostDir]})
+      @Directive({
+        selector: '[dir]',
+        hostDirectives: [HostDir],
+        standalone: false,
+      })
       class Dir {}
 
-      @Component({template: '<button dir [color]="color"></button>'})
+      @Component({
+        template: '<button dir [color]="color"></button>',
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {
         color = 'red';
       }
@@ -1466,15 +1832,23 @@ describe('host directives', () => {
     });
 
     it('should set the input of a host directive that has been exposed', () => {
-      @Directive({standalone: true})
+      @Directive()
       class HostDir {
         @Input() color?: string;
       }
 
-      @Directive({selector: '[dir]', hostDirectives: [{directive: HostDir, inputs: ['color']}]})
+      @Directive({
+        selector: '[dir]',
+        hostDirectives: [{directive: HostDir, inputs: ['color']}],
+        standalone: false,
+      })
       class Dir {}
 
-      @Component({template: '<button dir [color]="color"></button>'})
+      @Component({
+        template: '<button dir [color]="color"></button>',
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {
         @ViewChild(HostDir) hostDir!: HostDir;
         color = 'red';
@@ -1491,7 +1865,7 @@ describe('host directives', () => {
     });
 
     it('should set an input of a host directive that has been exposed under an alias', () => {
-      @Directive({standalone: true})
+      @Directive()
       class HostDir {
         @Input() color?: string;
       }
@@ -1499,10 +1873,15 @@ describe('host directives', () => {
       @Directive({
         selector: '[dir]',
         hostDirectives: [{directive: HostDir, inputs: ['color: buttonColor']}],
+        standalone: false,
       })
       class Dir {}
 
-      @Component({template: '<button dir [buttonColor]="color"></button>'})
+      @Component({
+        template: '<button dir [buttonColor]="color"></button>',
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {
         @ViewChild(HostDir) hostDir!: HostDir;
         color = 'red';
@@ -1519,7 +1898,7 @@ describe('host directives', () => {
     });
 
     it('should alias to the public name of the host directive input, not the private one', () => {
-      @Directive({standalone: true})
+      @Directive()
       class HostDir {
         @Input('colorAlias') color?: string;
       }
@@ -1527,10 +1906,15 @@ describe('host directives', () => {
       @Directive({
         selector: '[dir]',
         hostDirectives: [{directive: HostDir, inputs: ['colorAlias: buttonColor']}],
+        standalone: false,
       })
       class Dir {}
 
-      @Component({template: '<button dir [buttonColor]="color"></button>'})
+      @Component({
+        template: '<button dir [buttonColor]="color"></button>',
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {
         @ViewChild(HostDir) hostDir!: HostDir;
         color = 'red';
@@ -1547,7 +1931,7 @@ describe('host directives', () => {
     });
 
     it('should set an input of a host that has the same name as a non-exposed input of a host directive', () => {
-      @Directive({standalone: true})
+      @Directive()
       class HostDir {
         @Input() color?: string;
       }
@@ -1555,12 +1939,17 @@ describe('host directives', () => {
       @Directive({
         selector: '[dir]',
         hostDirectives: [HostDir],
+        standalone: false,
       })
       class Dir {
         @Input() color?: string;
       }
 
-      @Component({template: '<button dir [color]="color"></button>'})
+      @Component({
+        template: '<button dir [color]="color"></button>',
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {
         @ViewChild(Dir) dir!: Dir;
         @ViewChild(HostDir) hostDir!: HostDir;
@@ -1583,17 +1972,25 @@ describe('host directives', () => {
     });
 
     it('should set an input of a host that has the same name as an exposed input of a host directive', () => {
-      @Directive({standalone: true})
+      @Directive()
       class HostDir {
         @Input() color?: string;
       }
 
-      @Directive({selector: '[dir]', hostDirectives: [{directive: HostDir, inputs: ['color']}]})
+      @Directive({
+        selector: '[dir]',
+        hostDirectives: [{directive: HostDir, inputs: ['color']}],
+        standalone: false,
+      })
       class Dir {
         @Input() color?: string;
       }
 
-      @Component({template: '<button dir [color]="color"></button>'})
+      @Component({
+        template: '<button dir [color]="color"></button>',
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {
         @ViewChild(Dir) dir!: Dir;
         @ViewChild(HostDir) hostDir!: HostDir;
@@ -1616,7 +2013,7 @@ describe('host directives', () => {
     });
 
     it('should set an input of a host that has the same name as the alias of a host directive input', () => {
-      @Directive({standalone: true})
+      @Directive()
       class HostDir {
         @Input() color?: string;
       }
@@ -1624,12 +2021,17 @@ describe('host directives', () => {
       @Directive({
         selector: '[dir]',
         hostDirectives: [{directive: HostDir, inputs: ['color: buttonColor']}],
+        standalone: false,
       })
       class Dir {
         @Input() buttonColor?: string;
       }
 
-      @Component({template: '<button dir [buttonColor]="color"></button>'})
+      @Component({
+        template: '<button dir [buttonColor]="color"></button>',
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {
         @ViewChild(Dir) dir!: Dir;
         @ViewChild(HostDir) hostDir!: HostDir;
@@ -1657,16 +2059,21 @@ describe('host directives', () => {
         @Input() color?: string;
       }
 
-      @Directive({standalone: true})
+      @Directive()
       class HostDir extends ParentDir {}
 
       @Directive({
         selector: '[dir]',
         hostDirectives: [{directive: HostDir, inputs: ['color']}],
+        standalone: false,
       })
       class Dir {}
 
-      @Component({template: '<button dir [color]="color"></button>'})
+      @Component({
+        template: '<button dir [color]="color"></button>',
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {
         @ViewChild(HostDir) hostDir!: HostDir;
         color = 'red';
@@ -1685,12 +2092,12 @@ describe('host directives', () => {
     });
 
     it('should set an input that was exposed from one host directive, but not another', () => {
-      @Directive({standalone: true})
+      @Directive()
       class ExposedHostDir {
         @Input() color?: string;
       }
 
-      @Directive({standalone: true})
+      @Directive()
       class UnExposedHostDir {
         @Input() color?: string;
       }
@@ -1698,10 +2105,15 @@ describe('host directives', () => {
       @Directive({
         selector: '[dir]',
         hostDirectives: [{directive: ExposedHostDir, inputs: ['color']}, UnExposedHostDir],
+        standalone: false,
       })
       class Dir {}
 
-      @Component({template: '<button dir [color]="color"></button>'})
+      @Component({
+        template: '<button dir [color]="color"></button>',
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {
         @ViewChild(ExposedHostDir) exposedHostDir!: ExposedHostDir;
         @ViewChild(UnExposedHostDir) unExposedHostDir!: UnExposedHostDir;
@@ -1724,12 +2136,12 @@ describe('host directives', () => {
     });
 
     it('should set inputs from different host directives that have been aliased to the same name', () => {
-      @Directive({standalone: true})
+      @Directive()
       class FirstHostDir {
         @Input() firstColor?: string;
       }
 
-      @Directive({standalone: true})
+      @Directive()
       class SecondHostDir {
         @Input() secondColor?: string;
       }
@@ -1740,10 +2152,15 @@ describe('host directives', () => {
           {directive: FirstHostDir, inputs: ['firstColor: buttonColor']},
           {directive: SecondHostDir, inputs: ['secondColor: buttonColor']},
         ],
+        standalone: false,
       })
       class Dir {}
 
-      @Component({template: '<button dir [buttonColor]="color"></button>'})
+      @Component({
+        template: '<button dir [buttonColor]="color"></button>',
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {
         @ViewChild(FirstHostDir) firstHostDir!: FirstHostDir;
         @ViewChild(SecondHostDir) secondHostDir!: SecondHostDir;
@@ -1766,15 +2183,23 @@ describe('host directives', () => {
     });
 
     it('should not set a static input of a host directive that has not been exposed', () => {
-      @Directive({standalone: true})
+      @Directive()
       class HostDir {
         @Input() color?: string;
       }
 
-      @Directive({selector: '[dir]', hostDirectives: [HostDir]})
+      @Directive({
+        selector: '[dir]',
+        hostDirectives: [HostDir],
+        standalone: false,
+      })
       class Dir {}
 
-      @Component({template: '<button dir color="red"></button>'})
+      @Component({
+        template: '<button dir color="red"></button>',
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {
         @ViewChild(HostDir) hostDir!: HostDir;
       }
@@ -1787,15 +2212,23 @@ describe('host directives', () => {
     });
 
     it('should set a static input of a host directive that has been exposed', () => {
-      @Directive({standalone: true})
+      @Directive()
       class HostDir {
         @Input() color?: string;
       }
 
-      @Directive({selector: '[dir]', hostDirectives: [{directive: HostDir, inputs: ['color']}]})
+      @Directive({
+        selector: '[dir]',
+        hostDirectives: [{directive: HostDir, inputs: ['color']}],
+        standalone: false,
+      })
       class Dir {}
 
-      @Component({template: '<button dir color="red"></button>'})
+      @Component({
+        template: '<button dir color="red"></button>',
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {
         @ViewChild(HostDir) hostDir!: HostDir;
       }
@@ -1807,7 +2240,7 @@ describe('host directives', () => {
     });
 
     it('should set a static input of a host directive that has been exposed under an alias', () => {
-      @Directive({standalone: true})
+      @Directive()
       class HostDir {
         @Input() color?: string;
       }
@@ -1815,10 +2248,15 @@ describe('host directives', () => {
       @Directive({
         selector: '[dir]',
         hostDirectives: [{directive: HostDir, inputs: ['color: buttonColor']}],
+        standalone: false,
       })
       class Dir {}
 
-      @Component({template: '<button dir buttonColor="red"></button>'})
+      @Component({
+        template: '<button dir buttonColor="red"></button>',
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {
         @ViewChild(HostDir) hostDir!: HostDir;
       }
@@ -1830,7 +2268,7 @@ describe('host directives', () => {
     });
 
     it('should alias to the public name of a static host directive input, not the private one', () => {
-      @Directive({standalone: true})
+      @Directive()
       class HostDir {
         @Input('colorAlias') color?: string;
       }
@@ -1838,10 +2276,15 @@ describe('host directives', () => {
       @Directive({
         selector: '[dir]',
         hostDirectives: [{directive: HostDir, inputs: ['colorAlias: buttonColor']}],
+        standalone: false,
       })
       class Dir {}
 
-      @Component({template: '<button dir buttonColor="red"></button>'})
+      @Component({
+        template: '<button dir buttonColor="red"></button>',
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {
         @ViewChild(HostDir) hostDir!: HostDir;
       }
@@ -1853,12 +2296,12 @@ describe('host directives', () => {
     });
 
     it('should set a static input that was exposed from one host directive, but not another', () => {
-      @Directive({standalone: true})
+      @Directive()
       class ExposedHostDir {
         @Input() color?: string;
       }
 
-      @Directive({standalone: true})
+      @Directive()
       class UnExposedHostDir {
         @Input() color?: string;
       }
@@ -1866,10 +2309,15 @@ describe('host directives', () => {
       @Directive({
         selector: '[dir]',
         hostDirectives: [{directive: ExposedHostDir, inputs: ['color']}, UnExposedHostDir],
+        standalone: false,
       })
       class Dir {}
 
-      @Component({template: '<button dir color="red"></button>'})
+      @Component({
+        template: '<button dir color="red"></button>',
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {
         @ViewChild(ExposedHostDir) exposedHostDir!: ExposedHostDir;
         @ViewChild(UnExposedHostDir) unExposedHostDir!: UnExposedHostDir;
@@ -1884,12 +2332,12 @@ describe('host directives', () => {
     });
 
     it('should set static inputs from different host directives that have been aliased to the same name', () => {
-      @Directive({standalone: true})
+      @Directive()
       class FirstHostDir {
         @Input() firstColor?: string;
       }
 
-      @Directive({standalone: true})
+      @Directive()
       class SecondHostDir {
         @Input() secondColor?: string;
       }
@@ -1900,10 +2348,15 @@ describe('host directives', () => {
           {directive: FirstHostDir, inputs: ['firstColor: buttonColor']},
           {directive: SecondHostDir, inputs: ['secondColor: buttonColor']},
         ],
+        standalone: false,
       })
       class Dir {}
 
-      @Component({template: '<button dir buttonColor="red"></button>'})
+      @Component({
+        template: '<button dir buttonColor="red"></button>',
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {
         @ViewChild(FirstHostDir) firstHostDir!: FirstHostDir;
         @ViewChild(SecondHostDir) secondHostDir!: SecondHostDir;
@@ -1921,7 +2374,7 @@ describe('host directives', () => {
     it('should not expose an input under its host directive alias if a host directive is not applied', () => {
       const logs: string[] = [];
 
-      @Directive({selector: '[host-dir]', standalone: true})
+      @Directive({selector: '[host-dir]'})
       class HostDir implements OnChanges {
         @Input('colorAlias') color?: string;
 
@@ -1932,20 +2385,19 @@ describe('host directives', () => {
 
       @Directive({
         selector: '[dir]',
-        standalone: true,
         hostDirectives: [{directive: HostDir, inputs: ['colorAlias: buttonColor']}],
       })
       class Dir {}
 
       @Component({
-        standalone: true,
         imports: [Dir, HostDir],
         // Note that `[dir]` doesn't match on the `button` on purpose.
         // The wrong behavior would be if the `buttonColor` binding worked on `host-dir`.
         template: `
-              <span dir [buttonColor]="spanValue"></span>
-              <button host-dir [buttonColor]="buttonValue"></button>
-            `,
+          <span dir [buttonColor]="spanValue"></span>
+          <button host-dir [buttonColor]="buttonValue"></button>
+        `,
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class App {
         spanValue = 'spanValue';
@@ -1964,18 +2416,28 @@ describe('host directives', () => {
     });
 
     it('should set the input of an inherited host directive that has been exposed', () => {
-      @Directive({standalone: true})
+      @Directive()
       class HostDir {
         @Input() color?: string;
       }
 
-      @Directive({hostDirectives: [{directive: HostDir, inputs: ['color']}]})
+      @Directive({
+        hostDirectives: [{directive: HostDir, inputs: ['color']}],
+        standalone: false,
+      })
       class Parent {}
 
-      @Directive({selector: '[dir]'})
+      @Directive({
+        selector: '[dir]',
+        standalone: false,
+      })
       class Dir extends Parent {}
 
-      @Component({template: '<button dir [color]="color"></button>'})
+      @Component({
+        template: '<button dir [color]="color"></button>',
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {
         @ViewChild(HostDir) hostDir!: HostDir;
         color = 'red';
@@ -1997,7 +2459,7 @@ describe('host directives', () => {
       let firstDirChangeEvent: SimpleChanges | undefined;
       let secondDirChangeEvent: SimpleChanges | undefined;
 
-      @Directive({standalone: true})
+      @Directive()
       class FirstHostDir implements OnChanges {
         @Input() color?: string;
 
@@ -2006,7 +2468,7 @@ describe('host directives', () => {
         }
       }
 
-      @Directive({standalone: true})
+      @Directive()
       class SecondHostDir implements OnChanges {
         @Input() color?: string;
 
@@ -2021,10 +2483,15 @@ describe('host directives', () => {
           {directive: FirstHostDir, inputs: ['color']},
           {directive: SecondHostDir, inputs: ['color']},
         ],
+        standalone: false,
       })
       class Dir {}
 
-      @Component({template: '<button dir [color]="color"></button>'})
+      @Component({
+        template: '<button dir [color]="color"></button>',
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {
         color = 'red';
       }
@@ -2080,7 +2547,7 @@ describe('host directives', () => {
       let firstDirChangeEvent: SimpleChanges | undefined;
       let secondDirChangeEvent: SimpleChanges | undefined;
 
-      @Directive({standalone: true})
+      @Directive()
       class FirstHostDir implements OnChanges {
         @Input('firstAlias') color?: string;
 
@@ -2089,7 +2556,7 @@ describe('host directives', () => {
         }
       }
 
-      @Directive({standalone: true})
+      @Directive()
       class SecondHostDir implements OnChanges {
         @Input('secondAlias') color?: string;
 
@@ -2104,10 +2571,15 @@ describe('host directives', () => {
           {directive: FirstHostDir, inputs: ['firstAlias: buttonColor']},
           {directive: SecondHostDir, inputs: ['secondAlias: buttonColor']},
         ],
+        standalone: false,
       })
       class Dir {}
 
-      @Component({template: '<button dir [buttonColor]="color"></button>'})
+      @Component({
+        template: '<button dir [buttonColor]="color"></button>',
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {
         color = 'red';
       }
@@ -2163,7 +2635,7 @@ describe('host directives', () => {
       let firstDirChangeEvent: SimpleChanges | undefined;
       let secondDirChangeEvent: SimpleChanges | undefined;
 
-      @Directive({standalone: true})
+      @Directive()
       class FirstHostDir implements OnChanges {
         @Input() color?: string;
 
@@ -2172,7 +2644,7 @@ describe('host directives', () => {
         }
       }
 
-      @Directive({standalone: true})
+      @Directive()
       class SecondHostDir implements OnChanges {
         @Input() color?: string;
 
@@ -2184,10 +2656,15 @@ describe('host directives', () => {
       @Directive({
         selector: '[dir]',
         hostDirectives: [FirstHostDir, {directive: SecondHostDir, inputs: ['color']}],
+        standalone: false,
       })
       class Dir {}
 
-      @Component({template: '<button dir [color]="color"></button>'})
+      @Component({
+        template: '<button dir [color]="color"></button>',
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {
         color = 'red';
       }
@@ -2225,7 +2702,7 @@ describe('host directives', () => {
     it('should invoke ngOnChanges when a static aliased host directive input is set', () => {
       let latestChangeEvent: SimpleChanges | undefined;
 
-      @Directive({standalone: true})
+      @Directive()
       class HostDir implements OnChanges {
         @Input('colorAlias') color?: string;
 
@@ -2237,10 +2714,15 @@ describe('host directives', () => {
       @Directive({
         selector: '[dir]',
         hostDirectives: [{directive: HostDir, inputs: ['colorAlias: buttonColor']}],
+        standalone: false,
       })
       class Dir {}
 
-      @Component({template: '<button dir buttonColor="red"></button>'})
+      @Component({
+        template: '<button dir buttonColor="red"></button>',
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {}
 
       TestBed.configureTestingModule({declarations: [App, Dir]});
@@ -2265,21 +2747,24 @@ describe('host directives', () => {
       let otherHostDirInstance!: OtherHostDir;
       let plainDirInstance!: PlainDir;
 
-      @Directive({standalone: true})
+      @Directive()
       class HostDir {
         constructor() {
           hostDirInstance = this;
         }
       }
 
-      @Directive({standalone: true})
+      @Directive()
       class OtherHostDir {
         constructor() {
           otherHostDirInstance = this;
         }
       }
 
-      @Directive({selector: '[plain-dir]'})
+      @Directive({
+        selector: '[plain-dir]',
+        standalone: false,
+      })
       class PlainDir {
         constructor() {
           plainDirInstance = this;
@@ -2290,10 +2775,16 @@ describe('host directives', () => {
         selector: 'comp',
         template: '',
         hostDirectives: [HostDir, OtherHostDir],
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class Comp {}
 
-      @Component({template: '<comp plain-dir></comp>'})
+      @Component({
+        template: '<comp plain-dir></comp>',
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {}
 
       TestBed.configureTestingModule({declarations: [App, Comp, PlainDir]});
@@ -2314,13 +2805,15 @@ describe('host directives', () => {
     it('should be able to retrieve components that have host directives using ng.getComponent', () => {
       let compInstance!: Comp;
 
-      @Directive({standalone: true})
+      @Directive()
       class HostDir {}
 
       @Component({
         selector: 'comp',
         template: '',
         hostDirectives: [HostDir],
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class Comp {
         constructor() {
@@ -2328,7 +2821,11 @@ describe('host directives', () => {
         }
       }
 
-      @Component({template: '<comp></comp>'})
+      @Component({
+        template: '<comp></comp>',
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {}
 
       TestBed.configureTestingModule({declarations: [App, Comp]});
@@ -2343,13 +2840,15 @@ describe('host directives', () => {
     it('should be able to retrieve components that have host directives using DebugNode.componentInstance', () => {
       let compInstance!: Comp;
 
-      @Directive({standalone: true})
+      @Directive()
       class HostDir {}
 
       @Component({
         selector: 'comp',
         template: '',
         hostDirectives: [HostDir],
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class Comp {
         constructor() {
@@ -2357,7 +2856,11 @@ describe('host directives', () => {
         }
       }
 
-      @Component({template: '<comp></comp>'})
+      @Component({
+        template: '<comp></comp>',
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {}
 
       TestBed.configureTestingModule({declarations: [App, Comp]});
@@ -2370,19 +2873,25 @@ describe('host directives', () => {
     });
 
     it('should be able to query by a host directive', () => {
-      @Directive({standalone: true})
+      @Directive()
       class HostDir {}
 
       @Component({
         selector: 'comp',
         template: '',
         hostDirectives: [HostDir],
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class Comp {
         constructor(public elementRef: ElementRef<HTMLElement>) {}
       }
 
-      @Component({template: '<comp></comp>'})
+      @Component({
+        template: '<comp></comp>',
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {
         @ViewChild(Comp) compInstance!: Comp;
       }
@@ -2398,29 +2907,10 @@ describe('host directives', () => {
   });
 
   describe('root component with host directives', () => {
-    function createRootComponent<T>(componentType: Type<T>) {
-      @Component({template: '<ng-container #insertionPoint></ng-container>'})
-      class App {
-        @ViewChild('insertionPoint', {read: ViewContainerRef}) insertionPoint!: ViewContainerRef;
-      }
-
-      TestBed.configureTestingModule({
-        declarations: [App, componentType],
-        errorOnUnknownProperties: true,
-      });
-
-      const fixture = TestBed.createComponent(App);
-      fixture.detectChanges();
-      const ref = fixture.componentInstance.insertionPoint.createComponent(componentType);
-
-      return {ref, fixture};
-    }
-
     it('should apply a basic host directive to the root component', () => {
       const logs: string[] = [];
 
       @Directive({
-        standalone: true,
         host: {'host-dir-attr': '', 'class': 'host-dir', 'style': 'height: 50px'},
       })
       class HostDir {
@@ -2434,6 +2924,8 @@ describe('host directives', () => {
         host: {'host-attr': '', 'class': 'dir', 'style': 'width: 50px'},
         hostDirectives: [HostDir],
         template: '',
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class HostComp {
         constructor() {
@@ -2453,7 +2945,7 @@ describe('host directives', () => {
     it('should invoke lifecycle hooks on host directives applied to a root component', () => {
       const logs: string[] = [];
 
-      @Directive({standalone: true})
+      @Directive()
       class HostDir implements OnInit, AfterViewInit, AfterViewChecked {
         ngOnInit() {
           logs.push('HostDir - ngOnInit');
@@ -2468,7 +2960,7 @@ describe('host directives', () => {
         }
       }
 
-      @Directive({standalone: true})
+      @Directive()
       class OtherHostDir implements OnInit, AfterViewInit, AfterViewChecked {
         ngOnInit() {
           logs.push('OtherHostDir - ngOnInit');
@@ -2483,7 +2975,12 @@ describe('host directives', () => {
         }
       }
 
-      @Component({template: '', hostDirectives: [HostDir, OtherHostDir]})
+      @Component({
+        template: '',
+        hostDirectives: [HostDir, OtherHostDir],
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class HostComp implements OnInit, AfterViewInit, AfterViewChecked {
         ngOnInit() {
           logs.push('HostComp - ngOnInit');
@@ -2517,7 +3014,6 @@ describe('host directives', () => {
     describe('host bindings', () => {
       it('should support host attribute bindings coming from the host directives', () => {
         @Directive({
-          standalone: true,
           host: {
             '[attr.host-dir-only]': 'value',
             '[attr.shadowed-attr]': 'value',
@@ -2528,7 +3024,6 @@ describe('host directives', () => {
         }
 
         @Directive({
-          standalone: true,
           host: {
             '[attr.other-host-dir-only]': 'value',
             '[attr.shadowed-attr]': 'value',
@@ -2544,6 +3039,8 @@ describe('host directives', () => {
             '[attr.shadowed-attr]': 'value',
           },
           hostDirectives: [HostDir, OtherHostDir],
+          standalone: false,
+          changeDetection: ChangeDetectionStrategy.Eager,
         })
         class HostComp {
           value = 'host';
@@ -2573,14 +3070,14 @@ describe('host directives', () => {
       it('should support host event bindings coming from the host directives', () => {
         const logs: string[] = [];
 
-        @Directive({standalone: true, host: {'(click)': 'handleClick()'}})
+        @Directive({host: {'(click)': 'handleClick()'}})
         class HostDir {
           handleClick() {
             logs.push('HostDir');
           }
         }
 
-        @Directive({standalone: true, host: {'(click)': 'handleClick()'}})
+        @Directive({host: {'(click)': 'handleClick()'}})
         class OtherHostDir {
           handleClick() {
             logs.push('OtherHostDir');
@@ -2591,6 +3088,9 @@ describe('host directives', () => {
           selector: 'host-comp',
           host: {'(click)': 'handleClick()'},
           hostDirectives: [HostDir, OtherHostDir],
+          standalone: false,
+
+          changeDetection: ChangeDetectionStrategy.Eager,
         })
         class HostComp {
           handleClick() {
@@ -2607,16 +3107,19 @@ describe('host directives', () => {
       });
 
       it('should have the host bindings of the root component take precedence over the ones from the host directives', () => {
-        @Directive({standalone: true, host: {'id': 'host-dir'}})
+        @Directive({host: {'id': 'host-dir'}})
         class HostDir {}
 
-        @Directive({standalone: true, host: {'id': 'other-host-dir'}})
+        @Directive({host: {'id': 'other-host-dir'}})
         class OtherHostDir {}
 
         @Component({
           template: '',
           host: {'id': 'host'},
           hostDirectives: [HostDir, OtherHostDir],
+          standalone: false,
+
+          changeDetection: ChangeDetectionStrategy.Eager,
         })
         class HostComp {}
 
@@ -2630,7 +3133,7 @@ describe('host directives', () => {
       it('should allow the host directive to inject the root component', () => {
         let hostDirInstance!: HostDir;
 
-        @Directive({standalone: true})
+        @Directive()
         class HostDir {
           host = inject(HostComp);
 
@@ -2639,7 +3142,13 @@ describe('host directives', () => {
           }
         }
 
-        @Component({hostDirectives: [HostDir], template: ''})
+        @Component({
+          hostDirectives: [HostDir],
+          template: '',
+          standalone: false,
+
+          changeDetection: ChangeDetectionStrategy.Eager,
+        })
         class HostComp {}
 
         const {ref} = createRootComponent(HostComp);
@@ -2651,14 +3160,20 @@ describe('host directives', () => {
       it('should allow the root component to inject the host directive', () => {
         let hostDirInstance!: HostDir;
 
-        @Directive({standalone: true})
+        @Directive()
         class HostDir {
           constructor() {
             hostDirInstance = this;
           }
         }
 
-        @Component({hostDirectives: [HostDir], template: ''})
+        @Component({
+          hostDirectives: [HostDir],
+          template: '',
+          standalone: false,
+
+          changeDetection: ChangeDetectionStrategy.Eager,
+        })
         class HostComp {
           hostDir = inject(HostDir);
         }
@@ -2674,7 +3189,7 @@ describe('host directives', () => {
         let firstHostDirInstance!: FirstHostDir;
         let secondHostDirInstance!: SecondHostDir;
 
-        @Directive({standalone: true, providers: [{provide: token, useValue: 'SecondDir'}]})
+        @Directive({providers: [{provide: token, useValue: 'SecondDir'}]})
         class SecondHostDir {
           tokenValue = inject(token);
 
@@ -2684,7 +3199,6 @@ describe('host directives', () => {
         }
 
         @Directive({
-          standalone: true,
           hostDirectives: [SecondHostDir],
           providers: [{provide: token, useValue: 'FirstDir'}],
         })
@@ -2700,6 +3214,9 @@ describe('host directives', () => {
           template: '',
           hostDirectives: [FirstHostDir],
           providers: [{provide: token, useValue: 'HostDir'}],
+          standalone: false,
+
+          changeDetection: ChangeDetectionStrategy.Eager,
         })
         class HostComp {
           tokenValue = inject(token);
@@ -2724,17 +3241,22 @@ describe('host directives', () => {
         const firstToken = new InjectionToken<string>('firstToken');
         const secondToken = new InjectionToken<string>('secondToken');
 
-        @Directive({standalone: true, providers: [{provide: secondToken, useValue: 'SecondDir'}]})
+        @Directive({providers: [{provide: secondToken, useValue: 'SecondDir'}]})
         class SecondHostDir {}
 
         @Directive({
-          standalone: true,
           hostDirectives: [SecondHostDir],
           providers: [{provide: firstToken, useValue: 'FirstDir'}],
         })
         class FirstHostDir {}
 
-        @Component({template: '', hostDirectives: [FirstHostDir]})
+        @Component({
+          template: '',
+          hostDirectives: [FirstHostDir],
+          standalone: false,
+
+          changeDetection: ChangeDetectionStrategy.Eager,
+        })
         class HostComp {
           firstTokenValue = inject(firstToken);
           secondTokenValue = inject(secondToken);
@@ -2751,7 +3273,7 @@ describe('host directives', () => {
         let hostDirInstance!: HostDir;
         let otherHostDirInstance!: OtherHostDir;
 
-        @Directive({standalone: true})
+        @Directive()
         class HostDir {
           @Input() color?: string;
 
@@ -2760,7 +3282,7 @@ describe('host directives', () => {
           }
         }
 
-        @Directive({standalone: true})
+        @Directive()
         class OtherHostDir {
           @Input() color?: string;
 
@@ -2781,6 +3303,9 @@ describe('host directives', () => {
               inputs: ['color'],
             },
           ],
+          standalone: false,
+
+          changeDetection: ChangeDetectionStrategy.Eager,
         })
         class HostComp {
           @Input() color?: string;
@@ -2803,7 +3328,7 @@ describe('host directives', () => {
       it('should set inputs that only exist on a host directive when using `setInput`', () => {
         let hostDirInstance!: HostDir;
 
-        @Directive({standalone: true})
+        @Directive()
         class HostDir {
           @Input() color?: string;
 
@@ -2820,6 +3345,9 @@ describe('host directives', () => {
               inputs: ['color'],
             },
           ],
+          standalone: false,
+
+          changeDetection: ChangeDetectionStrategy.Eager,
         })
         class HostComp {
           color?: string; // Note: intentionally not marked as @Input.
@@ -2839,7 +3367,7 @@ describe('host directives', () => {
       it('should set inputs that only exist on the root component when using `setInput`', () => {
         let hostDirInstance!: HostDir;
 
-        @Directive({standalone: true})
+        @Directive()
         class HostDir {
           @Input() color?: string;
 
@@ -2850,7 +3378,10 @@ describe('host directives', () => {
 
         @Component({
           selector: 'host-comp',
-          hostDirectives: [HostDir], // Note: `color` input has intentionally not been exposed.
+          hostDirectives: [HostDir],
+          standalone: false,
+
+          changeDetection: ChangeDetectionStrategy.Eager,
         })
         class HostComp {
           @Input() color?: string;
@@ -2871,7 +3402,7 @@ describe('host directives', () => {
       it('should use the input name alias in `setInput`', () => {
         let hostDirInstance!: HostDir;
 
-        @Directive({standalone: true})
+        @Directive()
         class HostDir {
           @Input('alias') color?: string;
 
@@ -2888,6 +3419,9 @@ describe('host directives', () => {
               inputs: ['alias: customAlias'],
             },
           ],
+          standalone: false,
+
+          changeDetection: ChangeDetectionStrategy.Eager,
         })
         class HostComp {}
 
@@ -2913,7 +3447,7 @@ describe('host directives', () => {
       it('should invoke ngOnChanges when setting host directive inputs using setInput', () => {
         let latestChanges: SimpleChanges | undefined;
 
-        @Directive({standalone: true})
+        @Directive()
         class HostDir implements OnChanges {
           @Input('alias') color?: string;
 
@@ -2925,6 +3459,9 @@ describe('host directives', () => {
         @Component({
           selector: 'host-comp',
           hostDirectives: [{directive: HostDir, inputs: ['alias: customAlias']}],
+          standalone: false,
+
+          changeDetection: ChangeDetectionStrategy.Eager,
         })
         class HostComp {}
 
@@ -2959,25 +3496,426 @@ describe('host directives', () => {
         );
       });
     });
+  });
 
-    it('should throw an error if a host directive is applied multiple times to a root component', () => {
-      @Directive({standalone: true})
-      class DuplicateHostDir {}
+  describe('de-duplication', () => {
+    it('should de-duplicate a host directive that matches multiple times in a template', () => {
+      let creationCount = 0;
 
-      @Directive({standalone: true, hostDirectives: [DuplicateHostDir]})
+      @Directive({selector: '[dir]'})
+      class HostDir {
+        constructor() {
+          creationCount++;
+        }
+      }
+
+      @Directive({
+        selector: '[dir]',
+        hostDirectives: [HostDir],
+      })
+      class Dir {}
+
+      @Component({template: '<div dir></div>', imports: [HostDir, Dir]})
+      class App {}
+
+      TestBed.createComponent(App);
+      expect(creationCount).toBe(1);
+    });
+
+    it('should de-duplicate a host directive that matches multiple times on a component', () => {
+      let createCount = 0;
+
+      @Directive({selector: '[dir]'})
+      class HostDir {
+        constructor() {
+          createCount++;
+        }
+      }
+
+      @Component({
+        selector: 'comp',
+        hostDirectives: [HostDir],
+        template: '',
+      })
+      class Comp {}
+
+      const baseAppMetadata = {
+        template: '<comp dir></comp>',
+      };
+
+      // Note: the definition order in `imports` seems to affect the
+      // directive matching order so we test both scenarios.
+      @Component({...baseAppMetadata, imports: [Comp, HostDir], selector: 'app-one'})
+      class App1 {}
+      TestBed.createComponent(App1);
+      expect(createCount).toBe(1);
+
+      createCount = 0;
+      @Component({...baseAppMetadata, imports: [HostDir, Comp], selector: 'app-two'})
+      class App2 {}
+      TestBed.createComponent(App2);
+      expect(createCount).toBe(1);
+    });
+
+    it('should de-duplicate a host directive appears multiple times in a chain', () => {
+      let creationCount = 0;
+
+      @Directive()
+      class DuplicateHostDir {
+        constructor() {
+          creationCount++;
+        }
+      }
+
+      @Directive({hostDirectives: [DuplicateHostDir]})
       class HostDir {}
 
-      @Directive({standalone: true, hostDirectives: [HostDir, DuplicateHostDir]})
+      @Directive({
+        selector: '[dir]',
+        hostDirectives: [HostDir, DuplicateHostDir],
+        standalone: false,
+      })
+      class Dir {}
+
+      @Component({
+        template: '<div dir></div>',
+        standalone: false,
+      })
+      class App {}
+
+      TestBed.configureTestingModule({declarations: [App, Dir]});
+      TestBed.createComponent(App);
+      expect(creationCount).toBe(1);
+    });
+
+    it('should de-duplicate inherited host directives', () => {
+      let creationCount = 0;
+
+      @Directive()
+      class HostDir {
+        constructor() {
+          creationCount++;
+        }
+      }
+
+      @Directive({hostDirectives: [HostDir]})
+      class Grandparent {}
+
+      @Directive()
+      class Parent extends Grandparent {}
+
+      @Directive({
+        selector: '[dir]',
+        hostDirectives: [HostDir],
+        standalone: false,
+      })
+      class Dir extends Parent {}
+
+      @Component({
+        template: '<div dir></div>',
+        standalone: false,
+      })
+      class App {}
+
+      TestBed.configureTestingModule({declarations: [App, Dir]});
+      TestBed.createComponent(App);
+      expect(creationCount).toBe(1);
+    });
+
+    it('should de-duplicate a host directive that is applied multiple times to a root component', () => {
+      let createCount = 0;
+
+      @Directive()
+      class DuplicateHostDir {
+        constructor() {
+          createCount++;
+        }
+      }
+
+      @Directive({hostDirectives: [DuplicateHostDir]})
+      class HostDir {}
+
+      @Directive({hostDirectives: [HostDir, DuplicateHostDir]})
       class Dir {}
 
       @Component({
         hostDirectives: [Dir],
+        standalone: false,
       })
       class HostComp {}
 
-      expect(() => createRootComponent(HostComp)).toThrowError(
-        'NG0309: Directive DuplicateHostDir matches multiple times on the same element. Directives can only match an element once.',
+      createRootComponent(HostComp);
+      expect(createCount).toBe(1);
+    });
+
+    it('should expose original inputs if a directive matches both as a host directive and through the template', () => {
+      const instances: HostDir[] = [];
+
+      @Directive({selector: '[dir]'})
+      class HostDir {
+        @Input() value = '';
+        @Input({alias: 'otherAlias'}) other = '';
+
+        constructor() {
+          instances.push(this);
+        }
+      }
+
+      @Directive({
+        selector: '[dir]',
+        hostDirectives: [{directive: HostDir, inputs: ['value: valueAlias']}],
+      })
+      class Dir {}
+
+      @Component({
+        selector: 'my-comp',
+        template:
+          '<div dir [value]="greeting" [valueAlias]="greeting" [otherAlias]="greeting"></div>',
+        imports: [HostDir, Dir],
+      })
+      class App {
+        greeting = 'hello';
+      }
+
+      const spy = spyOn(console, 'error');
+      const fixture = TestBed.createComponent(App);
+      fixture.detectChanges();
+
+      expect(instances.length).toBe(1);
+      expect(instances[0].value).toBe('hello');
+      expect(instances[0].other).toBe('hello');
+      expect(spy.calls.mostRecent().args[0]).toMatch(
+        /Can't bind to 'valueAlias' since it isn't a known property of 'div'/,
       );
+    });
+
+    it('should expose original outputs if a directive matches both as a host directive and through the template', () => {
+      const instances: HostDir[] = [];
+      const emittedValues: unknown[] = [];
+
+      @Directive({selector: '[dir]'})
+      class HostDir {
+        @Output() eventOne = new EventEmitter<number>();
+        @Output('twoAlias') eventTwo = new EventEmitter<boolean>();
+
+        constructor() {
+          instances.push(this);
+        }
+
+        emitEvents() {
+          this.eventOne.emit(1);
+          this.eventTwo.emit(true);
+        }
+      }
+
+      @Directive({
+        selector: '[dir]',
+        hostDirectives: [{directive: HostDir, outputs: ['eventOne: oneAlias']}],
+      })
+      class Dir {}
+
+      @Component({
+        selector: 'my-comp',
+        template:
+          '<div dir (eventOne)="callback($event)" (oneAlias)="callback($event)" (twoAlias)="callback($event)"></div>',
+        imports: [HostDir, Dir],
+      })
+      class App {
+        callback(value: unknown) {
+          emittedValues.push(value);
+        }
+      }
+
+      const fixture = TestBed.createComponent(App);
+      fixture.detectChanges();
+
+      expect(instances.length).toBe(1);
+      instances[0].emitEvents();
+      fixture.detectChanges();
+
+      expect(emittedValues).toEqual([1, true]);
+    });
+
+    it('should combine inputs configuration if host directive is exposed multiple times with non-conflicting configurations', () => {
+      const instances: HostDir[] = [];
+
+      @Directive()
+      class HostDir {
+        @Input() value = '';
+        @Input({alias: 'otherInput'}) other = '';
+
+        constructor() {
+          instances.push(this);
+        }
+      }
+
+      @Directive({
+        selector: '[dir]',
+        hostDirectives: [{directive: HostDir, inputs: ['value']}],
+      })
+      class DirOne {}
+
+      @Directive({
+        selector: '[dir]',
+        hostDirectives: [{directive: HostDir, inputs: ['otherInput: otherAlias']}],
+      })
+      class DirTwo {}
+
+      @Component({
+        selector: 'my-comp',
+        template: '<div dir [value]="greeting" [otherAlias]="greeting"></div>',
+        imports: [DirOne, DirTwo],
+      })
+      class App {
+        greeting = 'hi';
+      }
+
+      const fixture = TestBed.createComponent(App);
+      fixture.detectChanges();
+
+      expect(instances.length).toBe(1);
+      expect(instances[0].value).toBe('hi');
+      expect(instances[0].other).toBe('hi');
+    });
+
+    it('should combine inputs configuration if host directive is exposed multiple times with identical configurations', () => {
+      const instances: HostDir[] = [];
+
+      @Directive()
+      class HostDir {
+        @Input() value = '';
+
+        constructor() {
+          instances.push(this);
+        }
+      }
+
+      @Directive({
+        selector: '[dir]',
+        hostDirectives: [{directive: HostDir, inputs: ['value']}],
+      })
+      class DirOne {}
+
+      @Directive({
+        selector: '[dir]',
+        hostDirectives: [{directive: HostDir, inputs: ['value']}],
+      })
+      class DirTwo {}
+
+      @Component({
+        selector: 'my-comp',
+        template: '<div dir [value]="greeting"></div>',
+        imports: [DirOne, DirTwo],
+      })
+      class App {
+        greeting = 'hi';
+      }
+
+      const fixture = TestBed.createComponent(App);
+      fixture.detectChanges();
+
+      expect(instances.length).toBe(1);
+      expect(instances[0].value).toBe('hi');
+    });
+
+    it('should combine output configuration if host directive is exposed multiple times with non-conflicting configurations', () => {
+      const instances: HostDir[] = [];
+      const emittedValues: unknown[] = [];
+
+      @Directive()
+      class HostDir {
+        @Output() myEvent = new EventEmitter<number>();
+        @Output('otherOutput') myOtherEvent = new EventEmitter<boolean>();
+
+        constructor() {
+          instances.push(this);
+        }
+
+        emitEvents() {
+          this.myEvent.emit(1);
+          this.myOtherEvent.emit(true);
+        }
+      }
+
+      @Directive({
+        selector: '[dir]',
+        hostDirectives: [{directive: HostDir, outputs: ['myEvent']}],
+      })
+      class DirOne {}
+
+      @Directive({
+        selector: '[dir]',
+        hostDirectives: [{directive: HostDir, outputs: ['otherOutput: otherAlias']}],
+      })
+      class DirTwo {}
+
+      @Component({
+        selector: 'my-comp',
+        template: '<div dir (myEvent)="callback($event)" (otherAlias)="callback($event)"></div>',
+        imports: [DirOne, DirTwo],
+      })
+      class App {
+        callback(value: unknown) {
+          emittedValues.push(value);
+        }
+      }
+
+      const fixture = TestBed.createComponent(App);
+      fixture.detectChanges();
+      expect(instances.length).toBe(1);
+
+      instances[0].emitEvents();
+      fixture.detectChanges();
+      expect(emittedValues).toEqual([1, true]);
+    });
+
+    it('should combine outputs configuration if host directive is exposed multiple times with identical configurations', () => {
+      const instances: HostDir[] = [];
+      const emittedValues: unknown[] = [];
+
+      @Directive()
+      class HostDir {
+        @Output() myEvent = new EventEmitter<number>();
+
+        constructor() {
+          instances.push(this);
+        }
+
+        emitEvent() {
+          this.myEvent.emit(1);
+        }
+      }
+
+      @Directive({
+        selector: '[dir]',
+        hostDirectives: [{directive: HostDir, outputs: ['myEvent']}],
+      })
+      class DirOne {}
+
+      @Directive({
+        selector: '[dir]',
+        hostDirectives: [{directive: HostDir, outputs: ['myEvent']}],
+      })
+      class DirTwo {}
+
+      @Component({
+        selector: 'my-comp',
+        template: '<div dir (myEvent)="callback($event)"></div>',
+        imports: [DirOne, DirTwo],
+      })
+      class App {
+        callback(value: unknown) {
+          emittedValues.push(value);
+        }
+      }
+
+      const fixture = TestBed.createComponent(App);
+      fixture.detectChanges();
+      expect(instances.length).toBe(1);
+
+      instances[0].emitEvent();
+      fixture.detectChanges();
+      expect(emittedValues).toEqual([1]);
     });
   });
 
@@ -2985,10 +3923,18 @@ describe('host directives', () => {
     it('should throw an error if the metadata of a host directive cannot be resolved', () => {
       class HostDir {}
 
-      @Directive({selector: '[dir]', hostDirectives: [HostDir]})
+      @Directive({
+        selector: '[dir]',
+        hostDirectives: [HostDir],
+        standalone: false,
+      })
       class Dir {}
 
-      @Component({template: '<div dir></div>'})
+      @Component({
+        template: '<div dir></div>',
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {}
 
       TestBed.configureTestingModule({declarations: [App, Dir]});
@@ -3003,10 +3949,18 @@ describe('host directives', () => {
       @Directive({standalone: false})
       class HostDir {}
 
-      @Directive({selector: '[dir]', hostDirectives: [HostDir]})
+      @Directive({
+        selector: '[dir]',
+        hostDirectives: [HostDir],
+        standalone: false,
+      })
       class Dir {}
 
-      @Component({template: '<div dir></div>'})
+      @Component({
+        template: '<div dir></div>',
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {}
 
       TestBed.configureTestingModule({declarations: [App, Dir]});
@@ -3016,91 +3970,26 @@ describe('host directives', () => {
       );
     });
 
-    it('should throw an error if a host directive matches multiple times in a template', () => {
-      @Directive({standalone: true, selector: '[dir]'})
-      class HostDir {}
-
-      @Directive({
-        selector: '[dir]',
-        hostDirectives: [HostDir],
-        standalone: true,
-      })
-      class Dir {}
-
-      @Component({template: '<div dir></div>', standalone: true, imports: [HostDir, Dir]})
-      class App {}
-
-      expect(() => TestBed.createComponent(App)).toThrowError(
-        'NG0309: Directive HostDir matches multiple times on the same element. Directives can only match an element once.',
-      );
-    });
-
-    it('should throw an error if a host directive matches multiple times on a component', () => {
-      @Directive({standalone: true, selector: '[dir]'})
-      class HostDir {}
-
-      @Component({
-        selector: 'comp',
-        hostDirectives: [HostDir],
-        standalone: true,
-        template: '',
-      })
-      class Comp {}
-
-      const baseAppMetadata = {
-        template: '<comp dir></comp>',
-        standalone: true,
-      };
-
-      const expectedError =
-        'NG0309: Directive HostDir matches multiple times on the same element. Directives can only match an element once.';
-
-      // Note: the definition order in `imports` seems to affect the
-      // directive matching order so we test both scenarios.
-      expect(() => {
-        @Component({...baseAppMetadata, imports: [Comp, HostDir]})
-        class App {}
-        TestBed.createComponent(App);
-      }).toThrowError(expectedError);
-
-      expect(() => {
-        @Component({...baseAppMetadata, imports: [HostDir, Comp]})
-        class App {}
-        TestBed.createComponent(App);
-      }).toThrowError(expectedError);
-    });
-
-    it('should throw an error if a host directive appears multiple times in a chain', () => {
-      @Directive({standalone: true})
-      class DuplicateHostDir {}
-
-      @Directive({standalone: true, hostDirectives: [DuplicateHostDir]})
-      class HostDir {}
-
-      @Directive({
-        selector: '[dir]',
-        hostDirectives: [HostDir, DuplicateHostDir],
-      })
-      class Dir {}
-
-      @Component({template: '<div dir></div>'})
-      class App {}
-
-      TestBed.configureTestingModule({declarations: [App, Dir]});
-
-      expect(() => TestBed.createComponent(App)).toThrowError(
-        'NG0309: Directive DuplicateHostDir matches multiple times on the same element. Directives can only match an element once.',
-      );
-    });
-
     it('should throw an error if a host directive is a component', () => {
-      @Component({standalone: true, template: '', selector: 'host-comp'})
+      @Component({
+        template: '',
+        selector: 'host-comp',
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class HostComp {}
 
-      @Directive({selector: '[dir]', hostDirectives: [HostComp]})
+      @Directive({
+        selector: '[dir]',
+        hostDirectives: [HostComp],
+        standalone: false,
+      })
       class Dir {}
 
-      @Component({template: '<div dir></div>'})
+      @Component({
+        template: '<div dir></div>',
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {}
 
       TestBed.configureTestingModule({declarations: [App, Dir]});
@@ -3111,7 +4000,7 @@ describe('host directives', () => {
     });
 
     it('should throw an error if a host directive output does not exist', () => {
-      @Directive({standalone: true})
+      @Directive()
       class HostDir {
         @Output() foo = new EventEmitter();
       }
@@ -3124,10 +4013,15 @@ describe('host directives', () => {
             outputs: ['doesNotExist'],
           },
         ],
+        standalone: false,
       })
       class Dir {}
 
-      @Component({template: '<div dir></div>'})
+      @Component({
+        template: '<div dir></div>',
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {}
 
       TestBed.configureTestingModule({declarations: [App, Dir]});
@@ -3138,7 +4032,7 @@ describe('host directives', () => {
     });
 
     it('should throw an error if a host directive output alias does not exist', () => {
-      @Directive({standalone: true})
+      @Directive()
       class HostDir {
         @Output('alias') foo = new EventEmitter();
       }
@@ -3151,10 +4045,15 @@ describe('host directives', () => {
             outputs: ['foo'],
           },
         ],
+        standalone: false,
       })
       class Dir {}
 
-      @Component({template: '<div dir></div>'})
+      @Component({
+        template: '<div dir></div>',
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {}
 
       TestBed.configureTestingModule({declarations: [App, Dir]});
@@ -3165,7 +4064,7 @@ describe('host directives', () => {
     });
 
     it('should throw an error if a host directive input does not exist', () => {
-      @Directive({standalone: true})
+      @Directive()
       class HostDir {
         @Input() foo: any;
       }
@@ -3178,10 +4077,15 @@ describe('host directives', () => {
             inputs: ['doesNotExist'],
           },
         ],
+        standalone: false,
       })
       class Dir {}
 
-      @Component({template: '<div dir></div>'})
+      @Component({
+        template: '<div dir></div>',
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {}
 
       TestBed.configureTestingModule({declarations: [App, Dir]});
@@ -3192,7 +4096,7 @@ describe('host directives', () => {
     });
 
     it('should throw an error if a host directive input alias does not exist', () => {
-      @Directive({standalone: true})
+      @Directive()
       class HostDir {
         @Input('alias') foo: any;
       }
@@ -3200,10 +4104,15 @@ describe('host directives', () => {
       @Directive({
         selector: '[dir]',
         hostDirectives: [{directive: HostDir, inputs: ['foo']}],
+        standalone: false,
       })
       class Dir {}
 
-      @Component({template: '<div dir></div>'})
+      @Component({
+        template: '<div dir></div>',
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {}
 
       TestBed.configureTestingModule({declarations: [App, Dir]});
@@ -3214,7 +4123,7 @@ describe('host directives', () => {
     });
 
     it('should throw an error if a host directive tries to alias to an existing input', () => {
-      @Directive({selector: '[host-dir]', standalone: true})
+      @Directive({selector: '[host-dir]'})
       class HostDir {
         @Input('colorAlias') color?: string;
         @Input() buttonColor?: string;
@@ -3223,10 +4132,16 @@ describe('host directives', () => {
       @Directive({
         selector: '[dir]',
         hostDirectives: [{directive: HostDir, inputs: ['colorAlias: buttonColor']}],
+        standalone: false,
       })
       class Dir {}
 
-      @Component({imports: [Dir, HostDir], template: '<button dir buttonColor="red"></button>'})
+      @Component({
+        imports: [Dir, HostDir],
+        template: '<button dir buttonColor="red"></button>',
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {}
 
       TestBed.configureTestingModule({declarations: [App, Dir]});
@@ -3241,7 +4156,7 @@ describe('host directives', () => {
     });
 
     it('should throw an error if a host directive tries to alias to an existing input alias', () => {
-      @Directive({selector: '[host-dir]', standalone: true})
+      @Directive({selector: '[host-dir]'})
       class HostDir {
         @Input('colorAlias') color?: string;
         @Input('buttonColorAlias') buttonColor?: string;
@@ -3250,12 +4165,15 @@ describe('host directives', () => {
       @Directive({
         selector: '[dir]',
         hostDirectives: [{directive: HostDir, inputs: ['colorAlias: buttonColorAlias']}],
+        standalone: false,
       })
       class Dir {}
 
       @Component({
         imports: [Dir, HostDir],
         template: '<button dir buttonColorAlias="red"></button>',
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class App {}
 
@@ -3271,7 +4189,7 @@ describe('host directives', () => {
     });
 
     it('should not throw if a host directive input aliases to the same name', () => {
-      @Directive({selector: '[host-dir]', standalone: true})
+      @Directive({selector: '[host-dir]'})
       class HostDir {
         @Input('color') color?: string;
       }
@@ -3279,10 +4197,16 @@ describe('host directives', () => {
       @Directive({
         selector: '[dir]',
         hostDirectives: [{directive: HostDir, inputs: ['color: buttonColor']}],
+        standalone: false,
       })
       class Dir {}
 
-      @Component({imports: [Dir, HostDir], template: '<button dir buttonColor="red"></button>'})
+      @Component({
+        imports: [Dir, HostDir],
+        template: '<button dir buttonColor="red"></button>',
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {}
 
       TestBed.configureTestingModule({declarations: [App, Dir]});
@@ -3294,7 +4218,7 @@ describe('host directives', () => {
     });
 
     it('should throw an error if a host directive tries to alias to an existing output alias', () => {
-      @Directive({selector: '[host-dir]', standalone: true})
+      @Directive({selector: '[host-dir]'})
       class HostDir {
         @Output('clickedAlias') clicked = new EventEmitter();
         @Output('tappedAlias') tapped = new EventEmitter();
@@ -3303,12 +4227,15 @@ describe('host directives', () => {
       @Directive({
         selector: '[dir]',
         hostDirectives: [{directive: HostDir, outputs: ['clickedAlias: tappedAlias']}],
+        standalone: false,
       })
       class Dir {}
 
       @Component({
         imports: [Dir, HostDir],
         template: '<button dir (tappedAlias)="handleTap()"></button>',
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class App {
         handleTap() {}
@@ -3326,7 +4253,7 @@ describe('host directives', () => {
     });
 
     it('should not throw if a host directive output aliases to the same name', () => {
-      @Directive({selector: '[host-dir]', standalone: true})
+      @Directive({selector: '[host-dir]'})
       class HostDir {
         @Output('clicked') clicked = new EventEmitter();
       }
@@ -3334,12 +4261,15 @@ describe('host directives', () => {
       @Directive({
         selector: '[dir]',
         hostDirectives: [{directive: HostDir, outputs: ['clicked: wasClicked']}],
+        standalone: false,
       })
       class Dir {}
 
       @Component({
         imports: [Dir, HostDir],
         template: '<button dir (wasClicked)="handleClick()"></button>',
+        standalone: false,
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class App {
         handleClick() {}
@@ -3357,20 +4287,22 @@ describe('host directives', () => {
       @Directive({
         outputs: ['opened: triggerOpened'],
         selector: '[trigger]',
-        standalone: true,
       })
       class Trigger {
         opened = new EventEmitter();
       }
 
       @Directive({
-        standalone: true,
         selector: '[host]',
         hostDirectives: [{directive: Trigger, outputs: ['triggerOpened']}],
       })
       class Host {}
 
-      @Component({template: '<div host></div>', standalone: true, imports: [Host]})
+      @Component({
+        template: '<div host></div>',
+        imports: [Host],
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {}
 
       expect(() => {
@@ -3380,7 +4312,7 @@ describe('host directives', () => {
     });
 
     it('should not throw when exposing an inherited aliased binding', () => {
-      @Directive({standalone: true})
+      @Directive()
       abstract class Base {
         opened = new EventEmitter();
       }
@@ -3388,18 +4320,20 @@ describe('host directives', () => {
       @Directive({
         outputs: ['opened: triggerOpened'],
         selector: '[trigger]',
-        standalone: true,
       })
       class Trigger extends Base {}
 
       @Directive({
-        standalone: true,
         selector: '[host]',
         hostDirectives: [{directive: Trigger, outputs: ['triggerOpened: hostOpened']}],
       })
       class Host {}
 
-      @Component({template: '<div host></div>', standalone: true, imports: [Host]})
+      @Component({
+        template: '<div host></div>',
+        imports: [Host],
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
       class App {}
 
       expect(() => {
@@ -3408,26 +4342,110 @@ describe('host directives', () => {
       }).not.toThrow();
     });
 
-    it('should throw an error if a duplicate directive is inherited', () => {
-      @Directive({standalone: true})
-      class HostDir {}
+    it('should throw an error if an input is exposed under multiple names in a chain of host directives', () => {
+      @Directive()
+      class DuplicateHostDir {
+        @Input() inp: any;
+      }
 
-      @Directive({standalone: true, hostDirectives: [HostDir]})
-      class Grandparent {}
+      @Directive({hostDirectives: [{directive: DuplicateHostDir, inputs: ['inp: alias']}]})
+      class HostOne {}
 
-      @Directive({standalone: true})
-      class Parent extends Grandparent {}
+      @Directive({hostDirectives: [HostOne, {directive: DuplicateHostDir, inputs: ['inp']}]})
+      class HostTwo {}
 
-      @Directive({selector: '[dir]', hostDirectives: [HostDir]})
-      class Dir extends Parent {}
+      @Directive({
+        selector: '[dir]',
+        hostDirectives: [HostTwo, {directive: DuplicateHostDir, inputs: ['inp: alias2']}],
+      })
+      class Dir {}
 
-      @Component({template: '<div dir></div>'})
+      @Component({
+        template: '<div dir></div>',
+        imports: [Dir],
+      })
       class App {}
 
-      TestBed.configureTestingModule({declarations: [App, Dir]});
+      expect(() => TestBed.createComponent(App).detectChanges()).toThrowError(
+        /Input "inp" from DuplicateHostDir is exposed under the following conflicting names: "alias" and "inp"/,
+      );
+    });
 
-      expect(() => TestBed.createComponent(App)).toThrowError(
-        'NG0309: Directive HostDir matches multiple times on the same element. Directives can only match an element once.',
+    it('should throw an error if an aliased input is exposed under multiple names in a chain of host directives', () => {
+      @Directive()
+      class DuplicateHostDir {
+        @Input({alias: 'foo'}) inp: any;
+      }
+
+      @Directive({hostDirectives: [{directive: DuplicateHostDir, inputs: ['foo']}]})
+      class HostDir {}
+
+      @Directive({
+        selector: '[dir]',
+        hostDirectives: [HostDir, {directive: DuplicateHostDir, inputs: ['foo: alias']}],
+      })
+      class Dir {}
+
+      @Component({
+        template: '<div dir></div>',
+        imports: [Dir],
+      })
+      class App {}
+
+      expect(() => TestBed.createComponent(App).detectChanges()).toThrowError(
+        /Input "foo" from DuplicateHostDir is exposed under the following conflicting names: "foo" and "alias"/,
+      );
+    });
+
+    it('should throw an error if an output is exposed under multiple names in a chain of host directives', () => {
+      @Directive()
+      class DuplicateHostDir {
+        @Output() myEvent = new EventEmitter<void>();
+      }
+
+      @Directive({hostDirectives: [{directive: DuplicateHostDir, outputs: ['myEvent']}]})
+      class HostDir {}
+
+      @Directive({
+        selector: '[dir]',
+        hostDirectives: [HostDir, {directive: DuplicateHostDir, outputs: ['myEvent: alias']}],
+      })
+      class Dir {}
+
+      @Component({
+        template: '<div dir></div>',
+        imports: [Dir],
+      })
+      class App {}
+
+      expect(() => TestBed.createComponent(App).detectChanges()).toThrowError(
+        /Output "myEvent" from DuplicateHostDir is exposed under the following conflicting names: "myEvent" and "alias"/,
+      );
+    });
+
+    it('should throw an error if an aliased output is exposed under multiple names in a chain of host directives', () => {
+      @Directive()
+      class DuplicateHostDir {
+        @Output('foo') myEvent = new EventEmitter<void>();
+      }
+
+      @Directive({hostDirectives: [{directive: DuplicateHostDir, outputs: ['foo']}]})
+      class HostDir {}
+
+      @Directive({
+        selector: '[dir]',
+        hostDirectives: [HostDir, {directive: DuplicateHostDir, outputs: ['foo: alias']}],
+      })
+      class Dir {}
+
+      @Component({
+        template: '<div dir></div>',
+        imports: [Dir],
+      })
+      class App {}
+
+      expect(() => TestBed.createComponent(App).detectChanges()).toThrowError(
+        /Output "foo" from DuplicateHostDir is exposed under the following conflicting names: "foo" and "alias"/,
       );
     });
   });

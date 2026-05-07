@@ -6,7 +6,7 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
-import {Injector, Type} from '@angular/core';
+import {Injector, Type, isSignal} from '@angular/core';
 import {Subscription} from 'rxjs';
 
 import {ComponentNgElementStrategyFactory} from './component-factory-strategy';
@@ -136,7 +136,7 @@ export function createCustomElement<P>(
   const inputs = getComponentInputs(component, config.injector);
 
   const strategyFactory =
-    config.strategyFactory || new ComponentNgElementStrategyFactory(component, config.injector);
+    config.strategyFactory || new ComponentNgElementStrategyFactory(component);
 
   const attributeToPropertyInputs = getDefaultAttributeToPropertyInputs(inputs);
 
@@ -156,13 +156,13 @@ export function createCustomElement<P>(
         // Re-apply pre-existing input values (set as properties on the element) through the
         // strategy.
         // TODO(alxhub): why are we doing this? this makes no sense.
-        inputs.forEach(({propName, transform, isSignal}) => {
-          if (!this.hasOwnProperty(propName) || isSignal) {
-            // No pre-existing value for `propName`, or a signal input.
+        inputs.forEach(({propName, transform}) => {
+          if (!this.hasOwnProperty(propName)) {
+            // No pre-existing value for `propName`.
             return;
           }
 
-          // Delete the property from the instance and re-apply it through the strategy.
+          // Delete the property from the DOM node and re-apply it through the strategy.
           const value = (this as any)[propName];
           delete (this as any)[propName];
           strategy.setInputValue(propName, value, transform);
@@ -237,10 +237,11 @@ export function createCustomElement<P>(
   }
 
   // Add getters and setters to the prototype for each property input.
-  inputs.forEach(({propName, transform}) => {
+  inputs.forEach(({propName, transform, isSignal: _isSignal}) => {
     Object.defineProperty(NgElementImpl.prototype, propName, {
       get(): any {
-        return this.ngElementStrategy.getInputValue(propName);
+        const inputValue = this.ngElementStrategy.getInputValue(propName);
+        return _isSignal && isSignal(inputValue) ? inputValue() : inputValue;
       },
       set(newValue: any): void {
         this.ngElementStrategy.setInputValue(propName, newValue, transform);

@@ -7,8 +7,6 @@
  */
 
 import {
-  DEFAULT_INTERPOLATION_CONFIG,
-  InterpolationConfig,
   LexerRange,
   ParsedTemplate,
   ParseSourceFile,
@@ -22,10 +20,10 @@ import {ErrorCode, FatalDiagnosticError} from '../../../diagnostics';
 import {absoluteFrom} from '../../../file_system';
 import {DependencyTracker} from '../../../incremental/api';
 import {Resource} from '../../../metadata';
-import {DynamicValue, PartialEvaluator, traceDynamicValue} from '../../../partial_evaluator';
+import {PartialEvaluator} from '../../../partial_evaluator';
 import {ClassDeclaration, DeclarationNode, Decorator} from '../../../reflection';
 import {CompilationMode} from '../../../transform';
-import {TemplateSourceMapping} from '../../../typecheck/api';
+import {SourceMapping} from '../../../typecheck/api';
 import {
   createValueHasWrongTypeError,
   isStringArray,
@@ -82,7 +80,7 @@ export interface ParsedComponentTemplate extends ParsedTemplate {
 export interface ParsedTemplateWithSource extends ParsedComponentTemplate {
   /** The string contents of the template. */
   content: string;
-  sourceMapping: TemplateSourceMapping;
+  sourceMapping: SourceMapping;
   declaration: TemplateDeclaration;
 }
 
@@ -91,7 +89,6 @@ export interface ParsedTemplateWithSource extends ParsedComponentTemplate {
  */
 interface CommonTemplateDeclaration {
   preserveWhitespaces: boolean;
-  interpolationConfig: InterpolationConfig;
   templateUrl: string;
   resolvedTemplateUrl: string;
 }
@@ -135,6 +132,7 @@ export interface ExtractTemplateOptions {
   i18nNormalizeLineEndingsInICUs: boolean;
   enableBlockSyntax: boolean;
   enableLetSyntax: boolean;
+  enableSelectorless: boolean;
   preserveSignificantWhitespace?: boolean;
 }
 
@@ -151,7 +149,7 @@ export function extractTemplate(
     let sourceStr: string;
     let sourceParseRange: LexerRange | null = null;
     let templateContent: string;
-    let sourceMapping: TemplateSourceMapping;
+    let sourceMapping: SourceMapping;
     let escapedString = false;
     let sourceMapUrl: string | null;
     // We only support SourceMaps for inline templates that are simple string literals.
@@ -254,6 +252,50 @@ export function extractTemplate(
   }
 }
 
+export function createEmptyTemplate(
+  componentClass: ClassDeclaration,
+  component: Map<string, ts.Expression>,
+  containingFile: string,
+): ParsedTemplateWithSource {
+  const templateUrl = component.get('templateUrl');
+  const template = component.get('template');
+
+  return {
+    content: '',
+    diagNodes: [],
+    nodes: [],
+    errors: null,
+    styles: [],
+    styleUrls: [],
+    ngContentSelectors: [],
+    file: new ParseSourceFile('', ''),
+    sourceMapping: templateUrl
+      ? {type: 'direct', node: template as ts.StringLiteral}
+      : {
+          type: 'external',
+          componentClass,
+          node: templateUrl!,
+          template: '',
+          templateUrl: 'missing.ng.html',
+        },
+    declaration: templateUrl
+      ? {
+          isInline: false,
+          preserveWhitespaces: false,
+          templateUrlExpression: templateUrl,
+          templateUrl: 'missing.ng.html',
+          resolvedTemplateUrl: '/missing.ng.html',
+        }
+      : {
+          isInline: true,
+          preserveWhitespaces: false,
+          expression: template!,
+          templateUrl: containingFile,
+          resolvedTemplateUrl: containingFile,
+        },
+  };
+}
+
 function parseExtractedTemplate(
   template: TemplateDeclaration,
   sourceStr: string,
@@ -265,7 +307,6 @@ function parseExtractedTemplate(
   // We always normalize line endings if the template has been escaped (i.e. is inline).
   const i18nNormalizeLineEndingsInICUs = escapedString || options.i18nNormalizeLineEndingsInICUs;
   const commonParseOptions: ParseTemplateOptions = {
-    interpolationConfig: template.interpolationConfig,
     range: sourceParseRange ?? undefined,
     enableI18nLegacyMessageIdFormat: options.enableI18nLegacyMessageIdFormat,
     i18nNormalizeLineEndingsInICUs,
@@ -273,6 +314,7 @@ function parseExtractedTemplate(
     escapedString,
     enableBlockSyntax: options.enableBlockSyntax,
     enableLetSyntax: options.enableLetSyntax,
+    enableSelectorless: options.enableSelectorless,
   };
 
   const parsedTemplate = parseTemplate(sourceStr, sourceMapUrl ?? '', {
@@ -331,7 +373,6 @@ export function parseTemplateDeclaration(
     preserveWhitespaces = value;
   }
 
-  let interpolationConfig = DEFAULT_INTERPOLATION_CONFIG;
   if (component.has('interpolation')) {
     const expr = component.get('interpolation')!;
     const value = evaluator.evaluate(expr);
@@ -346,7 +387,6 @@ export function parseTemplateDeclaration(
         'interpolation must be an array with 2 elements of string type',
       );
     }
-    interpolationConfig = InterpolationConfig.fromArray(value as [string, string]);
   }
 
   if (component.has('templateUrl')) {
@@ -363,7 +403,6 @@ export function parseTemplateDeclaration(
       const resourceUrl = resourceLoader.resolve(templateUrl, containingFile);
       return {
         isInline: false,
-        interpolationConfig,
         preserveWhitespaces,
         templateUrl,
         templateUrlExpression: templateUrlExpr,
@@ -385,7 +424,6 @@ export function parseTemplateDeclaration(
   } else if (component.has('template')) {
     return {
       isInline: true,
-      interpolationConfig,
       preserveWhitespaces,
       expression: component.get('template')!,
       templateUrl: containingFile,
@@ -395,7 +433,7 @@ export function parseTemplateDeclaration(
     throw new FatalDiagnosticError(
       ErrorCode.COMPONENT_MISSING_TEMPLATE,
       decorator.node,
-      'component is missing a template',
+      '@Component is missing a template. Add either a `template` or `templateUrl`',
     );
   }
 }
@@ -429,6 +467,7 @@ export function preloadAndParseTemplate(
       const templatePromise = resourceLoader.preload(resourceUrl, {
         type: 'template',
         containingFile,
+        className: node.name.text,
       });
 
       // If the preload worked, then actually load and parse the template, and wait for any
@@ -698,10 +737,10 @@ export function extractInlineStyleResources(component: Map<string, ts.Expression
   if (stylesExpr !== undefined) {
     if (ts.isArrayLiteralExpression(stylesExpr)) {
       for (const expression of stringLiteralElements(stylesExpr)) {
-        styles.add({path: null, expression});
+        styles.add({path: null, node: expression});
       }
     } else if (ts.isStringLiteralLike(stylesExpr)) {
-      styles.add({path: null, expression: stylesExpr});
+      styles.add({path: null, node: stylesExpr});
     }
   }
 

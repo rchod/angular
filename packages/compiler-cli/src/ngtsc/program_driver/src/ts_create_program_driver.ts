@@ -14,6 +14,7 @@ import {RequiredDelegations, toUnredirectedSourceFile} from '../../util/src/type
 
 import {
   FileUpdate,
+  InliningMode,
   MaybeSourceFileWithOriginalFile,
   NgOriginalFile,
   ProgramDriver,
@@ -27,10 +28,10 @@ import {
  * If a new method is added to `ts.CompilerHost` which is not delegated, a type error will be
  * generated for this class.
  */
-export class DelegatingCompilerHost
-  implements
-    Omit<RequiredDelegations<ts.CompilerHost>, 'getSourceFile' | 'fileExists' | 'writeFile'>
-{
+export class DelegatingCompilerHost implements Omit<
+  RequiredDelegations<ts.CompilerHost>,
+  'getSourceFile' | 'fileExists' | 'writeFile'
+> {
   createHash;
   directoryExists;
   getCancellationToken;
@@ -100,7 +101,7 @@ export class DelegatingCompilerHost
   private delegateMethod<M extends keyof ts.CompilerHost>(name: M): ts.CompilerHost[M] {
     return this.delegate[name] !== undefined
       ? (this.delegate[name] as any).bind(this.delegate)
-      : undefined;
+      : undefined!;
   }
 }
 
@@ -212,7 +213,14 @@ export class TsCreateProgramDriver implements ProgramDriver {
     this.program = this.originalProgram;
   }
 
-  readonly supportsInlineOperations = true;
+  inliningMode = InliningMode.InlineOps;
+
+  get supportsInlineOperations(): boolean {
+    return (
+      this.inliningMode === InliningMode.InlineOps ||
+      this.inliningMode === InliningMode.CopySourceToTcb
+    );
+  }
 
   getProgram(): ts.Program {
     return this.program;

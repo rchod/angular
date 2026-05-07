@@ -15,8 +15,9 @@ import {FormControl, FormGroup, Validators} from '@angular/forms';
   selector: 'example-app',
   template: `
     <form [formGroup]="form" (ngSubmit)="onSubmit()">
-      <div *ngIf="first.invalid">Name is too short.</div>
-
+      @if (first.invalid) {
+        <div>Name is too short.</div>
+      }
       <input formControlName="first" placeholder="First name" />
       <input formControlName="last" placeholder="Last name" />
 
@@ -24,6 +25,7 @@ import {FormControl, FormGroup, Validators} from '@angular/forms';
     </form>
     <button (click)="setValue()">Set preset value</button>
   `,
+  standalone: false,
 })
 export class SimpleFormGroup {
   form = new FormGroup({

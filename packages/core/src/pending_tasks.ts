@@ -6,57 +6,14 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
-import {BehaviorSubject} from 'rxjs';
-
 import {inject} from './di/injector_compatibility';
 import {ɵɵdefineInjectable} from './di/interface/defs';
-import {OnDestroy} from './interface/lifecycle_hooks';
 import {
   ChangeDetectionScheduler,
   NotificationSource,
 } from './change_detection/scheduling/zoneless_scheduling';
-
-/**
- * Internal implementation of the pending tasks service.
- */
-export class PendingTasksInternal implements OnDestroy {
-  private taskId = 0;
-  private pendingTasks = new Set<number>();
-  private get _hasPendingTasks() {
-    return this.hasPendingTasks.value;
-  }
-  hasPendingTasks = new BehaviorSubject<boolean>(false);
-
-  add(): number {
-    if (!this._hasPendingTasks) {
-      this.hasPendingTasks.next(true);
-    }
-    const taskId = this.taskId++;
-    this.pendingTasks.add(taskId);
-    return taskId;
-  }
-
-  remove(taskId: number): void {
-    this.pendingTasks.delete(taskId);
-    if (this.pendingTasks.size === 0 && this._hasPendingTasks) {
-      this.hasPendingTasks.next(false);
-    }
-  }
-
-  ngOnDestroy(): void {
-    this.pendingTasks.clear();
-    if (this._hasPendingTasks) {
-      this.hasPendingTasks.next(false);
-    }
-  }
-
-  /** @nocollapse */
-  static ɵprov = /** @pureOrBreakMyCode */ ɵɵdefineInjectable({
-    token: PendingTasksInternal,
-    providedIn: 'root',
-    factory: () => new PendingTasksInternal(),
-  });
-}
+import {INTERNAL_APPLICATION_ERROR_HANDLER} from './error_handler';
+import {PendingTasksInternal} from './pending_tasks_internal';
 
 /**
  * Service that keeps track of pending tasks contributing to the stableness of Angular
@@ -70,19 +27,22 @@ export class PendingTasksInternal implements OnDestroy {
  * - tests might want to delay assertions until the application becomes stable;
  *
  * @usageNotes
- * ```typescript
+ * ```ts
  * const pendingTasks = inject(PendingTasks);
  * const taskCleanup = pendingTasks.add();
  * // do work that should block application's stability and then:
  * taskCleanup();
  * ```
  *
- * @publicApi
- * @developerPreview
+ *
+ * @see [PendingTasks for Server Side Rendering (SSR)](guide/zoneless#pendingtasks-for-server-side-rendering-ssr)
+ *
+ * @publicApi 20.0
  */
 export class PendingTasks {
-  private internalPendingTasks = inject(PendingTasksInternal);
-  private scheduler = inject(ChangeDetectionScheduler);
+  private readonly internalPendingTasks = inject(PendingTasksInternal);
+  private readonly scheduler = inject(ChangeDetectionScheduler);
+  private readonly errorHandler = inject(INTERNAL_APPLICATION_ERROR_HANDLER);
   /**
    * Adds a new task that should block application's stability.
    * @returns A cleanup function that removes a task when called.
@@ -90,6 +50,10 @@ export class PendingTasks {
   add(): () => void {
     const taskId = this.internalPendingTasks.add();
     return () => {
+      if (!this.internalPendingTasks.has(taskId)) {
+        // This pending task has already been cleared.
+        return;
+      }
       // Notifying the scheduler will hold application stability open until the next tick.
       this.scheduler.notify(NotificationSource.PendingTaskRemoved);
       this.internalPendingTasks.remove(taskId);
@@ -99,34 +63,23 @@ export class PendingTasks {
   /**
    * Runs an asynchronous function and blocks the application's stability until the function completes.
    *
-   * ```
+   * ```ts
    * pendingTasks.run(async () => {
    *   const userData = await fetch('/api/user');
    *   this.userData.set(userData);
    * });
    * ```
    *
-   * Application stability is at least delayed until the next tick after the `run` method resolves
-   * so it is safe to make additional updates to application state that would require UI synchronization:
-   *
-   * ```
-   * const userData = await pendingTasks.run(() => fetch('/api/user'));
-   * this.userData.set(userData);
-   * ```
-   *
    * @param fn The asynchronous function to execute
+   * @developerPreview 19.0
    */
-  async run<T>(fn: () => Promise<T>): Promise<T> {
+  run(fn: () => Promise<unknown>): void {
     const removeTask = this.add();
-    try {
-      return await fn();
-    } finally {
-      removeTask();
-    }
+    fn().catch(this.errorHandler).finally(removeTask);
   }
 
   /** @nocollapse */
-  static ɵprov = /** @pureOrBreakMyCode */ ɵɵdefineInjectable({
+  static ɵprov = /** @pureOrBreakMyCode */ /* @__PURE__ */ ɵɵdefineInjectable({
     token: PendingTasks,
     providedIn: 'root',
     factory: () => new PendingTasks(),

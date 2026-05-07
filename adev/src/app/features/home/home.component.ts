@@ -6,140 +6,68 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
-import {DOCUMENT, isPlatformBrowser} from '@angular/common';
-import {
-  AfterViewInit,
-  ChangeDetectionStrategy,
-  Component,
-  ElementRef,
-  Injector,
-  OnDestroy,
-  OnInit,
-  PLATFORM_ID,
-  ViewChild,
-  inject,
-} from '@angular/core';
-import {WINDOW, shouldReduceMotion, isIos} from '@angular/docs';
+import {Tab, TabContent, TabList, TabPanel, Tabs} from '@angular/aria/tabs';
+import {A11yModule} from '@angular/cdk/a11y';
+import {afterRenderEffect, Component, ElementRef, inject, signal, viewChild} from '@angular/core';
+import {IconComponent, IS_SEARCH_DIALOG_OPEN, TextField} from '@angular/docs';
 import {ActivatedRoute, RouterLink} from '@angular/router';
+import {ControlFlowExample} from './components/control-flow/control-flow-example';
+import {DeferrableViewsExample} from './components/deferrable-views-example/deferrable-views-example';
+import {HydrationExample} from './components/hydration-example/hydration-example';
+import {SignalsDemo} from './components/signals-demo/signals-demo';
 
-import {injectAsync} from '../../core/services/inject-async';
-
-import {CodeEditorComponent} from './components/home-editor.component';
-
-import {HEADER_CLASS_NAME} from './home-animation-constants';
-import type {HomeAnimation} from './services/home-animation.service';
-
-export const TUTORIALS_HOMEPAGE_DIRECTORY = 'homepage';
+const FEATURE_TAB = {
+  signals: 'signals',
+  controlFlow: 'control-flow',
+  deferrableViews: 'deferrable-views',
+  hydration: 'hydration',
+} as const;
 
 @Component({
-  standalone: true,
   selector: 'adev-home',
-  imports: [RouterLink, CodeEditorComponent],
+  imports: [
+    RouterLink,
+    TextField,
+    TabList,
+    Tab,
+    Tabs,
+    TabPanel,
+    TabContent,
+    IconComponent,
+    A11yModule,
+    SignalsDemo,
+    ControlFlowExample,
+    DeferrableViewsExample,
+    HydrationExample,
+  ],
   templateUrl: './home.component.html',
   styleUrls: ['./home.component.scss'],
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export default class Home implements OnInit, AfterViewInit, OnDestroy {
-  @ViewChild('home') home!: ElementRef<HTMLDivElement>;
-
-  private readonly document = inject(DOCUMENT);
-  private readonly injector = inject(Injector);
-  private readonly platformId = inject(PLATFORM_ID);
-  private readonly window = inject(WINDOW);
+export default class Home {
   private readonly activatedRoute = inject(ActivatedRoute);
-
-  protected readonly tutorialFiles = TUTORIALS_HOMEPAGE_DIRECTORY;
   protected readonly isUwu = 'uwu' in this.activatedRoute.snapshot.queryParams;
-  private element!: HTMLDivElement;
-  private homeAnimation?: HomeAnimation;
-  private intersectionObserver: IntersectionObserver | undefined;
 
-  ctaLink = 'tutorials/learn-angular';
-  ctaIosLink = 'overview';
+  protected readonly displaySearchDialog = inject(IS_SEARCH_DIALOG_OPEN);
 
-  ngOnInit(): void {
-    if (isIos) {
-      this.ctaLink = this.ctaIosLink;
-    }
-  }
+  protected readonly FEATURE_TAB = FEATURE_TAB;
+  protected readonly selectedFeatureTab = signal<keyof typeof FEATURE_TAB>(FEATURE_TAB.signals);
+  protected readonly featuresSection = viewChild<ElementRef>('featuresSection');
 
-  ngAfterViewInit() {
-    this.element = this.home.nativeElement;
+  constructor() {
+    let lastFeatureTab = this.selectedFeatureTab();
 
-    if (isPlatformBrowser(this.platformId)) {
-      // Always scroll to top on home page (even for navigating back)
-      this.window.scrollTo({top: 0, left: 0, behavior: 'instant'});
-
-      // Create a single intersection observer used for disabling the animation
-      // at the end of the page, and to load the embedded editor.
-      this.initIntersectionObserver();
-
-      if (this.isWebGLAvailable() && !shouldReduceMotion() && !this.isUwu) {
-        this.loadHomeAnimation();
-      }
-    }
-  }
-
-  ngOnDestroy(): void {
-    if (isPlatformBrowser(this.platformId)) {
-      // Stop observing and disconnect
-      this.intersectionObserver?.disconnect();
-
-      if (this.homeAnimation) {
-        this.homeAnimation.destroy();
-      }
-    }
-  }
-
-  private initIntersectionObserver(): void {
-    const header = this.document.querySelector('.adev-top');
-    const footer = this.document.querySelector('footer');
-
-    this.intersectionObserver = new IntersectionObserver((entries) => {
-      const headerEntry = entries.find((entry) => entry.target === header);
-      const footerEntry = entries.find((entry) => entry.target === footer);
-
-      // CTA and arrow animation
-      this.headerTop(headerEntry);
-
-      // Disable animation at end of page
-      if (this.homeAnimation) {
-        this.homeAnimation.disableEnd(footerEntry);
-      }
+    afterRenderEffect({
+      read: () => {
+        const featureTab = this.selectedFeatureTab();
+        if (lastFeatureTab !== featureTab) {
+          this.featuresSection()?.nativeElement.scrollIntoView();
+          lastFeatureTab = featureTab;
+        }
+      },
     });
-
-    // Start observing
-    this.intersectionObserver.observe(header!);
-    this.intersectionObserver.observe(footer!);
   }
 
-  private headerTop(headerEntry: IntersectionObserverEntry | undefined): void {
-    if (!headerEntry) {
-      return;
-    }
-
-    if (headerEntry.isIntersecting) {
-      this.element.classList.add(HEADER_CLASS_NAME);
-    } else {
-      this.element.classList.remove(HEADER_CLASS_NAME);
-    }
-  }
-
-  private async loadHomeAnimation() {
-    this.homeAnimation = await injectAsync(this.injector, () =>
-      import('./services/home-animation.service').then((c) => c.HomeAnimation),
-    );
-
-    await this.homeAnimation.init(this.element);
-  }
-
-  private isWebGLAvailable() {
-    try {
-      return !!document
-        .createElement('canvas')
-        .getContext('webgl', {failIfMajorPerformanceCaveat: true});
-    } catch (e) {
-      return false;
-    }
+  openSearch() {
+    this.displaySearchDialog.set(true);
   }
 }

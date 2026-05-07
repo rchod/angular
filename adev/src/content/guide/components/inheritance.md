@@ -1,6 +1,6 @@
 # Inheritance
 
-Tip: This guide assumes you've already read the [Essentials Guide](essentials). Read that first if you're new to Angular.
+TIP: This guide assumes you've already read the [Essentials Guide](essentials). Read that first if you're new to Angular.
 
 Angular components are TypeScript classes and participate in standard JavaScript inheritance
 semantics.
@@ -12,7 +12,9 @@ export class ListboxBase {
   value: string;
 }
 
-@Component({ ... })
+@Component({
+  /*...*/
+})
 export class CustomListbox extends ListboxBase {
   // CustomListbox inherits the `value` property.
 }
@@ -20,22 +22,20 @@ export class CustomListbox extends ListboxBase {
 
 ## Extending other components and directives
 
-When a component extends another component or a directive, it inherits all the metadata defined in
-the base class's decorator and the base class's decorated members. This includes the selector,
-template, styles, host bindings, inputs, outputs, lifecycle methods, and any other settings.
+When a component extends another component or a directive, it inherits some of the metadata defined in
+the base class's decorator and the base class's decorated members. This includes
+host bindings, inputs, outputs, lifecycle methods.
 
 ```angular-ts
 @Component({
   selector: 'base-listbox',
-  template: `
-    ...
-  `,
+  template: ` ... `,
   host: {
     '(keydown)': 'handleKey($event)',
   },
 })
 export class ListboxBase {
-  @Input() value: string;
+  value = input.required<string>();
   handleKey(event: KeyboardEvent) {
     /* ... */
   }
@@ -43,15 +43,13 @@ export class ListboxBase {
 
 @Component({
   selector: 'custom-listbox',
-  template: `
-    ...
-  `,
+  template: ` ... `,
   host: {
     '(click)': 'focusActiveOption()',
   },
 })
 export class CustomListbox extends ListboxBase {
-  @Input() disabled = false;
+  disabled = input(false);
   focusActiveOption() {
     /* ... */
   }
@@ -67,16 +65,19 @@ and their own.
 
 ### Forwarding injected dependencies
 
-If a base class relies on dependency injection, the child class must explicitly pass these
-dependencies to `super`.
+If a base class injects dependencies as constructor parameters, the child class must explicitly class these dependencies to `super`.
 
 ```ts
-@Component({ ... })
+@Component({
+  /*...*/
+})
 export class ListboxBase {
-  constructor(private element: ElementRef) { }
+  constructor(private element: ElementRef) {}
 }
 
-@Component({ ... })
+@Component({
+  /*...*/
+})
 export class CustomListbox extends ListboxBase {
   constructor(element: ElementRef) {
     super(element);
@@ -91,7 +92,9 @@ implements `ngOnInit` _overrides_ the base class's implementation. If you want t
 class's lifecycle method, explicitly call the method with `super`:
 
 ```ts
-@Component({ ... })
+@Component({
+  /*...*/
+})
 export class ListboxBase {
   protected isInitialized = false;
   ngOnInit() {
@@ -99,7 +102,9 @@ export class ListboxBase {
   }
 }
 
-@Component({ ... })
+@Component({
+  /*...*/
+})
 export class CustomListbox extends ListboxBase {
   override ngOnInit() {
     super.ngOnInit();

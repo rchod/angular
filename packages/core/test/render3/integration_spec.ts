@@ -7,8 +7,14 @@
  */
 
 import {CommonModule} from '@angular/common';
-import {Component, Directive, HostBinding} from '@angular/core';
-import {TestBed} from '@angular/core/testing';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  Directive,
+  HostBinding,
+  provideZoneChangeDetection,
+} from '../../src/core';
+import {TestBed} from '../../testing';
 
 import {getLContext, readPatchedData} from '../../src/render3/context_discovery';
 import {CONTEXT, HEADER_OFFSET} from '../../src/render3/interfaces/view';
@@ -18,7 +24,6 @@ import {SecurityContext} from '../../src/sanitization/security';
 describe('element discovery', () => {
   it('should only monkey-patch immediate child nodes in a component', () => {
     @Component({
-      standalone: true,
       template: '<div><p></p></div>',
     })
     class StructuredComp {}
@@ -37,7 +42,6 @@ describe('element discovery', () => {
   it('should only monkey-patch immediate child nodes in a sub component', () => {
     @Component({
       selector: 'child-comp',
-      standalone: true,
       template: `
         <div></div>
         <div></div>
@@ -48,7 +52,6 @@ describe('element discovery', () => {
 
     @Component({
       selector: 'parent-comp',
-      standalone: true,
       imports: [ChildComp],
       template: `
         <section>
@@ -75,7 +78,6 @@ describe('element discovery', () => {
     @Component({
       selector: 'structured-comp',
       imports: [CommonModule],
-      standalone: true,
       template: `
         <section>
           <ng-container *ngIf="true">
@@ -111,7 +113,6 @@ describe('element discovery', () => {
   it('should return a context object from a given dom node', () => {
     @Component({
       selector: 'structured-comp',
-      standalone: true,
       template: `
         <section></section>
         <div></div>
@@ -140,10 +141,7 @@ describe('element discovery', () => {
   it('should cache the element context on a element was preemptively monkey-patched', () => {
     @Component({
       selector: 'structured-comp',
-      standalone: true,
-      template: `
-        <section></section>
-      `,
+      template: ` <section></section> `,
     })
     class StructuredComp {}
 
@@ -165,12 +163,11 @@ describe('element discovery', () => {
   it("should cache the element context on an intermediate element that isn't preemptively monkey-patched", () => {
     @Component({
       selector: 'structured-comp',
-      standalone: true,
       template: `
-            <section>
-              <p></p>
-            </section>
-          `,
+        <section>
+          <p></p>
+        </section>
+      `,
     })
     class StructuredComp {}
 
@@ -191,10 +188,7 @@ describe('element discovery', () => {
   it('should be able to pull in element context data even if the element is decorated using styling', () => {
     @Component({
       selector: 'structured-comp',
-      standalone: true,
-      template: `
-            <section></section>
-          `,
+      template: ` <section></section> `,
     })
     class StructuredComp {}
 
@@ -232,30 +226,28 @@ describe('element discovery', () => {
        */
     @Component({
       selector: 'projector-comp',
-      standalone: true,
       template: `
-            welcome
-            <header>
-              <h1>
-                <ng-content></ng-content>
-              </h1>
-            </header>
-          `,
+        welcome
+        <header>
+          <h1>
+            <ng-content></ng-content>
+          </h1>
+        </header>
+      `,
     })
     class ProjectorComp {}
 
     @Component({
       selector: 'parent-comp',
-      standalone: true,
       imports: [ProjectorComp],
       template: `
-            <section>
-              <projector-comp>
-                <p>this content is projected</p>
-                this content is projected also
-              </projector-comp>
-            </section>
-          `,
+        <section>
+          <projector-comp>
+            <p>this content is projected</p>
+            this content is projected also
+          </projector-comp>
+        </section>
+      `,
     })
     class ParentComp {}
 
@@ -310,10 +302,7 @@ describe('element discovery', () => {
   it('should return `null` when an element context is retrieved that is a DOM node that was not created by Angular', () => {
     @Component({
       selector: 'structured-comp',
-      standalone: true,
-      template: `
-             <section></section>
-           `,
+      template: ` <section></section> `,
     })
     class StructuredComp {}
 
@@ -331,7 +320,6 @@ describe('element discovery', () => {
   it('should by default monkey-patch the bootstrap component with context details', () => {
     @Component({
       selector: 'structured-comp',
-      standalone: true,
       template: ``,
     })
     class StructuredComp {}
@@ -365,7 +353,6 @@ describe('element discovery', () => {
 
     @Directive({
       selector: '[my-dir-1]',
-      standalone: true,
     })
     class MyDir1 {
       constructor() {
@@ -375,7 +362,6 @@ describe('element discovery', () => {
 
     @Directive({
       selector: '[my-dir-2]',
-      standalone: true,
     })
     class MyDir2 {
       constructor() {
@@ -385,7 +371,6 @@ describe('element discovery', () => {
 
     @Directive({
       selector: '[my-dir-3]',
-      standalone: true,
     })
     class MyDir3 {
       constructor() {
@@ -395,12 +380,11 @@ describe('element discovery', () => {
 
     @Component({
       selector: 'structured-comp',
-      standalone: true,
       imports: [MyDir1, MyDir2, MyDir3],
       template: `
-            <div my-dir-1 my-dir-2></div>
-            <div my-dir-3></div>
-          `,
+        <div my-dir-1 my-dir-2></div>
+        <div my-dir-3></div>
+      `,
     })
     class StructuredComp {}
 
@@ -453,7 +437,6 @@ describe('element discovery', () => {
 
     @Directive({
       selector: '[my-dir-1]',
-      standalone: true,
     })
     class MyDir1 {
       constructor() {
@@ -463,7 +446,6 @@ describe('element discovery', () => {
 
     @Directive({
       selector: '[my-dir-2]',
-      standalone: true,
     })
     class MyDir2 {
       constructor() {
@@ -473,10 +455,7 @@ describe('element discovery', () => {
 
     @Component({
       selector: 'child-comp',
-      standalone: true,
-      template: `
-             <div></div>
-           `,
+      template: ` <div></div> `,
     })
     class ChildComp {
       constructor() {
@@ -486,11 +465,8 @@ describe('element discovery', () => {
 
     @Component({
       selector: 'parent-comp',
-      standalone: true,
       imports: [ChildComp, MyDir1, MyDir2],
-      template: `
-             <child-comp my-dir-1 my-dir-2></child-comp>
-           `,
+      template: ` <child-comp my-dir-1 my-dir-2></child-comp> `,
     })
     class ParentComp {}
 
@@ -541,24 +517,22 @@ describe('element discovery', () => {
   it('should monkey-patch sub components with the view data and then replace them with the context result once a lookup occurs', () => {
     @Component({
       selector: 'child-comp',
-      standalone: true,
       template: `
-            <div></div>
-            <div></div>
-            <div></div>
-          `,
+        <div></div>
+        <div></div>
+        <div></div>
+      `,
     })
     class ChildComp {}
 
     @Component({
       selector: 'parent-comp',
-      standalone: true,
       imports: [ChildComp],
       template: `
-            <section>
-              <child-comp></child-comp>
-            </section>
-          `,
+        <section>
+          <child-comp></child-comp>
+        </section>
+      `,
     })
     class ParentComp {}
 
@@ -589,10 +563,8 @@ describe('sanitization', () => {
   it('should sanitize data using the provided sanitization interface', () => {
     @Component({
       selector: 'sanitize-this',
-      standalone: true,
-      template: `
-        <a [href]="href"></a>
-      `,
+      template: ` <a [href]="href"></a> `,
+      changeDetection: ChangeDetectionStrategy.Eager,
     })
     class SanitizationComp {
       href = '';
@@ -608,6 +580,7 @@ describe('sanitization', () => {
 
     TestBed.configureTestingModule({
       providers: [
+        provideZoneChangeDetection(),
         {
           provide: Sanitizer,
           useValue: sanitizer,
@@ -632,10 +605,9 @@ describe('sanitization', () => {
 
     @Directive({
       selector: '[unsafeUrlHostBindingDir]',
-      standalone: true,
     })
     class UnsafeUrlHostBindingDir {
-      @HostBinding() cite: any = 'http://cite-dir-value';
+      @HostBinding() href: any = 'http://href-dir-value';
 
       constructor() {
         hostBindingDir = this;
@@ -644,11 +616,9 @@ describe('sanitization', () => {
 
     @Component({
       selector: 'sanitize-this',
-      standalone: true,
       imports: [UnsafeUrlHostBindingDir],
-      template: `
-        <blockquote unsafeUrlHostBindingDir></blockquote>
-      `,
+      template: ` <a unsafeUrlHostBindingDir>text</a> `,
+      changeDetection: ChangeDetectionStrategy.Eager,
     })
     class SimpleComp {}
 
@@ -656,6 +626,7 @@ describe('sanitization', () => {
 
     TestBed.configureTestingModule({
       providers: [
+        provideZoneChangeDetection(),
         {
           provide: Sanitizer,
           useValue: sanitizer,
@@ -663,16 +634,62 @@ describe('sanitization', () => {
       ],
     });
     const fixture = TestBed.createComponent(SimpleComp);
-    hostBindingDir!.cite = 'http://foo';
+    hostBindingDir!.href = 'http://foo';
     fixture.detectChanges();
 
-    const anchor = fixture.nativeElement.querySelector('blockquote')!;
-    expect(anchor.getAttribute('cite')).toEqual('http://bar');
+    const anchor = fixture.nativeElement.querySelector('a')!;
+    expect(anchor.getAttribute('href')).toEqual('http://bar');
 
-    hostBindingDir!.cite = sanitizer.bypassSecurityTrustUrl('http://foo');
+    hostBindingDir!.href = sanitizer.bypassSecurityTrustUrl('http://foo');
     fixture.detectChanges();
 
-    expect(anchor.getAttribute('cite')).toEqual('http://foo');
+    expect(anchor.getAttribute('href')).toEqual('http://foo');
+  });
+
+  it('should throw when binding to animate element with attributeName="href"', () => {
+    @Component({
+      selector: 'test-comp',
+      template: `<svg><animate attributeName="href" [to]="'foo'"></animate></svg>`,
+    })
+    class TestComp {}
+
+    TestBed.configureTestingModule({
+      providers: [provideZoneChangeDetection()],
+    });
+    const fixture = TestBed.createComponent(TestComp);
+    expect(() => fixture.detectChanges()).toThrowError(
+      /Angular has detected that the `to` was applied/,
+    );
+  });
+
+  it('should throw when binding to set element with attributeName="href"', () => {
+    @Component({
+      selector: 'test-comp',
+      template: `<svg><set attributeName="href" [to]="'foo'"></set></svg>`,
+    })
+    class TestComp {}
+
+    TestBed.configureTestingModule({
+      providers: [provideZoneChangeDetection()],
+    });
+    const fixture = TestBed.createComponent(TestComp);
+    expect(() => fixture.detectChanges()).toThrowError(
+      /Angular has detected that the `to` was applied/,
+    );
+  });
+
+  it('should not throw when binding to animate element when attributeName is not href', () => {
+    @Component({
+      selector: 'test-comp',
+      template: `<svg><animate attributeName="display" [to]="'foo'"></animate></svg>`,
+    })
+    class TestComp {}
+
+    TestBed.configureTestingModule({
+      providers: [provideZoneChangeDetection()],
+    });
+    const fixture = TestBed.createComponent(TestComp);
+    expect(() => fixture.detectChanges()).not.toThrow();
   });
 });
 

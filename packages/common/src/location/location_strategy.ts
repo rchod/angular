@@ -6,9 +6,15 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
-import {Inject, inject, Injectable, InjectionToken, OnDestroy, Optional} from '@angular/core';
-
-import {DOCUMENT} from '../dom_tokens';
+import {
+  DOCUMENT,
+  Inject,
+  inject,
+  Injectable,
+  InjectionToken,
+  OnDestroy,
+  Optional,
+} from '@angular/core';
 
 import {LocationChangeListener, PlatformLocation} from './platform_location';
 import {joinWithSlash, normalizeQueryParams} from './util';
@@ -57,7 +63,7 @@ export abstract class LocationStrategy {
  * The following example shows how to use this token to configure the root app injector
  * with a base href value, so that the DI framework can supply the dependency anywhere in the app.
  *
- * ```typescript
+ * ```ts
  * import {NgModule} from '@angular/core';
  * import {APP_BASE_HREF} from '@angular/common';
  *
@@ -69,7 +75,9 @@ export abstract class LocationStrategy {
  *
  * @publicApi
  */
-export const APP_BASE_HREF = new InjectionToken<string>(ngDevMode ? 'appBaseHref' : '');
+export const APP_BASE_HREF = new InjectionToken<string>(
+  typeof ngDevMode !== 'undefined' && ngDevMode ? 'appBaseHref' : '',
+);
 
 /**
  * @description
@@ -93,6 +101,9 @@ export const APP_BASE_HREF = new InjectionToken<string>(ngDevMode ? 'appBaseHref
  * Note that when using `PathLocationStrategy`, neither the query nor
  * the fragment in the `<base href>` will be preserved, as outlined
  * by the [RFC](https://tools.ietf.org/html/rfc3986#section-5.2.2).
+ *
+ * To ensure that trailing slashes are always present or never present in the URL, use
+ * {@link TrailingSlashPathLocationStrategy} or {@link NoTrailingSlashPathLocationStrategy}.
  *
  * @usageNotes
  *
@@ -120,7 +131,7 @@ export class PathLocationStrategy extends LocationStrategy implements OnDestroy 
       '';
   }
 
-  /** @nodoc */
+  /** @docs-private */
   ngOnDestroy(): void {
     while (this._removeListenerFns.length) {
       this._removeListenerFns.pop()!();
@@ -174,4 +185,46 @@ export class PathLocationStrategy extends LocationStrategy implements OnDestroy 
   override historyGo(relativePosition: number = 0): void {
     this._platformLocation.historyGo?.(relativePosition);
   }
+}
+
+/**
+ * A `LocationStrategy` that ensures URLs never have a trailing slash.
+ * This strategy only affects the URL written to the browser.
+ * `Location.path()` and `Location.normalize()` will continue to strip trailing slashes when reading the URL.
+ *
+ * @publicApi
+ */
+@Injectable({providedIn: 'root'})
+export class NoTrailingSlashPathLocationStrategy extends PathLocationStrategy {
+  override prepareExternalUrl(internal: string): string {
+    const path = extractUrlPath(internal);
+    if (path.endsWith('/') && path.length > 1) {
+      internal = path.slice(0, -1) + internal.slice(path.length);
+    }
+    return super.prepareExternalUrl(internal);
+  }
+}
+
+/**
+ * A `LocationStrategy` that ensures URLs always have a trailing slash.
+ * This strategy only affects the URL written to the browser.
+ * `Location.path()` and `Location.normalize()` will continue to strip trailing slashes when reading the URL.
+ *
+ * @publicApi
+ */
+@Injectable({providedIn: 'root'})
+export class TrailingSlashPathLocationStrategy extends PathLocationStrategy {
+  override prepareExternalUrl(internal: string): string {
+    const path = extractUrlPath(internal);
+    if (!path.endsWith('/')) {
+      internal = path + '/' + internal.slice(path.length);
+    }
+    return super.prepareExternalUrl(internal);
+  }
+}
+
+function extractUrlPath(url: string): string {
+  const questionMarkOrHashIndex = url.search(/[?#]/);
+  const pathEnd = questionMarkOrHashIndex > -1 ? questionMarkOrHashIndex : url.length;
+  return url.slice(0, pathEnd);
 }

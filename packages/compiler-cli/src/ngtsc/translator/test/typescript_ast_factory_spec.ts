@@ -27,6 +27,19 @@ describe('TypeScriptAstFactory', () => {
 
       expect(generate(stmt)).toEqual(['/* comment 1 */', '//comment 2', 'x = 10;'].join('\n'));
     });
+
+    it('should add the comments to the given expression', () => {
+      const {
+        items: [expr],
+        generate,
+      } = setupExpressions('x + 10');
+      factory.attachComments(expr, [
+        leadingComment('comment 1', true),
+        leadingComment('comment 2', false),
+      ]);
+
+      expect(generate(expr)).toEqual(['/* comment 1 */', '//comment 2', 'x + 10'].join('\n'));
+    });
   });
 
   describe('createArrayLiteral()', () => {
@@ -46,7 +59,7 @@ describe('TypeScriptAstFactory', () => {
         items: [target, value],
         generate,
       } = setupExpressions(`x`, `42`);
-      const assignment = factory.createAssignment(target, value);
+      const assignment = factory.createAssignment(target, '=', value);
       expect(generate(assignment)).toEqual('x = 42');
     });
   });
@@ -60,14 +73,29 @@ describe('TypeScriptAstFactory', () => {
       const assignment = factory.createBinaryExpression(left, '+', right);
       expect(generate(assignment)).toEqual('17 + 42');
     });
+
+    it('should create a binary operation node for exponentiation', () => {
+      const {
+        items: [left, right],
+        generate,
+      } = setupExpressions(`2`, `3`);
+      const assignment = factory.createBinaryExpression(left, '**', right);
+      expect(generate(assignment)).toEqual('2 ** 3');
+    });
   });
 
   describe('createDynamicImport()', () => {
-    it('should create a dynamic import expression', () => {
+    it('should create a dynamic import expression from a string URL', () => {
       const {generate} = setupExpressions(``);
       const url = './some/path';
       const assignment = factory.createDynamicImport(url);
       expect(generate(assignment)).toEqual(`import("${url}")`);
+    });
+
+    it('should create a dynamic import expression from an expression URL', () => {
+      const {items, generate} = setupExpressions(`'/' + 'abc' + '/'`);
+      const assignment = factory.createDynamicImport(items[0]);
+      expect(generate(assignment)).toEqual(`import('/' + 'abc' + '/')`);
     });
   });
 
@@ -150,8 +178,15 @@ describe('TypeScriptAstFactory', () => {
         items: [body],
         generate,
       } = setupStatements('{x = 10; y = 20;}');
-      const fn = factory.createFunctionDeclaration('foo', ['arg1', 'arg2'], body);
-      expect(generate(fn)).toEqual('function foo(arg1, arg2) { x = 10; y = 20; }');
+      const fn = factory.createFunctionDeclaration(
+        'foo',
+        [
+          {name: 'arg1', type: null},
+          {name: 'arg2', type: factory.createBuiltInType('number')},
+        ],
+        body,
+      );
+      expect(generate(fn)).toEqual('function foo(arg1, arg2: number) { x = 10; y = 20; }');
     });
   });
 
@@ -161,9 +196,16 @@ describe('TypeScriptAstFactory', () => {
         items: [body],
         generate,
       } = setupStatements('{x = 10; y = 20;}');
-      const fn = factory.createFunctionExpression('foo', ['arg1', 'arg2'], body);
+      const fn = factory.createFunctionExpression(
+        'foo',
+        [
+          {name: 'arg1', type: null},
+          {name: 'arg2', type: factory.createBuiltInType('number')},
+        ],
+        body,
+      );
       expect(ts.isExpressionStatement(fn)).toBe(false);
-      expect(generate(fn)).toEqual('function foo(arg1, arg2) { x = 10; y = 20; }');
+      expect(generate(fn)).toEqual('function foo(arg1, arg2: number) { x = 10; y = 20; }');
     });
 
     it('should create an anonymous function expression node if the name is null', () => {
@@ -171,8 +213,15 @@ describe('TypeScriptAstFactory', () => {
         items: [body],
         generate,
       } = setupStatements('{x = 10; y = 20;}');
-      const fn = factory.createFunctionExpression(null, ['arg1', 'arg2'], body);
-      expect(generate(fn)).toEqual('function (arg1, arg2) { x = 10; y = 20; }');
+      const fn = factory.createFunctionExpression(
+        null,
+        [
+          {name: 'arg1', type: null},
+          {name: 'arg2', type: factory.createBuiltInType('number')},
+        ],
+        body,
+      );
+      expect(generate(fn)).toEqual('function (arg1, arg2: number) { x = 10; y = 20; }');
     });
   });
 
@@ -214,8 +263,14 @@ describe('TypeScriptAstFactory', () => {
         items: [body],
         generate,
       } = setupExpressions('arg2 + arg1');
-      const fn = factory.createArrowFunctionExpression(['arg1', 'arg2'], body);
-      expect(generate(fn)).toEqual('(arg1, arg2) => arg2 + arg1');
+      const fn = factory.createArrowFunctionExpression(
+        [
+          {name: 'arg1', type: null},
+          {name: 'arg2', type: factory.createBuiltInType('number')},
+        ],
+        body,
+      );
+      expect(generate(fn)).toEqual('(arg1, arg2: number) => arg2 + arg1');
     });
 
     it('should create an arrow function with an implicit return object literal', () => {
@@ -232,8 +287,14 @@ describe('TypeScriptAstFactory', () => {
         items: [body],
         generate,
       } = setupStatements('{x = 10; y = 20; return x + y;}');
-      const fn = factory.createArrowFunctionExpression(['arg1', 'arg2'], body);
-      expect(generate(fn)).toEqual('(arg1, arg2) => { x = 10; y = 20; return x + y; }');
+      const fn = factory.createArrowFunctionExpression(
+        [
+          {name: 'arg1', type: null},
+          {name: 'arg2', type: factory.createBuiltInType('number')},
+        ],
+        body,
+      );
+      expect(generate(fn)).toEqual('(arg1, arg2: number) => { x = 10; y = 20; return x + y; }');
     });
   });
 
@@ -302,14 +363,15 @@ describe('TypeScriptAstFactory', () => {
   describe('createObjectLiteral()', () => {
     it('should create an object literal node, with the given properties', () => {
       const {
-        items: [prop1, prop2],
+        items: [prop1, prop2, prop3],
         generate,
-      } = setupExpressions('42', '"moo"');
+      } = setupExpressions('42', '"moo"', 'foo');
       const obj = factory.createObjectLiteral([
-        {propertyName: 'prop1', value: prop1, quoted: false},
-        {propertyName: 'prop2', value: prop2, quoted: true},
+        {propertyName: 'prop1', value: prop1, kind: 'property', quoted: false},
+        {propertyName: 'prop2', value: prop2, kind: 'property', quoted: true},
+        {expression: prop3, kind: 'spread'},
       ]);
-      expect(generate(obj)).toEqual('{ prop1: 42, "prop2": "moo" }');
+      expect(generate(obj)).toEqual('{ prop1: 42, "prop2": "moo", ...foo }');
     });
   });
 
@@ -390,6 +452,17 @@ describe('TypeScriptAstFactory', () => {
     });
   });
 
+  describe('createVoidExpression()', () => {
+    it('should create a void expression node', () => {
+      const {
+        items: [expr],
+        generate,
+      } = setupExpressions(`42`);
+      const voidExpr = factory.createVoidExpression(expr);
+      expect(generate(voidExpr)).toEqual('void 42');
+    });
+  });
+
   describe('createUnaryExpression()', () => {
     it('should create a unary expression with the operator and operand', () => {
       const {
@@ -407,7 +480,7 @@ describe('TypeScriptAstFactory', () => {
         items: [initializer],
         generate,
       } = setupExpressions(`42`);
-      const varDecl = factory.createVariableDeclaration('foo', initializer, 'let');
+      const varDecl = factory.createVariableDeclaration('foo', initializer, 'let', null);
       expect(generate(varDecl)).toEqual('let foo = 42;');
     });
 
@@ -416,7 +489,7 @@ describe('TypeScriptAstFactory', () => {
         items: [initializer],
         generate,
       } = setupExpressions(`42`);
-      const varDecl = factory.createVariableDeclaration('foo', initializer, 'const');
+      const varDecl = factory.createVariableDeclaration('foo', initializer, 'const', null);
       expect(generate(varDecl)).toEqual('const foo = 42;');
     });
 
@@ -425,14 +498,117 @@ describe('TypeScriptAstFactory', () => {
         items: [initializer],
         generate,
       } = setupExpressions(`42`);
-      const varDecl = factory.createVariableDeclaration('foo', initializer, 'var');
+      const varDecl = factory.createVariableDeclaration('foo', initializer, 'var', null);
       expect(generate(varDecl)).toEqual('var foo = 42;');
     });
 
     it('should create an uninitialized variable declaration statement node for the given variable name and a null initializer', () => {
       const {generate} = setupStatements();
-      const varDecl = factory.createVariableDeclaration('foo', null, 'let');
+      const varDecl = factory.createVariableDeclaration('foo', null, 'let', null);
       expect(generate(varDecl)).toEqual('let foo;');
+    });
+
+    it('should create a variable declaration with a type', () => {
+      const {
+        items: [initializer],
+        generate,
+      } = setupExpressions(`42`);
+      const varDecl = factory.createVariableDeclaration(
+        'foo',
+        initializer,
+        'let',
+        factory.createBuiltInType('number'),
+      );
+      expect(generate(varDecl)).toEqual('let foo: number = 42;');
+    });
+  });
+
+  describe('createRegularExpressionLiteral()', () => {
+    it('should create a regular expressions without flags', () => {
+      const {generate} = setupStatements();
+      const regex = factory.createRegularExpressionLiteral('^\\d+-foo$', null);
+      expect(generate(regex)).toEqual('/^\\d+-foo$/');
+    });
+
+    it('should create a regular expressions with flags', () => {
+      const {generate} = setupStatements();
+      const regex = factory.createRegularExpressionLiteral('^\\d+-foo$', 'gi');
+      expect(generate(regex)).toEqual('/^\\d+-foo$/gi');
+    });
+  });
+
+  describe('createSpreadElement()', () => {
+    it('should create a spread element in an array', () => {
+      const {generate} = setupStatements();
+      const before = factory.createIdentifier('a');
+      const spread = factory.createSpreadElement(factory.createIdentifier('b'));
+      const array = factory.createArrayLiteral([before, spread]);
+      expect(generate(array)).toEqual('[a, ...b]');
+    });
+
+    it('should create a spread in a call expression', () => {
+      const {generate} = setupStatements();
+      const fn = factory.createIdentifier('fn');
+      const before = factory.createIdentifier('a');
+      const spread = factory.createSpreadElement(factory.createIdentifier('b'));
+      const call = factory.createCallExpression(fn, [before, spread], false);
+      expect(generate(call)).toEqual('fn(a, ...b)');
+    });
+  });
+
+  describe('createBuiltInType()', () => {
+    it('should create keyword type nodes for simple types', () => {
+      const {generate} = setupStatements();
+      expect(generate(factory.createBuiltInType('any'))).toEqual('any');
+      expect(generate(factory.createBuiltInType('boolean'))).toEqual('boolean');
+      expect(generate(factory.createBuiltInType('number'))).toEqual('number');
+      expect(generate(factory.createBuiltInType('string'))).toEqual('string');
+      expect(generate(factory.createBuiltInType('never'))).toEqual('never');
+      expect(generate(factory.createBuiltInType('unknown'))).toEqual('unknown');
+    });
+
+    it('should create a type reference for "function"', () => {
+      const {generate} = setupStatements();
+      expect(generate(factory.createBuiltInType('function'))).toEqual('Function');
+    });
+  });
+
+  describe('createExpressionType()', () => {
+    it('should create a type reference for an identifier', () => {
+      const {items, generate} = setupExpressions('MyType');
+      const type = factory.createExpressionType(items[0], null);
+      expect(generate(type)).toEqual('MyType');
+    });
+
+    it('should create a type reference for a property access', () => {
+      const {items, generate} = setupExpressions('ns.MyType');
+      const type = factory.createExpressionType(items[0], null);
+      expect(generate(type)).toEqual('ns.MyType');
+    });
+
+    it('should create a type reference with type parameters', () => {
+      const {items, generate} = setupExpressions('MyType');
+      const typeParam = factory.createBuiltInType('string');
+      const type = factory.createExpressionType(items[0], [typeParam]);
+      expect(generate(type)).toEqual('MyType<string>');
+    });
+  });
+
+  describe('createArrayType()', () => {
+    it('should create an array type node', () => {
+      const {generate} = setupStatements();
+      const elementType = factory.createBuiltInType('string');
+      const type = factory.createArrayType(elementType);
+      expect(generate(type)).toEqual('string[]');
+    });
+  });
+
+  describe('createMapType()', () => {
+    it('should create a type literal with an index signature', () => {
+      const {generate} = setupStatements();
+      const valueType = factory.createBuiltInType('number');
+      const type = factory.createMapType(valueType);
+      expect(generate(type)).toEqual('{\n    [key: string]: number;\n}');
     });
   });
 

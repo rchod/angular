@@ -21,7 +21,7 @@ import {
 } from '../../util/assert';
 import {assertIndexInExpandoRange, assertTIcu} from '../assert';
 import {attachPatchData} from '../context_discovery';
-import {elementPropertyInternal, setElementAttribute} from '../instructions/shared';
+import {setPropertyAndInputs, setElementAttribute} from '../instructions/shared';
 import {
   ELEMENT_MARKER,
   I18nCreateOpCode,
@@ -44,10 +44,9 @@ import {
   createElementNode,
   createTextNode,
   nativeInsertBefore,
-  nativeParentNode,
   nativeRemoveNode,
   updateTextNode,
-} from '../node_manipulation';
+} from '../dom_node_manipulation';
 import {
   getBindingIndex,
   isInSkipHydrationBlock,
@@ -102,19 +101,22 @@ export function setMaskBit(hasChange: boolean) {
 }
 
 export function applyI18n(tView: TView, lView: LView, index: number) {
-  if (changeMaskCounter > 0) {
-    ngDevMode && assertDefined(tView, `tView should be defined`);
-    const tI18n = tView.data[index] as TI18n | I18nUpdateOpCodes;
-    // When `index` points to an `ɵɵi18nAttributes` then we have an array otherwise `TI18n`
-    const updateOpCodes: I18nUpdateOpCodes = Array.isArray(tI18n)
-      ? (tI18n as I18nUpdateOpCodes)
-      : (tI18n as TI18n).update;
-    const bindingsStartIndex = getBindingIndex() - changeMaskCounter - 1;
-    applyUpdateOpCodes(tView, lView, updateOpCodes, bindingsStartIndex, changeMask);
+  try {
+    if (changeMaskCounter > 0) {
+      ngDevMode && assertDefined(tView, `tView should be defined`);
+      const tI18n = tView.data[index] as TI18n | I18nUpdateOpCodes;
+      // When `index` points to an `ɵɵi18nAttributes` then we have an array otherwise `TI18n`
+      const updateOpCodes: I18nUpdateOpCodes = Array.isArray(tI18n)
+        ? (tI18n as I18nUpdateOpCodes)
+        : (tI18n as TI18n).update;
+      const bindingsStartIndex = getBindingIndex() - changeMaskCounter - 1;
+      applyUpdateOpCodes(tView, lView, updateOpCodes, bindingsStartIndex, changeMask);
+    }
+  } finally {
+    // Reset changeMask & maskBit to default for the next update cycle
+    changeMask = 0b0;
+    changeMaskCounter = 0;
   }
-  // Reset changeMask & maskBit to default for the next update cycle
-  changeMask = 0b0;
-  changeMaskCounter = 0;
 }
 
 function createNodeWithoutHydration(
@@ -238,7 +240,7 @@ export function applyCreateOpCodes(
  * @param lView Current `LView`
  * @param anchorRNode place where the i18n node should be inserted.
  */
-export function applyMutableOpCodes(
+function applyMutableOpCodes(
   tView: TView,
   mutableOpCodes: IcuCreateOpCodes,
   lView: LView,
@@ -259,7 +261,6 @@ export function applyMutableOpCodes(
     if (typeof opCode == 'string') {
       const textNodeIndex = mutableOpCodes[++i] as number;
       if (lView[textNodeIndex] === null) {
-        ngDevMode && ngDevMode.rendererCreateTextNode++;
         ngDevMode && assertIndexInRange(lView, textNodeIndex);
         lView[textNodeIndex] = _locateOrCreateNode(lView, textNodeIndex, opCode, Node.TEXT_NODE);
       }
@@ -272,7 +273,7 @@ export function applyMutableOpCodes(
             // must insert into the root. (Only subsequent operations can insert into a dynamic
             // parent)
             rootIdx = parentIdx;
-            rootRNode = nativeParentNode(renderer, anchorRNode);
+            rootRNode = renderer.parentNode(anchorRNode);
           }
           let insertInFrontOf: RNode | null;
           let parentRNode: RElement | null;
@@ -345,7 +346,6 @@ export function applyMutableOpCodes(
                 'string',
                 `Expected "${commentValue}" to be a comment node value`,
               );
-            ngDevMode && ngDevMode.rendererCreateComment++;
             ngDevMode && assertIndexInExpandoRange(lView, commentNodeIndex);
             const commentRNode = (lView[commentNodeIndex] = _locateOrCreateNode(
               lView,
@@ -368,7 +368,6 @@ export function applyMutableOpCodes(
                 `Expected "${tagName}" to be an element node tag name`,
               );
 
-            ngDevMode && ngDevMode.rendererCreateElement++;
             ngDevMode && assertIndexInExpandoRange(lView, elementNodeIndex);
             const elementRNode = (lView[elementNodeIndex] = _locateOrCreateNode(
               lView,
@@ -398,7 +397,7 @@ export function applyMutableOpCodes(
  * @param changeMask Each bit corresponds to a `ɵɵi18nExp` (Counting backwards from
  *     `bindingsStartIndex`)
  */
-export function applyUpdateOpCodes(
+function applyUpdateOpCodes(
   tView: TView,
   lView: LView,
   updateOpCodes: I18nUpdateOpCodes,
@@ -443,15 +442,13 @@ export function applyUpdateOpCodes(
                     sanitizeFn,
                   );
                 } else {
-                  elementPropertyInternal(
-                    tView,
+                  setPropertyAndInputs(
                     tNodeOrTagName,
                     lView,
                     propName,
                     value,
                     lView[RENDERER],
                     sanitizeFn,
-                    false,
                   );
                 }
                 break;

@@ -3,27 +3,26 @@ import {bootstrapApplication} from '@angular/platform-browser';
 
 @Component({
   selector: 'app-root',
-  standalone: true,
   template: `
     <h2>Todos</h2>
     <input #text />
     <button (click)="add(text.value)">Add</button>
 
     @for (todo of todos; track $index) {
-    <p>
-      <input type="checkbox" (change)="toggle($index)" />
-      @if (todo.done) {
-      <s>{{ todo.text }}</s>
-      } @else {
-      <span>{{ todo.text }}</span>
-      }
-    </p>
+      <p>
+        <input type="checkbox" (change)="toggle($index)" />
+        @if (todo.done) {
+          <s>{{ todo.text }}</s>
+        } @else {
+          <span>{{ todo.text }}</span>
+        }
+      </p>
     } @empty {
-    <p>No todos</p>
+      <p>No todos</p>
     }
   `,
 })
-export class TodosComponent {
+export class Todos {
   todos: Array<{done: boolean; text: string}> = [];
 
   add(text: string) {
@@ -35,4 +34,4 @@ export class TodosComponent {
   }
 }
 
-bootstrapApplication(TodosComponent);
+bootstrapApplication(Todos);

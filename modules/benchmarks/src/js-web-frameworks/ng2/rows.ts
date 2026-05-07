@@ -6,8 +6,7 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
-import {ApplicationRef, Component, NgModule} from '@angular/core';
-import {BrowserModule} from '@angular/platform-browser';
+import {ApplicationRef, Component} from '@angular/core';
 
 export interface RowData {
   id: number;
@@ -19,7 +18,7 @@ export interface RowData {
   template: `
     <table class="table table-hover table-striped test-data">
       <tbody>
-        @for(item of data; track item.id) {
+        @for (item of data; track item.id) {
           <tr [class.danger]="item.id === selected">
             <td class="col-md-1">{{ item.id }}</td>
             <td class="col-md-4">
@@ -39,7 +38,7 @@ export interface RowData {
 })
 export class JsWebFrameworksComponent {
   data: Array<RowData> = [];
-  selected: number | null;
+  selected: number | null = null;
 
   constructor(private _appRef: ApplicationRef) {}
 
@@ -59,10 +58,3 @@ export class JsWebFrameworksComponent {
     this._appRef.tick();
   }
 }
-
-@NgModule({
-  imports: [BrowserModule],
-  declarations: [JsWebFrameworksComponent],
-  bootstrap: [JsWebFrameworksComponent],
-})
-export class JsWebFrameworksModule {}

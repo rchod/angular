@@ -7,7 +7,6 @@
  */
 
 import {ChangeDetectionStrategy, ViewEncapsulation} from '../../core';
-import {InterpolationConfig} from '../../ml_parser/defaults';
 import * as o from '../../output/output_ast';
 import {ParseSourceSpan} from '../../parse_util';
 import * as t from '../r3_ast';
@@ -93,9 +92,9 @@ export interface R3DirectiveMetadata {
   usesInheritance: boolean;
 
   /**
-   * Whether or not the component or directive inherits its entire decorator from its base class.
+   * Whether or not the component or directive uses the private `ɵngControlCreate` hook.
    */
-  fullInheritance: boolean;
+  controlCreate: {passThroughInput: string | null} | null;
 
   /**
    * Reference name under which to export the directive's type in a template,
@@ -122,6 +121,11 @@ export interface R3DirectiveMetadata {
    * Additional directives applied to the directive host.
    */
   hostDirectives: R3HostDirectiveMetadata[] | null;
+
+  /**
+   * Whether null should be used instead of undefined for optional chaining.
+   */
+  legacyOptionalChaining: boolean;
 }
 
 /**
@@ -156,7 +160,7 @@ export const enum DeclarationListEmitMode {
   /**
    * The list of declarations is emitted into the generated code as is.
    *
-   * ```
+   * ```ts
    * directives: [MyDir],
    * ```
    */
@@ -166,7 +170,7 @@ export const enum DeclarationListEmitMode {
    * The list of declarations is emitted into the generated code wrapped inside a closure, which
    * is needed when at least one declaration is a forward reference.
    *
-   * ```
+   * ```ts
    * directives: function () { return [MyDir, ForwardDir]; },
    * ```
    */
@@ -180,13 +184,13 @@ export const enum DeclarationListEmitMode {
    * any forward references within the list are resolved when the outer closure is invoked.
    *
    * Consider the case where the runtime has captured two declarations in two distinct values:
-   * ```
+   * ```ts
    * const dirA = MyDir;
    * const dirB = forwardRef(function() { return ForwardRef; });
    * ```
    *
    * This mode would emit the declarations captured in `dirA` and `dirB` as follows:
-   * ```
+   * ```ts
    * directives: function () { return [dirA, dirB].map(ng.resolveForwardRef); },
    * ```
    */
@@ -198,8 +202,9 @@ export const enum DeclarationListEmitMode {
 /**
  * Information needed to compile a component for the render3 runtime.
  */
-export interface R3ComponentMetadata<DeclarationT extends R3TemplateDependency>
-  extends R3DirectiveMetadata {
+export interface R3ComponentMetadata<
+  DeclarationT extends R3TemplateDependency,
+> extends R3DirectiveMetadata {
   /**
    * Information about the component's template.
    */
@@ -237,6 +242,11 @@ export interface R3ComponentMetadata<DeclarationT extends R3TemplateDependency>
   styles: string[];
 
   /**
+   * A collection of style paths for external stylesheets that will be applied and scoped to the component.
+   */
+  externalStyles?: string[];
+
+  /**
    * An encapsulation policy for the component's styling.
    * Possible values:
    * - `ViewEncapsulation.Emulated`: Apply modified component styles in order to emulate
@@ -270,11 +280,6 @@ export interface R3ComponentMetadata<DeclarationT extends R3TemplateDependency>
   i18nUseExternalIds: boolean;
 
   /**
-   * Overrides the default interpolation start and end delimiters ({{ and }}).
-   */
-  interpolation: InterpolationConfig;
-
-  /**
    * Strategy used for detecting changes in the component.
    *
    * In global compilation mode the value is ChangeDetectionStrategy if available as it is
@@ -282,6 +287,17 @@ export interface R3ComponentMetadata<DeclarationT extends R3TemplateDependency>
    * expression as appears in the decorator.
    */
   changeDetection: ChangeDetectionStrategy | o.Expression | null;
+
+  /**
+   * Relative path to the component's template from the root of the project.
+   * Used to generate debugging information.
+   */
+  relativeTemplatePath: string | null;
+
+  /**
+   * Whether any of the component's dependencies are directives.
+   */
+  hasDirectiveDependencies: boolean;
 
   /**
    * The imports expression as appears on the component decorate for standalone component. This

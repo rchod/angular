@@ -14,8 +14,7 @@ import {
 import {Type} from '../../interface/type';
 import {NG_FACTORY_DEF} from '../../render3/fields';
 import {getClosureSafeProperty} from '../../util/property';
-import {resolveForwardRef} from '../forward_ref';
-import {Injectable} from '../injectable';
+import type {Injectable} from '../injectable';
 import {NG_PROV_DEF} from '../interface/defs';
 import {
   ClassSansProvider,

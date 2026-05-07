@@ -9,7 +9,7 @@
 import {Location} from '@angular/common';
 import {Component, inject} from '@angular/core';
 import {TestBed} from '@angular/core/testing';
-import {Router, withRouterConfig} from '@angular/router';
+import {Router, withRouterConfig} from '../index';
 
 import {provideRouter} from '../src/provide_router';
 
@@ -99,5 +99,5 @@ describe('`navigationExtras handling with redirects`', () => {
   });
 });
 
-@Component({selector: 'simple-cmp', template: `simple`, standalone: true})
+@Component({selector: 'simple-cmp', template: `simple`})
 class SimpleCmp {}

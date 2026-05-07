@@ -6,7 +6,6 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
-import {initMockFileSystem} from '@angular/compiler-cli/src/ngtsc/file_system/testing';
 import ts from 'typescript';
 
 import {
@@ -16,14 +15,11 @@ import {
   humanizeDocumentSpanLike,
   LanguageServiceTestEnv,
   OpenBuffer,
+  Project,
 } from '../testing';
 
 describe('find references and rename locations', () => {
   let env: LanguageServiceTestEnv;
-
-  beforeEach(() => {
-    initMockFileSystem('Native');
-  });
 
   afterEach(() => {
     // Clear env so it's not accidentally carried over to the next test.
@@ -37,7 +33,10 @@ describe('find references and rename locations', () => {
       const files = {
         'app.ts': `import {Component} from '@angular/core';
 
-          @Component({templateUrl: './app.html'})
+          @Component({
+            templateUrl: './app.html',
+            standalone: false,
+          })
           export class AppCmp {
             myProp!: string;
           }`,
@@ -72,7 +71,10 @@ describe('find references and rename locations', () => {
         'app.ts': `
           import {Component} from '@angular/core';
 
-          @Component({templateUrl: './app.html'})
+          @Component({
+            templateUrl: './app.html',
+            standalone: false,
+          })
           export class AppCmp {
             myProp = '';
           }`,
@@ -107,7 +109,10 @@ describe('find references and rename locations', () => {
         'app.ts': `
           import {Component} from '@angular/core';
 
-          @Component({template: '<div (click)="setTitle(2)"></div>'})
+          @Component({
+            template: '<div (click)="setTitle(2)"></div>',
+            standalone: false,
+          })
           export class AppCmp {
             setTitle(s: number) {}
           }`,
@@ -143,7 +148,10 @@ describe('find references and rename locations', () => {
         'app.ts': `
           import {Component} from '@angular/core';
 
-          @Component({template: '<div (click)="setTitle(title)"></div>'})
+          @Component({
+            template: '<div (click)="setTitle(title)"></div>',
+            standalone: false,
+          })
           export class AppCmp {
             title = '';
             setTitle(s: string) {}
@@ -177,7 +185,7 @@ describe('find references and rename locations', () => {
       const files = {
         'app.ts': `
           import {Component} from '@angular/core';
-          @Component({template: '<div (click)="nested.setTitle(title)"></div>'})
+          @Component({template: '<div (click)="nested.setTitle(title)"></div>', standalone: false})
           export class AppCmp {
             title = '';
             nested = {
@@ -213,7 +221,10 @@ describe('find references and rename locations', () => {
       const files = {
         'app.ts': `
           import {Component} from '@angular/core';
-          @Component({template: '<div (click)="setTitle($event)"></div>'})
+          @Component({
+            template: '<div (click)="setTitle($event)"></div>',
+            standalone: false,
+          })
           export class AppCmp {
             setTitle(s: any) {}
           }`,
@@ -245,7 +256,10 @@ describe('find references and rename locations', () => {
         'app.ts': `
           import {Component} from '@angular/core';
 
-          @Component({templateUrl: './app.html' })
+          @Component({
+            templateUrl: './app.html',
+            standalone: false,
+          })
           export class AppCmp {
             title = '';
           }`,
@@ -282,7 +296,10 @@ describe('find references and rename locations', () => {
         'app.ts': `
           import {Component} from '@angular/core';
 
-          @Component({template: '<div (click)="title = otherTitle"></div>' })
+          @Component({
+            template: '<div (click)="title = otherTitle"></div>',
+            standalone: false,
+          })
           export class AppCmp {
             title = '';
             otherTitle = '';
@@ -320,7 +337,10 @@ describe('find references and rename locations', () => {
         'app.ts': `
           import {Component} from '@angular/core';
 
-          @Component({template: '{{hero["name"]}}' })
+          @Component({
+            template: '{{hero["name"]}}',
+            standalone: false,
+          })
           export class AppCmp {
             hero: {name: string} = {name: 'Superman'};
           }`,
@@ -367,7 +387,10 @@ describe('find references and rename locations', () => {
         'app.ts': `
           import {Component} from '@angular/core';
 
-          @Component({templateUrl: './app.html' })
+          @Component({
+            templateUrl: './app.html',
+            standalone: false,
+          })
           export class AppCmp {
             hero: {name: string} = {name: 'Superman'};
             batman = 'batman';
@@ -405,7 +428,10 @@ describe('find references and rename locations', () => {
         'app.ts': `
           import {Component} from '@angular/core';
 
-          @Component({template: '<input #myInput /> {{ myInput.value }}'})
+          @Component({
+            template: '<input #myInput /> {{ myInput.value }}',
+            standalone: false,
+          })
           export class AppCmp {
             title = '';
           }`,
@@ -439,7 +465,10 @@ describe('find references and rename locations', () => {
         'app.ts': `
           import {Component} from '@angular/core';
 
-          @Component({templateUrl: './app.html'})
+          @Component({
+            templateUrl: './app.html',
+            standalone: false,
+          })
           export class AppCmp {
             title = '';
           }`,
@@ -473,7 +502,11 @@ describe('find references and rename locations', () => {
       const dirFileContents = `
             import {Directive} from '@angular/core';
 
-            @Directive({selector: '[dir]', exportAs: 'myDir'})
+            @Directive({
+              selector: '[dir]',
+              exportAs: 'myDir',
+              standalone: false,
+            })
             export class Dir {
               dirValue!: string;
               doSomething() {}
@@ -481,7 +514,10 @@ describe('find references and rename locations', () => {
       const appFileContents = `
             import {Component} from '@angular/core';
 
-            @Component({templateUrl: './app.html'})
+            @Component({
+              templateUrl: './app.html',
+              standalone: false,
+            })
             export class AppCmp {}`;
 
       describe('when cursor is on usage of template reference', () => {
@@ -610,7 +646,10 @@ describe('find references and rename locations', () => {
           'app.ts': `
           import {Component} from '@angular/core';
 
-          @Component({templateUrl: './template.ng.html'})
+          @Component({
+            templateUrl: './template.ng.html',
+            standalone: false,
+          })
           export class AppCmp {
             heroes: string[] = [];
           }`,
@@ -650,7 +689,10 @@ describe('find references and rename locations', () => {
           'app.ts': `
           import {Component} from '@angular/core';
 
-          @Component({template: '<div *ngFor="let hero of heroes; let iRef = index">{{iRef}}</div>'})
+          @Component({
+            template: '<div *ngFor="let hero of heroes; let iRef = index">{{iRef}}</div>',
+            standalone: false,
+          })
           export class AppCmp {
             heroes: string[] = [];
           }`,
@@ -688,7 +730,10 @@ describe('find references and rename locations', () => {
           constructor(readonly $implicit: T, readonly identifier: string) {}
         }
 
-        @Directive({ selector: '[example]' })
+        @Directive({
+          selector: '[example]',
+          standalone: false,
+        })
         export class ExampleDirective<T> {
           @Input() set example(v: T) { }
           static ngTemplateContextGuard<T>(dir: ExampleDirective<T>, ctx: unknown):
@@ -700,7 +745,10 @@ describe('find references and rename locations', () => {
         import {Component, NgModule} from '@angular/core';
         import {ExampleDirective} from './example-directive';
 
-        @Component({template: '<div *example="state; let id = identifier">{{id}}</div>'})
+        @Component({
+          template: '<div *example="state; let id = identifier">{{id}}</div>',
+          standalone: false,
+        })
         export class AppCmp {
           state = {};
         }
@@ -739,7 +787,10 @@ describe('find references and rename locations', () => {
           'app.ts': `
             import {Component} from '@angular/core';
 
-            @Component({template: '<div *ngFor="let hero of heroes">{{hero.name}}</div>'})
+            @Component({
+              template: '<div *ngFor="let hero of heroes">{{hero.name}}</div>',
+              standalone: false,
+            })
             export class AppCmp {
               heroes: Array<{name: string}> = [];
             }`,
@@ -766,14 +817,17 @@ describe('find references and rename locations', () => {
       });
     });
 
-    describe('when cursor is on property read of variable', () => {
+    describe('when cursor is on property read of variable (inside listener callback)', () => {
       let file: OpenBuffer;
       beforeEach(() => {
         const files = {
           'app.ts': `
             import {Component} from '@angular/core';
 
-            @Component({template: '<div (click)="setHero({name})"></div>'})
+            @Component({
+              template: '<div (click)="setHero({name})"></div>',
+              standalone: false,
+            })
             export class AppCmp {
               name = 'Frodo';
 
@@ -807,7 +861,10 @@ describe('find references and rename locations', () => {
     const prefixPipe = `
         import {Pipe, PipeTransform} from '@angular/core';
 
-        @Pipe({ name: 'prefixPipe' })
+        @Pipe({
+          name: 'prefixPipe',
+          standalone: false,
+        })
         export class PrefixPipe implements PipeTransform {
           transform(value: string, prefix: string): string;
           transform(value: number, prefix: number): number;
@@ -824,7 +881,10 @@ describe('find references and rename locations', () => {
             'app.ts': `
         import {Component} from '@angular/core';
 
-        @Component({template: '{{birthday | prefixPipe: "MM/dd/yy"}}'})
+        @Component({
+          template: '{{birthday | prefixPipe: "MM/dd/yy"}}',
+          standalone: false,
+        })
         export class AppCmp {
           birthday = '';
         }
@@ -840,7 +900,7 @@ describe('find references and rename locations', () => {
 
         it('should find references', () => {
           const refs = getReferencesAtPosition(file)!;
-          assertFileNames(refs, ['index.d.ts', 'prefix-pipe.ts', 'app.ts']);
+          assertFileNames(refs, ['core.d.ts', 'prefix-pipe.ts', 'app.ts']);
           assertTextSpans(refs, ['transform', 'prefixPipe']);
         });
 
@@ -865,7 +925,10 @@ describe('find references and rename locations', () => {
           '/app.ts': `
         import {Component} from '@angular/core';
 
-        @Component({template: '{{birthday | prefixPipe: "MM/dd/yy"}}'})
+        @Component({
+          template: '{{birthday | prefixPipe: "MM/dd/yy"}}',
+          standalone: false,
+        })
         export class AppCmp {
           birthday = '';
         }
@@ -897,7 +960,10 @@ describe('find references and rename locations', () => {
           '/base_pipe.ts': `
         import {Pipe, PipeTransform} from '@angular/core';
 
-        @Pipe({ name: 'basePipe' })
+        @Pipe({
+          name: 'basePipe',
+          standalone: false,
+        })
         export class BasePipe implements PipeTransform {
           transform(value: string, prefix: string): string;
           transform(value: number, prefix: number): number;
@@ -909,7 +975,10 @@ describe('find references and rename locations', () => {
           'app.ts': `
             import {Component} from '@angular/core';
 
-            @Component({template: '{{"a" | prefixPipe: "MM/dd/yy"}}'})
+            @Component({
+              template: '{{"a" | prefixPipe: "MM/dd/yy"}}',
+              standalone: false,
+            })
             export class AppCmp { }
           `,
         };
@@ -932,7 +1001,10 @@ describe('find references and rename locations', () => {
           'app.ts': `
         import {Component} from '@angular/core';
 
-        @Component({template: '{{birthday | prefixPipe: prefix}}'})
+        @Component({
+          template: '{{birthday | prefixPipe: prefix}}',
+          standalone: false,
+        })
         export class AppCmp {
           birthday = '';
           prefix = '';
@@ -966,7 +1038,10 @@ describe('find references and rename locations', () => {
     const dirFileContents = `
         import {Directive, Input} from '@angular/core';
 
-        @Directive({selector: '[string-model]'})
+        @Directive({
+          selector: '[string-model]',
+          standalone: false,
+        })
         export class StringModel {
           @Input() model!: string;
           @Input('alias') aliasedModel!: string;
@@ -979,7 +1054,10 @@ describe('find references and rename locations', () => {
           'app.ts': `
         import {Component} from '@angular/core';
 
-        @Component({template: '<div string-model [model]="title"></div>'})
+        @Component({
+          template: '<div string-model [model]="title"></div>',
+          standalone: false,
+        })
         export class AppCmp {
           title = 'title';
         }`,
@@ -1013,7 +1091,10 @@ describe('find references and rename locations', () => {
           'other-dir.ts': `
         import {Directive, Input} from '@angular/core';
 
-        @Directive({selector: '[string-model]'})
+        @Directive({
+          selector: '[string-model]',
+          standalone: false,
+        })
         export class OtherDir {
           @Input('model') otherDirAliasedInput!: any;
         }
@@ -1022,7 +1103,10 @@ describe('find references and rename locations', () => {
           'app.ts': `
         import {Component} from '@angular/core';
 
-        @Component({template: '<div string-model [model]="title"></div>'})
+        @Component({
+          template: '<div string-model [model]="title"></div>',
+          standalone: false,
+        })
         export class AppCmp {
           title = 'title';
         }`,
@@ -1062,7 +1146,10 @@ describe('find references and rename locations', () => {
           'app.ts': `
         import {Component} from '@angular/core';
 
-        @Component({template: '<div string-model model="title"></div>'})
+        @Component({
+          template: '<div string-model model="title"></div>',
+          standalone: false,
+        })
         export class AppCmp {
           title = 'title';
         }`,
@@ -1096,14 +1183,20 @@ describe('find references and rename locations', () => {
           'string-model.ts': `
         import {Directive, Input} from '@angular/core';
 
-        @Directive({selector: '[string-model]'})
+        @Directive({
+          selector: '[string-model]',
+          standalone: false,
+        })
         export class StringModel {
           @Input() model!: string;
         }`,
           'app.ts': `
         import {Component} from '@angular/core';
 
-        @Component({template: '<div string-model model="title"></div>'})
+        @Component({
+          template: '<div string-model model="title"></div>',
+          standalone: false,
+        })
         export class AppCmp {
           title = 'title';
         }`,
@@ -1138,7 +1231,10 @@ describe('find references and rename locations', () => {
         import {Directive, Input} from '@angular/core';
         import {StringModel} from './string-model';
 
-        @Directive({selector: '[other-dir]'})
+        @Directive({
+          selector: '[other-dir]',
+          standalone: false,
+        })
         export class OtherDir {
           @Input() stringModelRef!: StringModel;
 
@@ -1149,14 +1245,20 @@ describe('find references and rename locations', () => {
           'string-model.ts': `
         import {Directive, Input} from '@angular/core';
 
-        @Directive({selector: '[string-model]'})
+        @Directive({
+          selector: '[string-model]',
+          standalone: false,
+        })
         export class StringModel {
           @Input() model!: string;
         }`,
           'app.ts': `
         import {Component} from '@angular/core';
 
-        @Component({template: '<div string-model other-dir model="title"></div>'})
+        @Component({
+          template: '<div string-model other-dir model="title"></div>',
+          standalone: false,
+        })
         export class AppCmp {
           title = 'title';
         }`,
@@ -1191,7 +1293,10 @@ describe('find references and rename locations', () => {
           'app.ts': `
         import {Component} from '@angular/core';
 
-        @Component({template: '<div string-model [alias]="title"></div>'})
+        @Component({
+          template: '<div string-model [alias]="title"></div>',
+          standalone: false,
+        })
         export class AppCmp {
           title = 'title';
         }`,
@@ -1225,7 +1330,10 @@ describe('find references and rename locations', () => {
     const dirFile = `
         import {Directive, Output, EventEmitter} from '@angular/core';
 
-        @Directive({selector: '[string-model]'})
+        @Directive({
+          selector: '[string-model]',
+          standalone: false,
+        })
         export class StringModel {
           @Output() modelChange = new EventEmitter<string>();
           @Output('alias') aliasedModelChange = new EventEmitter<string>();
@@ -1236,7 +1344,10 @@ describe('find references and rename locations', () => {
         import {Component, NgModule} from '@angular/core';
         import {StringModel} from './string-model';
 
-        @Component({template: '${template}'})
+        @Component({
+          template: '${template}',
+          standalone: false,
+        })
         export class AppCmp {
           setTitle(s: string) {}
         }
@@ -1306,7 +1417,10 @@ describe('find references and rename locations', () => {
           'app.ts': `
           import {Component} from '@angular/core';
 
-          @Component({templateUrl: './template.ng.html'})
+          @Component({
+            templateUrl: './template.ng.html',
+            standalone: false,
+          })
           export class AppCmp {
           }`,
           'template.ng.html': `
@@ -1344,7 +1458,10 @@ describe('find references and rename locations', () => {
           'app.ts': `
           import {Component} from '@angular/core';
 
-          @Component({templateUrl: './template.ng.html'})
+          @Component({
+            templateUrl: './template.ng.html',
+            standalone: false,
+          })
           export class AppCmp {
           }`,
           'template.ng.html': `
@@ -1376,12 +1493,134 @@ describe('find references and rename locations', () => {
     });
   });
 
+  describe('when cursor is on symbol referenced in host bindings', () => {
+    let appFile: OpenBuffer;
+
+    beforeEach(() => {
+      const files = {
+        'app.ts': `
+          import {Component, Directive} from '@angular/core';
+
+          @Component({
+            template: '',
+            standalone: false,
+            host: {
+              '[attr.id]': 'getCompId()',
+              '(click)': 'handleCompClick()',
+            }
+          })
+          export class AppCmp {
+            getCompId() {
+              return 'my-id';
+            }
+
+            handleCompClick() {}
+          }
+
+          @Component({
+            template: '',
+            standalone: false,
+            host: {
+              '[attr.title]': 'getDirTitle()',
+              '(keydown)': 'handleDirKeydown()',
+            }
+          })
+          export class Dir {
+            getDirTitle() {
+              return 'my title';
+            }
+
+            handleDirKeydown() {}
+          }
+        `,
+      };
+      env = LanguageServiceTestEnv.setup();
+      const project = createModuleAndProjectWithDeclarations(env, 'test', files);
+      appFile = project.openFile('app.ts');
+    });
+
+    it('gets component member reference in property binding', () => {
+      appFile.moveCursorToText('get¦CompId() {');
+      const refs = getReferencesAtPosition(appFile)!;
+      expect(refs.length).toBe(2);
+
+      assertFileNames(refs, ['app.ts']);
+      assertTextSpans(refs, ['getCompId']);
+    });
+
+    it('gets component rename location in property binding', () => {
+      appFile.moveCursorToText('get¦CompId() {');
+      const renameLocations = getRenameLocationsAtPosition(appFile)!;
+      expect(renameLocations.length).toBe(2);
+
+      assertFileNames(renameLocations, ['app.ts']);
+      assertTextSpans(renameLocations, ['getCompId']);
+    });
+
+    it('gets component member reference listener', () => {
+      appFile.moveCursorToText('handle¦CompClick() {');
+      const refs = getReferencesAtPosition(appFile)!;
+      expect(refs.length).toBe(2);
+
+      assertFileNames(refs, ['app.ts']);
+      assertTextSpans(refs, ['handleCompClick']);
+    });
+
+    it('gets component rename location listener', () => {
+      appFile.moveCursorToText('handle¦CompClick() {');
+      const renameLocations = getRenameLocationsAtPosition(appFile)!;
+      expect(renameLocations.length).toBe(2);
+
+      assertFileNames(renameLocations, ['app.ts']);
+      assertTextSpans(renameLocations, ['handleCompClick']);
+    });
+
+    it('gets directive member reference in property binding', () => {
+      appFile.moveCursorToText('getDir¦Title() {');
+      const refs = getReferencesAtPosition(appFile)!;
+      expect(refs.length).toBe(2);
+
+      assertFileNames(refs, ['app.ts']);
+      assertTextSpans(refs, ['getDirTitle']);
+    });
+
+    it('gets directive rename location in property binding', () => {
+      appFile.moveCursorToText('getDir¦Title() {');
+      const renameLocations = getRenameLocationsAtPosition(appFile)!;
+      expect(renameLocations.length).toBe(2);
+
+      assertFileNames(renameLocations, ['app.ts']);
+      assertTextSpans(renameLocations, ['getDirTitle']);
+    });
+
+    it('gets directive member reference listener', () => {
+      appFile.moveCursorToText('handle¦DirKeydown() {');
+      const refs = getReferencesAtPosition(appFile)!;
+      expect(refs.length).toBe(2);
+
+      assertFileNames(refs, ['app.ts']);
+      assertTextSpans(refs, ['handleDirKeydown']);
+    });
+
+    it('gets directive rename location listener', () => {
+      appFile.moveCursorToText('handleDir¦Keydown() {');
+      const renameLocations = getRenameLocationsAtPosition(appFile)!;
+      expect(renameLocations.length).toBe(2);
+
+      assertFileNames(renameLocations, ['app.ts']);
+      assertTextSpans(renameLocations, ['handleDirKeydown']);
+    });
+  });
+
   it('should get references to both input and output for two-way binding', () => {
     const files = {
       'dir.ts': `
       import {Directive, Input, Output} from '@angular/core';
 
-      @Directive({selector: '[string-model]'})
+      @Directive({
+        selector: '[string-model]',
+        standalone: false,
+      })
       export class StringModel {
         @Input() model!: any;
         @Output() modelChange!: any;
@@ -1389,7 +1628,10 @@ describe('find references and rename locations', () => {
       'app.ts': `
       import {Component} from '@angular/core';
 
-      @Component({template: '<div string-model [(model)]="title"></div>'})
+      @Component({
+        template: '<div string-model [(model)]="title"></div>',
+        standalone: false,
+      })
       export class AppCmp {
         title = 'title';
       }`,
@@ -1411,16 +1653,22 @@ describe('find references and rename locations', () => {
       'dir.ts': `
         import {Directive, model} from '@angular/core';
 
-        @Directive({selector: '[signal-model]'})
+        @Directive({
+          selector: '[signal-model]',
+          standalone: false,
+        })
         export class SignalModel {
           signalModel = model<string>();
         }`,
       'app.ts': `
         import {Component} from '@angular/core';
 
-        @Component({template: '<div signal-model [(signalModel)]="title"></div>'})
+        @Component({
+          template: '<div signal-model [(signalModel)]="title"></div>',
+          standalone: false,
+        })
         export class AppCmp {
-          title = 'title';
+          title = 'title' as string | undefined;
         }`,
     };
 
@@ -1443,13 +1691,19 @@ describe('find references and rename locations', () => {
           'dir.ts': `
       import {Directive} from '@angular/core';
 
-      @Directive({selector: '[dir]'})
+      @Directive({
+        selector: '[dir]',
+        standalone: false,
+      })
       export class Dir {}`,
           'app.ts': `
         import {Component, NgModule} from '@angular/core';
         import {Dir} from './dir';
 
-        @Component({template: '<div dir></div>'})
+        @Component({
+          template: '<div dir></div>',
+          standalone: false,
+        })
         export class AppCmp {
         }
 
@@ -1489,19 +1743,28 @@ describe('find references and rename locations', () => {
         const dirFile = `
       import {Directive} from '@angular/core';
 
-      @Directive({selector: '[dir]'})
+      @Directive({
+        selector: '[dir]',
+        standalone: false,
+      })
       export class Dir {}`;
         const dirFile2 = `
       import {Directive} from '@angular/core';
 
-      @Directive({selector: '[dir]'})
+      @Directive({
+        selector: '[dir]',
+        standalone: false,
+      })
       export class Dir2 {}`;
         const appFile = `
         import {Component, NgModule} from '@angular/core';
         import {Dir} from './dir';
         import {Dir2} from './dir2';
 
-        @Component({template: '<div dir></div>'})
+        @Component({
+          template: '<div dir></div>',
+          standalone: false,
+        })
         export class AppCmp {
         }
 
@@ -1542,7 +1805,10 @@ describe('find references and rename locations', () => {
           'app.ts': `
         import {Component, NgModule} from '@angular/core';
 
-        @Component({template: '<div *ngFor="let item of items"></div>'})
+        @Component({
+          template: '<div *ngFor="let item of items"></div>',
+          standalone: false,
+        })
         export class AppCmp {
           items = [];
         }
@@ -1557,9 +1823,9 @@ describe('find references and rename locations', () => {
 
       it('should be able to request references', () => {
         const refs = getReferencesAtPosition(file)!;
-        expect(refs.length).toBe(6);
+        expect(refs.length).toBe(7);
         assertTextSpans(refs, ['<div *ngFor="let item of items"></div>', 'NgForOf']);
-        assertFileNames(refs, ['index.d.ts', 'app.ts']);
+        assertFileNames(refs, ['fake_common.d.ts', 'app.ts']);
       });
 
       it('should not support rename if directive is in a dts file', () => {
@@ -1576,13 +1842,20 @@ describe('find references and rename locations', () => {
         const myComp = `
       import {Component} from '@angular/core';
 
-      @Component({selector: 'my-comp', template: ''})
+      @Component({
+        selector: 'my-comp',
+        template: '',
+        standalone: false,
+      })
       export class MyComp {}`;
         const appFile = `
         import {Component, NgModule} from '@angular/core';
         import {MyComp} from './comp';
 
-        @Component({template: '<my-comp></my-comp>'})
+        @Component({
+          template: '<my-comp></my-comp>',
+          standalone: false,
+        })
         export class AppCmp {
         }
 
@@ -1621,13 +1894,19 @@ describe('find references and rename locations', () => {
         const compFile = `
       import {Component} from '@angular/core';
 
-      @Component({selector: 'my-comp', template: ''})
+      @Component({
+        selector: 'my-comp', template: '',
+        standalone: false,
+      })
       export class MyComp {}`;
         const app = `
         import {Component, NgModule} from '@angular/core';
         import {MyComp} from './comp';
 
-        @Component({template: '<my-comp></my-comp>'})
+        @Component({
+          template: '<my-comp></my-comp>',
+          standalone: false,
+        })
         export class AppCmp {
         }
 
@@ -1650,6 +1929,14 @@ describe('find references and rename locations', () => {
       });
 
       it('finds rename locations', () => {
+        env.expectNoSourceDiagnostics();
+        const result = file.getRenameInfo() as ts.RenameInfoSuccess;
+        // Note that although we do not provide rename locations, we must _not_ respond with
+        // a result that indicates the item cannot be renamed when info is requested or we will prevent
+        // other rename providers from performing the rename.
+        expect(result.canRename).toBeTrue();
+        expect(result.displayName).toEqual('my-comp');
+        expect(result.kind).toEqual('component');
         const renameLocations = getRenameLocationsAtPosition(file)!;
         expect(renameLocations).toBeUndefined();
         // TODO(atscott): We may consider supporting rename of component selector in the future
@@ -1666,8 +1953,7 @@ describe('find references and rename locations', () => {
         import {Component} from '@angular/core';
 
         @Component({
-          template: '@if (x; as aliasX) { {{aliasX}} {{aliasX + "second"}} }',
-          standalone: true
+          template: '@if (x; as aliasX) { {{aliasX}} {{aliasX + "second"}} }'
         })
         export class AppCmp {
           x?: string;
@@ -1701,7 +1987,11 @@ describe('find references and rename locations', () => {
       const comp = `
             import {Component} from '@angular/core';
 
-            @Component({selector: 'my-comp', template: ''})
+            @Component({
+              selector: 'my-comp',
+              template: '',
+              standalone: false,
+            })
             export class MyComp {
               myProp = 'cannot rename me';
             }`;
@@ -1719,7 +2009,11 @@ describe('find references and rename locations', () => {
       const comp = `
             import {Component, Input} from '@angular/core';
 
-            @Component({selector: 'my-comp', template: ''})
+            @Component({
+              selector: 'my-comp',
+              template: '',
+              standalone: false,
+            })
             export class MyComp {
               @Input() myProp!: string;
             }`;
@@ -1739,7 +2033,11 @@ describe('find references and rename locations', () => {
       const text = `
             import {Component} from '@angular/core';
 
-            @Component({selector: 'my-comp', template: '{{ myObj["myProp"] }}'})
+            @Component({
+              selector: 'my-comp',
+              template: '{{ myObj["myProp"] }}',
+              standalone: false,
+            })
             export class MyComp {
               readonly myObj = {'myProp': 'hello world'};
             }`;
@@ -1771,14 +2069,21 @@ describe('find references and rename locations', () => {
       const files = {
         'dir.ts': `
         import {Directive, Input} from '@angular/core';
-        @Directive({selector: '[dir]'})
+        @Directive({
+          selector: '[dir]',
+          standalone: false,
+        })
         export class MyDir {
           @Input() dir!: any;
         }`,
         'my-comp.ts': `
             import {Component, Input} from '@angular/core';
 
-            @Component({selector: 'my-comp', template: '<div dir="something"></div>'})
+            @Component({
+              selector: 'my-comp',
+              template: '<div dir="something"></div>',
+              standalone: false,
+            })
             export class MyComp {
               @Input() myProp!: string;
             }`,
@@ -1794,6 +2099,448 @@ describe('find references and rename locations', () => {
       expect(result.canRename).toEqual(true);
       expect(result.displayName).toEqual('dir');
       expect(result.kind).toEqual('property');
+    });
+  });
+
+  describe('selectorless components', () => {
+    let project: Project;
+
+    beforeEach(() => {
+      env = LanguageServiceTestEnv.setup();
+      project = env.addProject(
+        'test',
+        {
+          'app.ts': `
+            import {Component} from '@angular/core';
+            import {TestComponent} from './test-component';
+
+            @Component({templateUrl: './app.html'})
+            export class AppCmp {
+              stringValue = 'hello';
+              handleEvent() {}
+            }
+          `,
+          'test-component.ts': `
+            import {Component, EventEmitter, Input, Output} from '@angular/core';
+
+            @Component({template: ''})
+            export class TestComponent {
+              @Input() name!: string;
+              @Output() testEvent = new EventEmitter<string>();
+            }
+          `,
+          'app.html': 'Will be overridden',
+        },
+        {_enableSelectorless: true},
+      );
+    });
+
+    describe('references', () => {
+      it('should find references to selectorless component from source file', () => {
+        const file = project.openFile('test-component.ts');
+        const template = project.openFile('app.html');
+        template.contents = '<TestComponent/>';
+        file.moveCursorToText('export class TestComp¦onent {');
+        const refs = getReferencesAtPosition(file)!;
+        expect(refs.length).toBe(3);
+        assertTextSpans(refs, ['TestComponent', '<TestComponent/>']);
+        assertFileNames(refs, ['test-component.ts', 'app.html', 'app.ts']);
+      });
+
+      it('should find references to selectorless component from template', () => {
+        const template = project.openFile('app.html');
+        template.contents = '<TestComponent/>';
+        template.moveCursorToText('<TestCom¦ponent/>');
+        const refs = getReferencesAtPosition(template)!;
+        expect(refs.length).toBe(3);
+        assertTextSpans(refs, ['TestComponent', '<TestComponent/>']);
+        assertFileNames(refs, ['test-component.ts', 'app.html', 'app.ts']);
+      });
+
+      it('should find references to selectorless component inputs from source file', () => {
+        const file = project.openFile('test-component.ts');
+        const template = project.openFile('app.html');
+        template.contents = '<TestComponent [name]="stringValue"/>';
+        file.moveCursorToText('@Input() na¦me!: string;');
+        const refs = getReferencesAtPosition(file)!;
+        expect(refs.length).toBe(2);
+        assertTextSpans(refs, ['name']);
+        assertFileNames(refs, ['test-component.ts', 'app.html']);
+      });
+
+      it('should find references to selectorless component inputs from template', () => {
+        const template = project.openFile('app.html');
+        template.contents = '<TestComponent [name]="stringValue"/>';
+        template.moveCursorToText('[na¦me]');
+        const refs = getReferencesAtPosition(template)!;
+        expect(refs.length).toBe(2);
+        assertTextSpans(refs, ['name']);
+        assertFileNames(refs, ['test-component.ts', 'app.html']);
+      });
+
+      it('should find references to selectorless component outputs from source file', () => {
+        const file = project.openFile('test-component.ts');
+        const template = project.openFile('app.html');
+        template.contents = '<TestComponent (testEvent)="handleEvent()"/>';
+        file.moveCursorToText('@Output() test¦Event = new EventEmitter<string>();');
+        const refs = getReferencesAtPosition(file)!;
+        expect(refs.length).toBe(2);
+        assertTextSpans(refs, ['testEvent']);
+        assertFileNames(refs, ['test-component.ts', 'app.html']);
+      });
+
+      it('should find references to selectorless component outputs from template', () => {
+        const template = project.openFile('app.html');
+        template.contents = '<TestComponent (testEvent)="handleEvent()"/>';
+        template.moveCursorToText('(tes¦tEvent)');
+        const refs = getReferencesAtPosition(template)!;
+        expect(refs.length).toBe(2);
+        assertTextSpans(refs, ['testEvent']);
+        assertFileNames(refs, ['test-component.ts', 'app.html']);
+      });
+    });
+
+    describe('rename locations', () => {
+      it('should find rename locations of selectorless component from template', () => {
+        const template = project.openFile('app.html');
+        template.contents = '<TestComponent/>';
+        template.moveCursorToText('<TestCom¦ponent/>');
+        const renameLocations = getRenameLocationsAtPosition(template)!;
+
+        // There are 3 locations that need to be renamed:
+        // - Source file where the component is defined.
+        // - Self-closing tag in the template.
+        // - Import in the app component.
+        expect(renameLocations.length).toBe(3);
+        assertTextSpans(renameLocations, ['TestComponent']);
+        assertFileNames(renameLocations, ['test-component.ts', 'app.html', 'app.ts']);
+      });
+
+      it('should find rename locations for complex selectorless component', () => {
+        const template = project.openFile('app.html');
+        template.contents = '<TestComponent:a hello="world">Hello</TestComponent:a>';
+        template.moveCursorToText('<TestCom¦ponent:a');
+        const renameLocations = getRenameLocationsAtPosition(template)!;
+
+        // There are 4 locations that need to be renamed:
+        // - Source file where the component is defined.
+        // - Opening tag in the template.
+        // - Closing tag in the template.
+        // - Import in the app component.
+        expect(renameLocations.length).toBe(4);
+        assertTextSpans(renameLocations, ['TestComponent']);
+        assertFileNames(renameLocations, ['test-component.ts', 'app.html', 'app.html', 'app.ts']);
+      });
+
+      it('should find rename locations to selectorless component inputs from source file', () => {
+        const file = project.openFile('test-component.ts');
+        const template = project.openFile('app.html');
+        template.contents = '<TestComponent [name]="stringValue"/>';
+        file.moveCursorToText('@Input() na¦me!: string;');
+        const refs = getRenameLocationsAtPosition(file)!;
+        expect(refs.length).toBe(2);
+        assertTextSpans(refs, ['name']);
+        assertFileNames(refs, ['test-component.ts', 'app.html']);
+      });
+
+      it('should find rename locations to selectorless component inputs from template', () => {
+        const template = project.openFile('app.html');
+        template.contents = '<TestComponent [name]="stringValue"/>';
+        template.moveCursorToText('[na¦me]');
+        const refs = getRenameLocationsAtPosition(template)!;
+        expect(refs.length).toBe(2);
+        assertTextSpans(refs, ['name']);
+        assertFileNames(refs, ['test-component.ts', 'app.html']);
+      });
+
+      it('should find rename locations to selectorless component outputs from source file', () => {
+        const file = project.openFile('test-component.ts');
+        const template = project.openFile('app.html');
+        template.contents = '<TestComponent (testEvent)="handleEvent()"/>';
+        file.moveCursorToText('@Output() test¦Event = new EventEmitter<string>();');
+        const refs = getRenameLocationsAtPosition(file)!;
+        expect(refs.length).toBe(2);
+        assertTextSpans(refs, ['testEvent']);
+        assertFileNames(refs, ['test-component.ts', 'app.html']);
+      });
+
+      it('should find rename locations to selectorless component outputs from template', () => {
+        const template = project.openFile('app.html');
+        template.contents = '<TestComponent (testEvent)="handleEvent()"/>';
+        template.moveCursorToText('(tes¦tEvent)');
+        const refs = getRenameLocationsAtPosition(template)!;
+        expect(refs.length).toBe(2);
+        assertTextSpans(refs, ['testEvent']);
+        assertFileNames(refs, ['test-component.ts', 'app.html']);
+      });
+
+      it('should handle rename request for selectorless component from source file', () => {
+        const file = project.openFile('test-component.ts');
+        const template = project.openFile('app.html');
+        template.contents =
+          '<TestComponent/> {{123 + 456}} <div><TestComponent>Hello</TestComponent></div>';
+        file.moveCursorToText('export class TestCom¦ponent {');
+        const renameLocations = getRenameLocationsAtPosition(file)!;
+
+        // There are 5 locations that need to be renamed:
+        // - Source file where the component is defined.
+        // - Self-closing tag in the template.
+        // - Opening tag in the template.
+        // - Closing tag in the template.
+        // - Import in the app component.
+        expect(renameLocations.length).toBe(5);
+        assertTextSpans(renameLocations, ['TestComponent']);
+        assertFileNames(renameLocations, ['test-component.ts', 'app.html', 'app.ts']);
+      });
+    });
+  });
+
+  describe('selectorless directives', () => {
+    let project: Project;
+
+    beforeEach(() => {
+      env = LanguageServiceTestEnv.setup();
+      project = env.addProject(
+        'test',
+        {
+          'app.ts': `
+            import {Component} from '@angular/core';
+            import {TestDirective} from './test-directive';
+
+            @Component({templateUrl: './app.html'})
+            export class AppCmp {
+              numberValue!: number;
+              handleEvent() {}
+            }
+          `,
+          'test-directive.ts': `
+            import {Directive, EventEmitter, Input, Output} from '@angular/core';
+
+            @Directive()
+            export class TestDirective {
+              @Input() value!: number;
+              @Output() testEvent = new EventEmitter<number>();
+            }
+          `,
+          'app.html': 'Will be overridden',
+        },
+        {_enableSelectorless: true},
+      );
+    });
+
+    describe('references', () => {
+      it('should find references to selectorless directive from source file', () => {
+        const file = project.openFile('test-directive.ts');
+        const template = project.openFile('app.html');
+        template.contents = '<div @TestDirective></div>';
+        file.moveCursorToText('export class TestDir¦ective {');
+        const refs = getReferencesAtPosition(file)!;
+        expect(refs.length).toBe(3);
+        assertTextSpans(refs, ['TestDirective', '@TestDirective']);
+        assertFileNames(refs, ['test-directive.ts', 'app.html', 'app.ts']);
+      });
+
+      it('should find references to selectorless directive from template', () => {
+        const template = project.openFile('app.html');
+        template.contents = '<div @TestDirective></div>';
+        template.moveCursorToText('<div @TestDir¦ective></div>');
+        const refs = getReferencesAtPosition(template)!;
+        expect(refs.length).toBe(3);
+        assertTextSpans(refs, ['TestDirective', '@TestDirective']);
+        assertFileNames(refs, ['test-directive.ts', 'app.html', 'app.ts']);
+      });
+
+      it('should find references to selectorless directive inputs from source file', () => {
+        const file = project.openFile('test-directive.ts');
+        const template = project.openFile('app.html');
+        template.contents = '<div @TestDirective([value]="numberValue")></div>';
+        file.moveCursorToText('@Input() val¦ue!: number;');
+        const refs = getReferencesAtPosition(file)!;
+        expect(refs.length).toBe(2);
+        assertTextSpans(refs, ['value']);
+        assertFileNames(refs, ['test-directive.ts', 'app.html']);
+      });
+
+      it('should find references to selectorless directive inputs from template', () => {
+        const template = project.openFile('app.html');
+        template.contents = '<div @TestDirective([value]="numberValue")></div>';
+        template.moveCursorToText('[val¦ue]');
+        const refs = getReferencesAtPosition(template)!;
+        expect(refs.length).toBe(2);
+        assertTextSpans(refs, ['value']);
+        assertFileNames(refs, ['test-directive.ts', 'app.html']);
+      });
+
+      it('should find references to selectorless directive outputs from source file', () => {
+        const file = project.openFile('test-directive.ts');
+        const template = project.openFile('app.html');
+        template.contents = '<div @TestDirective((testEvent)="handleEvent()")></div>';
+        file.moveCursorToText('@Output() test¦Event = new EventEmitter<number>();');
+        const refs = getReferencesAtPosition(file)!;
+        expect(refs.length).toBe(2);
+        assertTextSpans(refs, ['testEvent']);
+        assertFileNames(refs, ['test-directive.ts', 'app.html']);
+      });
+
+      it('should find references to selectorless directive outputs from template', () => {
+        const template = project.openFile('app.html');
+        template.contents = '<div @TestDirective((testEvent)="handleEvent()")></div>';
+        template.moveCursorToText('(tes¦tEvent)');
+        const refs = getReferencesAtPosition(template)!;
+        expect(refs.length).toBe(2);
+        assertTextSpans(refs, ['testEvent']);
+        assertFileNames(refs, ['test-directive.ts', 'app.html']);
+      });
+    });
+
+    describe('rename locations', () => {
+      it('should find rename locations of selectorless directive from template', () => {
+        const template = project.openFile('app.html');
+        template.contents = '<div @TestDirective></div>';
+        template.moveCursorToText('@TestDir¦ective');
+        const renameLocations = getRenameLocationsAtPosition(template)!;
+
+        // There are 3 locations that need to be renamed:
+        // - Source file where the directive is defined.
+        // - Reference on the `div` node.
+        // - Import in the app component.
+        expect(renameLocations.length).toBe(3);
+        assertTextSpans(renameLocations, ['TestDirective']);
+        assertFileNames(renameLocations, ['test-directive.ts', 'app.html', 'app.ts']);
+      });
+
+      it('should find rename locations for selectorless directive with bindings', () => {
+        const template = project.openFile('app.html');
+        template.contents = '<div @TestDirective([value]="123")>Hello</div>';
+        template.moveCursorToText('@TestDir¦ective(');
+        const renameLocations = getRenameLocationsAtPosition(template)!;
+
+        // There are 3 locations that need to be renamed:
+        // - Source file where the directive is defined.
+        // - Reference on the `div` node.
+        // - Import in the app component.
+        expect(renameLocations.length).toBe(3);
+        assertTextSpans(renameLocations, ['TestDirective']);
+        assertFileNames(renameLocations, ['test-directive.ts', 'app.html', 'app.ts']);
+      });
+
+      it('should find rename locations to selectorless directive inputs from source file', () => {
+        const file = project.openFile('test-directive.ts');
+        const template = project.openFile('app.html');
+        template.contents = '<div @TestDirective([value]="numberValue")></div>';
+        file.moveCursorToText('@Input() val¦ue!: number;');
+        const refs = getRenameLocationsAtPosition(file)!;
+        expect(refs.length).toBe(2);
+        assertTextSpans(refs, ['value']);
+        assertFileNames(refs, ['test-directive.ts', 'app.html']);
+      });
+
+      it('should find rename locations to selectorless directive inputs from template', () => {
+        const template = project.openFile('app.html');
+        template.contents = '<div @TestDirective([value]="numberValue")></div>';
+        template.moveCursorToText('[val¦ue]');
+        const refs = getRenameLocationsAtPosition(template)!;
+        expect(refs.length).toBe(2);
+        assertTextSpans(refs, ['value']);
+        assertFileNames(refs, ['test-directive.ts', 'app.html']);
+      });
+
+      it('should find rename locations to selectorless directive outputs from source file', () => {
+        const file = project.openFile('test-directive.ts');
+        const template = project.openFile('app.html');
+        template.contents = '<div @TestDirective((testEvent)="handleEvent()")></div>';
+        file.moveCursorToText('@Output() test¦Event = new EventEmitter<number>();');
+        const refs = getRenameLocationsAtPosition(file)!;
+        expect(refs.length).toBe(2);
+        assertTextSpans(refs, ['testEvent']);
+        assertFileNames(refs, ['test-directive.ts', 'app.html']);
+      });
+
+      it('should find rename locations to selectorless directive outputs from template', () => {
+        const template = project.openFile('app.html');
+        template.contents = '<div @TestDirective((testEvent)="handleEvent()")></div>';
+        template.moveCursorToText('(tes¦tEvent)');
+        const refs = getRenameLocationsAtPosition(template)!;
+        expect(refs.length).toBe(2);
+        assertTextSpans(refs, ['testEvent']);
+        assertFileNames(refs, ['test-directive.ts', 'app.html']);
+      });
+
+      it('should handle rename request for selectorless component from source file', () => {
+        const file = project.openFile('test-directive.ts');
+        const template = project.openFile('app.html');
+        template.contents =
+          '<div @TestDirective><span><input @TestDirective([value]="numberValue")></span></div>';
+        file.moveCursorToText('export class TestDir¦ective {');
+        const renameLocations = getRenameLocationsAtPosition(file)!;
+
+        // There are 4 locations that need to be renamed:
+        // - Source file where the directive is defined.
+        // - Reference on the `div` node.
+        // - Refernce on the `input` node.
+        // - Import in the app component.
+        expect(renameLocations.length).toBe(4);
+        assertTextSpans(renameLocations, ['TestDirective']);
+        assertFileNames(renameLocations, ['test-directive.ts', 'app.html', 'app.ts']);
+      });
+    });
+  });
+
+  describe('aliased selectorless', () => {
+    let project: Project;
+
+    beforeEach(() => {
+      env = LanguageServiceTestEnv.setup();
+      project = env.addProject(
+        'test',
+        {
+          'app.ts': `
+            import {Component} from '@angular/core';
+            import {TestComponent as AliasedComponent} from './test-component';
+            import {TestDirective as AliasedDirective} from './test-directive';
+
+            @Component({templateUrl: './app.html'})
+            export class AppCmp {
+              numberValue!: number;
+              handleEvent() {}
+            }
+          `,
+          'test-component.ts': `
+            import {Component, EventEmitter, Input, Output} from '@angular/core';
+
+            @Component({template: ''})
+            export class TestComponent {
+              @Input() name!: string;
+              @Output() testEvent = new EventEmitter<string>();
+            }
+          `,
+          'test-directive.ts': `
+            import {Directive, EventEmitter, Input, Output} from '@angular/core';
+
+            @Directive()
+            export class TestDirective {
+              @Input() value!: number;
+              @Output() testEvent = new EventEmitter<number>();
+            }
+          `,
+          'app.html': 'Will be overridden',
+        },
+        {_enableSelectorless: true},
+      );
+    });
+
+    it('should not rename aliased selectorless component references', () => {
+      const template = project.openFile('app.html');
+      template.contents = '<AliasedComponent/>';
+      template.moveCursorToText('<AliasedCom¦ponent/>');
+      expect(getRenameLocationsAtPosition(template)).toBeUndefined();
+    });
+
+    it('should not rename aliased selectorless directive references', () => {
+      const template = project.openFile('app.html');
+      template.contents = '<div @AliasedDirective></div>';
+      template.moveCursorToText('@AliasedDir¦ective');
+      expect(getRenameLocationsAtPosition(template)).toBeUndefined();
     });
   });
 

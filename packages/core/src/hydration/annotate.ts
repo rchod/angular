@@ -7,15 +7,22 @@
  */
 
 import {ApplicationRef} from '../application/application_ref';
+import {APP_ID} from '../application/application_tokens';
+import {
+  DEFER_BLOCK_STATE as CURRENT_DEFER_BLOCK_STATE,
+  DeferBlockTrigger,
+  HydrateTriggerDetails,
+  TDeferBlockDetails,
+} from '../defer/interfaces';
+import {getLDeferBlockDetails, getTDeferBlockDetails, isDeferBlock} from '../defer/utils';
 import {isDetachedByI18n} from '../i18n/utils';
 import {ViewEncapsulation} from '../metadata';
-import {Renderer2} from '../render';
 import {assertTNode} from '../render3/assert';
 import {collectNativeNodes, collectNativeNodesInLContainer} from '../render3/collect_native_nodes';
-import {getComponentDef} from '../render3/definition';
+import {getComponentDef} from '../render3/def_getters';
 import {CONTAINER_HEADER_OFFSET, LContainer} from '../render3/interfaces/container';
 import {isLetDeclaration, isTNodeShape, TNode, TNodeType} from '../render3/interfaces/node';
-import {RElement} from '../render3/interfaces/renderer_dom';
+import {RComment, RElement} from '../render3/interfaces/renderer_dom';
 import {
   hasI18n,
   isComponentHost,
@@ -37,7 +44,11 @@ import {
 import {unwrapLView, unwrapRNode} from '../render3/util/view_utils';
 import {TransferState} from '../transfer_state';
 
-import {unsupportedProjectionOfDomNodes} from './error_handling';
+import {
+  unsupportedProjectionOfDomNodes,
+  validateMatchingNode,
+  validateNodeExists,
+} from './error_handling';
 import {collectDomEventsInfo} from './event_replay';
 import {setJSActionAttributes} from '../event_delegation_utils';
 import {
@@ -48,6 +59,10 @@ import {
 } from './i18n';
 import {
   CONTAINERS,
+  DEFER_BLOCK_ID,
+  DEFER_BLOCK_STATE,
+  DEFER_HYDRATE_TRIGGERS,
+  DEFER_PARENT_BLOCK_ID,
   DISCONNECTED_NODES,
   ELEMENT_CONTAINERS,
   I18N_DATA,
@@ -55,6 +70,8 @@ import {
   NODES,
   NUM_ROOT_NODES,
   SerializedContainerView,
+  SerializedDeferBlock,
+  SerializedTriggerDetails,
   SerializedView,
   TEMPLATE_ID,
   TEMPLATES,
@@ -63,9 +80,12 @@ import {calcPathForNode, isDisconnectedNode} from './node_lookup_utils';
 import {isInSkipHydrationBlock, SKIP_HYDRATION_ATTR_NAME} from './skip_hydration';
 import {EVENT_REPLAY_ENABLED_DEFAULT, IS_EVENT_REPLAY_ENABLED} from './tokens';
 import {
+  convertHydrateTriggersToJsAction,
   getLNodeForHydration,
+  isIncrementalHydrationEnabled,
   NGH_ATTR_NAME,
   NGH_DATA_KEY,
+  NGH_DEFER_BLOCKS_KEY,
   processTextNodeBeforeSerialization,
   TextNodeMarker,
 } from './utils';
@@ -126,9 +146,12 @@ export interface HydrationContext {
   serializedViewCollection: SerializedViewCollection;
   corruptedTextNodes: Map<HTMLElement, TextNodeMarker>;
   isI18nHydrationEnabled: boolean;
+  isIncrementalHydrationEnabled: boolean;
   i18nChildren: Map<TView, Set<number> | null>;
   eventTypesToReplay: {regular: Set<string>; capture: Set<string>};
   shouldReplayEvents: boolean;
+  appId: string; // the value of `APP_ID`
+  deferBlocks: Map<string /* defer block id, e.g. `d0` */, SerializedDeferBlock>;
 }
 
 /**
@@ -162,7 +185,7 @@ function annotateComponentLViewForHydration(
   // Root elements might also be annotated with the `ngSkipHydration` attribute,
   // check if it's present before starting the serialization process.
   if (hostElement && !(hostElement as HTMLElement).hasAttribute(SKIP_HYDRATION_ATTR_NAME)) {
-    return annotateHostElementForHydration(hostElement as HTMLElement, lView, context);
+    return annotateHostElementForHydration(hostElement as HTMLElement, lView, null, context);
   }
   return null;
 }
@@ -191,9 +214,9 @@ function annotateLContainerForHydration(lContainer: LContainer, context: Hydrati
 
   // Serialize all views within this view container.
   const rootLView = lContainer[PARENT];
-  const rootLViewNghIndex = annotateHostElementForHydration(hostElement, rootLView, context);
+  const rootLViewNghIndex = annotateHostElementForHydration(hostElement, rootLView, null, context);
 
-  const renderer = componentLView[RENDERER] as Renderer2;
+  const renderer = componentLView[RENDERER];
 
   // For cases when a root component also acts as an anchor node for a ViewContainerRef
   // (for example, when ViewContainerRef is injected in a root component), there is a need
@@ -220,6 +243,7 @@ function annotateLContainerForHydration(lContainer: LContainer, context: Hydrati
 export function annotateForHydration(appRef: ApplicationRef, doc: Document) {
   const injector = appRef.injector;
   const isI18nHydrationEnabledVal = isI18nHydrationEnabled(injector);
+  const isIncrementalHydrationEnabledVal = isIncrementalHydrationEnabled(injector);
   const serializedViewCollection = new SerializedViewCollection();
   const corruptedTextNodes = new Map<HTMLElement, TextNodeMarker>();
   const viewRefs = appRef._views;
@@ -228,6 +252,8 @@ export function annotateForHydration(appRef: ApplicationRef, doc: Document) {
     regular: new Set<string>(),
     capture: new Set<string>(),
   };
+  const deferBlocks = new Map<string, SerializedDeferBlock>();
+  const appId = appRef.injector.get(APP_ID);
   for (const viewRef of viewRefs) {
     const lNode = getLNodeForHydration(viewRef);
 
@@ -238,9 +264,12 @@ export function annotateForHydration(appRef: ApplicationRef, doc: Document) {
         serializedViewCollection,
         corruptedTextNodes,
         isI18nHydrationEnabled: isI18nHydrationEnabledVal,
+        isIncrementalHydrationEnabled: isIncrementalHydrationEnabledVal,
         i18nChildren: new Map(),
         eventTypesToReplay,
         shouldReplayEvents,
+        appId,
+        deferBlocks,
       };
       if (isLContainer(lNode)) {
         annotateLContainerForHydration(lNode, context);
@@ -259,6 +288,15 @@ export function annotateForHydration(appRef: ApplicationRef, doc: Document) {
   const serializedViews = serializedViewCollection.getAll();
   const transferState = injector.get(TransferState);
   transferState.set(NGH_DATA_KEY, serializedViews);
+
+  if (deferBlocks.size > 0) {
+    const blocks: {[key: string]: SerializedDeferBlock} = {};
+    for (const [id, info] of deferBlocks.entries()) {
+      blocks[id] = info;
+    }
+    transferState.set(NGH_DEFER_BLOCKS_KEY, blocks);
+  }
+
   return eventTypesToReplay;
 }
 
@@ -267,11 +305,17 @@ export function annotateForHydration(appRef: ApplicationRef, doc: Document) {
  * that represent views within this lContainer.
  *
  * @param lContainer the lContainer we are serializing
+ * @param tNode the TNode that contains info about this LContainer
+ * @param lView that hosts this LContainer
+ * @param parentDeferBlockId the defer block id of the parent if it exists
  * @param context the hydration context
  * @returns an array of the `SerializedView` objects
  */
 function serializeLContainer(
   lContainer: LContainer,
+  tNode: TNode,
+  lView: LView,
+  parentDeferBlockId: string | null,
   context: HydrationContext,
 ): SerializedContainerView[] {
   const views: SerializedContainerView[] = [];
@@ -328,8 +372,95 @@ function serializeLContainer(
       serializedView = {
         [TEMPLATE_ID]: template,
         [NUM_ROOT_NODES]: numRootNodes,
-        ...serializeLView(lContainer[i] as LView, context),
       };
+
+      let isHydrateNeverBlock = false;
+
+      // If this is a defer block, serialize extra info.
+      if (isDeferBlock(lView[TVIEW], tNode)) {
+        const lDetails = getLDeferBlockDetails(lView, tNode);
+        const tDetails = getTDeferBlockDetails(lView[TVIEW], tNode);
+
+        if (context.isIncrementalHydrationEnabled && tDetails.hydrateTriggers !== null) {
+          const deferBlockId = `d${context.deferBlocks.size}`;
+
+          if (tDetails.hydrateTriggers.has(DeferBlockTrigger.Never)) {
+            isHydrateNeverBlock = true;
+          }
+
+          let rootNodes: any[] = [];
+          collectNativeNodesInLContainer(lContainer, rootNodes);
+
+          // Add defer block into info context.deferBlocks
+          const deferBlockInfo: SerializedDeferBlock = {
+            [NUM_ROOT_NODES]: rootNodes.length,
+            [DEFER_BLOCK_STATE]: lDetails[CURRENT_DEFER_BLOCK_STATE],
+          };
+
+          const serializedTriggers = serializeHydrateTriggers(tDetails.hydrateTriggers);
+          if (serializedTriggers.length > 0) {
+            deferBlockInfo[DEFER_HYDRATE_TRIGGERS] = serializedTriggers;
+          }
+
+          if (parentDeferBlockId !== null) {
+            // Serialize parent id only when it's present.
+            deferBlockInfo[DEFER_PARENT_BLOCK_ID] = parentDeferBlockId;
+          }
+
+          context.deferBlocks.set(deferBlockId, deferBlockInfo);
+
+          const node = unwrapRNode(lContainer);
+          if (node !== undefined) {
+            if ((node as Node).nodeType === Node.COMMENT_NODE) {
+              annotateDeferBlockAnchorForHydration(node as RComment, deferBlockId);
+            }
+          } else {
+            ngDevMode && validateNodeExists(node, childLView, tNode);
+            ngDevMode &&
+              validateMatchingNode(node, Node.COMMENT_NODE, null, childLView, tNode, true);
+
+            annotateDeferBlockAnchorForHydration(node as RComment, deferBlockId);
+          }
+
+          if (!isHydrateNeverBlock) {
+            // Add JSAction attributes for root nodes that use some hydration triggers
+            annotateDeferBlockRootNodesWithJsAction(tDetails, rootNodes, deferBlockId, context);
+          }
+
+          // Use current block id as parent for nested routes.
+          parentDeferBlockId = deferBlockId;
+
+          // Serialize extra info into the view object.
+          // TODO(incremental-hydration): this should be serialized and included at a different level
+          // (not at the view level).
+          serializedView[DEFER_BLOCK_ID] = deferBlockId;
+        }
+        // DEFER_BLOCK_STATE is used for reconciliation in hydration, both regular and incremental.
+        // We need to know which template is rendered when hydrating. So we serialize this state
+        // regardless of hydration type.
+        serializedView[DEFER_BLOCK_STATE] = lDetails[CURRENT_DEFER_BLOCK_STATE];
+      }
+
+      if (!isHydrateNeverBlock) {
+        // Skip serialization for component views that opted out of hydration via
+        // ngSkipHydration. This mirrors the guard in serializeLView for inline
+        // child components (see the Array.isArray branch below), but applies to
+        // components hosted inside an LContainer (e.g. created via
+        // ViewContainerRef.createComponent). Without this check, NG0503 is thrown
+        // when such a component receives projectable nodes even if ngSkipHydration
+        // is present on its host element (#67928).
+        const childHostElement = unwrapRNode(childLView[HOST]!);
+        if (
+          childLView[TVIEW].type !== TViewType.Component ||
+          childHostElement === null ||
+          !(childHostElement as HTMLElement).hasAttribute(SKIP_HYDRATION_ATTR_NAME)
+        ) {
+          Object.assign(
+            serializedView,
+            serializeLView(lContainer[i] as LView, parentDeferBlockId, context),
+          );
+        }
+      }
     }
 
     // Check if the previous view has the same shape (for example, it was
@@ -347,6 +478,30 @@ function serializeLContainer(
     }
   }
   return views;
+}
+
+function serializeHydrateTriggers(
+  triggerMap: Map<DeferBlockTrigger, HydrateTriggerDetails | null>,
+): (DeferBlockTrigger | SerializedTriggerDetails)[] {
+  const serializableDeferBlockTrigger = new Set<DeferBlockTrigger>([
+    DeferBlockTrigger.Idle,
+    DeferBlockTrigger.Immediate,
+    DeferBlockTrigger.Viewport,
+    DeferBlockTrigger.Timer,
+  ]);
+  let triggers: (DeferBlockTrigger | SerializedTriggerDetails)[] = [];
+  for (let [trigger, details] of triggerMap) {
+    if (serializableDeferBlockTrigger.has(trigger)) {
+      if (details === null) {
+        triggers.push(trigger);
+      } else if (details.type === DeferBlockTrigger.Timer) {
+        triggers.push({trigger, delay: details.delay});
+      } else {
+        triggers.push({trigger, intersectionObserverOptions: details.intersectionObserverOptions});
+      }
+    }
+  }
+  return triggers;
 }
 
 /**
@@ -391,7 +546,11 @@ function appendDisconnectedNodeIndex(ngh: SerializedView, tNodeOrNoOffsetIndex: 
  * @param context the hydration context
  * @returns the `SerializedView` object containing the data to be added to the host node
  */
-function serializeLView(lView: LView, context: HydrationContext): SerializedView {
+function serializeLView(
+  lView: LView,
+  parentDeferBlockId: string | null = null,
+  context: HydrationContext,
+): SerializedView {
   const ngh: SerializedView = {};
   const tView = lView[TVIEW];
   const i18nChildren = getOrComputeI18nChildren(tView, context);
@@ -440,25 +599,21 @@ function serializeLView(lView: LView, context: HydrationContext): SerializedView
       continue;
     }
 
+    // Serialize information about template.
+    if (isLContainer(lView[i]) && tNode.tView) {
+      ngh[TEMPLATES] ??= {};
+      ngh[TEMPLATES][noOffsetIndex] = getSsrId(tNode.tView!);
+    }
+
     // Check if a native node that represents a given TNode is disconnected from the DOM tree.
     // Such nodes must be excluded from the hydration (since the hydration won't be able to
     // find them), so the TNode ids are collected and used at runtime to skip the hydration.
-    //
     // This situation may happen during the content projection, when some nodes don't make it
     // into one of the content projection slots (for example, when there is no default
     // <ng-content /> slot in projector component's template).
     if (isDisconnectedNode(tNode, lView) && isContentProjectedNode(tNode)) {
       appendDisconnectedNodeIndex(ngh, tNode);
       continue;
-    }
-
-    // Attach `jsaction` attribute to elements that have registered listeners,
-    // thus potentially having a need to do an event replay.
-    if (nativeElementsToEventTypes && tNode.type & TNodeType.Element) {
-      const nativeElement = unwrapRNode(lView[i]) as Element;
-      if (nativeElementsToEventTypes.has(nativeElement)) {
-        setJSActionAttributes(nativeElement, nativeElementsToEventTypes.get(nativeElement)!);
-      }
     }
 
     if (Array.isArray(tNode.projection)) {
@@ -501,15 +656,7 @@ function serializeLView(lView: LView, context: HydrationContext): SerializedView
     }
 
     conditionallyAnnotateNodePath(ngh, tNode, lView, i18nChildren);
-
     if (isLContainer(lView[i])) {
-      // Serialize information about a template.
-      const embeddedTView = tNode.tView;
-      if (embeddedTView !== null) {
-        ngh[TEMPLATES] ??= {};
-        ngh[TEMPLATES][noOffsetIndex] = getSsrId(embeddedTView);
-      }
-
       // Serialize views within this LContainer.
       const hostNode = lView[i][HOST]!; // host node of this container
 
@@ -520,19 +667,35 @@ function serializeLView(lView: LView, context: HydrationContext): SerializedView
         // This is a component, serialize info about it.
         const targetNode = unwrapRNode(hostNode as LView) as RElement;
         if (!(targetNode as HTMLElement).hasAttribute(SKIP_HYDRATION_ATTR_NAME)) {
-          annotateHostElementForHydration(targetNode, hostNode as LView, context);
+          annotateHostElementForHydration(
+            targetNode,
+            hostNode as LView,
+            parentDeferBlockId,
+            context,
+          );
         }
       }
 
       ngh[CONTAINERS] ??= {};
-      ngh[CONTAINERS][noOffsetIndex] = serializeLContainer(lView[i], context);
+      ngh[CONTAINERS][noOffsetIndex] = serializeLContainer(
+        lView[i],
+        tNode,
+        lView,
+        parentDeferBlockId,
+        context,
+      );
     } else if (Array.isArray(lView[i]) && !isLetDeclaration(tNode)) {
       // This is a component, annotate the host node with an `ngh` attribute.
       // Note: Let declarations that return an array are also storing an array in the LView,
       // we need to exclude them.
       const targetNode = unwrapRNode(lView[i][HOST]!);
       if (!(targetNode as HTMLElement).hasAttribute(SKIP_HYDRATION_ATTR_NAME)) {
-        annotateHostElementForHydration(targetNode as RElement, lView[i], context);
+        annotateHostElementForHydration(
+          targetNode as RElement,
+          lView[i],
+          parentDeferBlockId,
+          context,
+        );
       }
     } else {
       // <ng-container> case
@@ -561,6 +724,19 @@ function serializeLView(lView: LView, context: HydrationContext): SerializedView
       } else if (tNode.type & TNodeType.Text) {
         const rNode = unwrapRNode(lView[i]);
         processTextNodeBeforeSerialization(context, rNode);
+      }
+    }
+
+    // Attach `jsaction` attribute to elements that have registered listeners,
+    // thus potentially having a need to do an event replay.
+    if (nativeElementsToEventTypes && tNode.type & TNodeType.Element) {
+      const nativeElement = unwrapRNode(lView[i]) as Element;
+      if (nativeElementsToEventTypes.has(nativeElement)) {
+        setJSActionAttributes(
+          nativeElement,
+          nativeElementsToEventTypes.get(nativeElement)!,
+          parentDeferBlockId,
+        );
       }
     }
   }
@@ -620,9 +796,12 @@ function conditionallyAnnotateNodePath(
  */
 function componentUsesShadowDomEncapsulation(lView: LView): boolean {
   const instance = lView[CONTEXT];
-  return instance?.constructor
-    ? getComponentDef(instance.constructor)?.encapsulation === ViewEncapsulation.ShadowDom
-    : false;
+  if (!instance?.constructor) return false;
+  const def = getComponentDef(instance.constructor);
+  return (
+    def?.encapsulation === ViewEncapsulation.ShadowDom ||
+    def?.encapsulation === ViewEncapsulation.ExperimentalIsolatedShadowDom
+  );
 }
 
 /**
@@ -641,6 +820,7 @@ function componentUsesShadowDomEncapsulation(lView: LView): boolean {
 function annotateHostElementForHydration(
   element: RElement,
   lView: LView,
+  parentDeferBlockId: string | null,
   context: HydrationContext,
 ): number | null {
   const renderer = lView[RENDERER];
@@ -656,11 +836,21 @@ function annotateHostElementForHydration(
     renderer.setAttribute(element, SKIP_HYDRATION_ATTR_NAME, '');
     return null;
   } else {
-    const ngh = serializeLView(lView, context);
+    const ngh = serializeLView(lView, parentDeferBlockId, context);
     const index = context.serializedViewCollection.add(ngh);
     renderer.setAttribute(element, NGH_ATTR_NAME, index.toString());
     return index;
   }
+}
+
+/**
+ * Annotates defer block comment node for hydration:
+ *
+ * @param comment The Host element to be annotated
+ * @param deferBlockId the id of the target defer block
+ */
+function annotateDeferBlockAnchorForHydration(comment: RComment, deferBlockId: string): void {
+  comment.textContent = `ngh=${deferBlockId}`;
 }
 
 /**
@@ -696,4 +886,32 @@ function isContentProjectedNode(tNode: TNode): boolean {
     currentTNode = currentTNode.parent as TNode;
   }
   return false;
+}
+
+/**
+ * Incremental hydration requires that any defer block root node
+ * with interaction or hover triggers have all of their root nodes
+ * trigger hydration with those events. So we need to make sure all
+ * the root nodes of that block have the proper jsaction attribute
+ * to ensure hydration is triggered, since the content is dehydrated
+ */
+function annotateDeferBlockRootNodesWithJsAction(
+  tDetails: TDeferBlockDetails,
+  rootNodes: any[],
+  parentDeferBlockId: string,
+  context: HydrationContext,
+) {
+  const actionList = convertHydrateTriggersToJsAction(tDetails.hydrateTriggers);
+  for (let et of actionList) {
+    context.eventTypesToReplay.regular.add(et);
+  }
+
+  if (actionList.length > 0) {
+    const elementNodes = (rootNodes as HTMLElement[]).filter(
+      (rn) => rn.nodeType === Node.ELEMENT_NODE,
+    );
+    for (let rNode of elementNodes) {
+      setJSActionAttributes(rNode, actionList, parentDeferBlockId);
+    }
+  }
 }

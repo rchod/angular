@@ -264,7 +264,7 @@ export abstract class AbstractControlDirective {
    * Resets the control with the provided value if the control is present.
    */
   reset(value: any = undefined): void {
-    if (this.control) this.control.reset(value);
+    this.control?.reset(value);
   }
 
   /**
@@ -278,7 +278,7 @@ export abstract class AbstractControlDirective {
    * @usageNotes
    * For example, for the following `FormGroup`:
    *
-   * ```
+   * ```ts
    * form = new FormGroup({
    *   address: new FormGroup({ street: new FormControl() })
    * });
@@ -312,7 +312,7 @@ export abstract class AbstractControlDirective {
    * @usageNotes
    * For example, for the following `FormGroup`:
    *
-   * ```
+   * ```ts
    * form = new FormGroup({
    *   address: new FormGroup({ street: new FormControl() })
    * });

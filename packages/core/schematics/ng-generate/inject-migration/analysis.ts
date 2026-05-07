@@ -9,6 +9,59 @@
 import ts from 'typescript';
 import {getAngularDecorators} from '../../utils/ng_decorators';
 import {getNamedImports} from '../../utils/typescript/imports';
+import {closestNode} from '../../utils/typescript/nodes';
+
+/** Options that can be used to configure the migration. */
+export interface MigrationOptions {
+  /** Whether to generate code that keeps injectors backwards compatible. */
+  backwardsCompatibleConstructors?: boolean;
+
+  /** Whether to migrate abstract classes. */
+  migrateAbstractClasses?: boolean;
+
+  /** Whether to make the return type of `@Optinal()` parameters to be non-nullable. */
+  nonNullableOptional?: boolean;
+
+  /**
+   * Internal-only option that determines whether the migration should try to move the
+   * initializers of class members from the constructor back into the member itself. E.g.
+   *
+   * ```
+   * // Before
+   * private foo;
+   *
+   * constructor(@Inject(BAR) private bar: Bar) {
+   *   this.foo = this.bar.getValue();
+   * }
+   *
+   * // After
+   * private bar = inject(BAR);
+   * private foo = this.bar.getValue();
+   * ```
+   */
+  _internalCombineMemberInitializers?: boolean;
+
+  /**
+   * Internal-only option that determines whether the migration should
+   * replace constructor parameter references with `this.param` property
+   * references. Only applies to references to readonly properties in
+   * initializers.
+   *
+   * ```
+   * // Before
+   * private foo;
+   *
+   * constructor(readonly service: Service) {
+   *   this.foo = service.getFoo();
+   * }
+   *
+   * // After
+   * readonly service = inject(Service);
+   * private foo = this.service.getFoo();
+   * ```
+   */
+  _internalReplaceParameterReferencesInInitializers?: boolean;
+}
 
 /** Names of decorators that enable DI on a class declaration. */
 const DECORATORS_SUPPORTING_DI = new Set([
@@ -30,12 +83,26 @@ export const DI_PARAM_SYMBOLS = new Set([
   'forwardRef',
 ]);
 
+/** Kinds of nodes which aren't injectable when set as a type of a parameter. */
+const UNINJECTABLE_TYPE_KINDS = new Set([
+  ts.SyntaxKind.TrueKeyword,
+  ts.SyntaxKind.FalseKeyword,
+  ts.SyntaxKind.NumberKeyword,
+  ts.SyntaxKind.StringKeyword,
+  ts.SyntaxKind.NullKeyword,
+  ts.SyntaxKind.VoidKeyword,
+]);
+
 /**
  * Finds the necessary information for the `inject` migration in a file.
  * @param sourceFile File which to analyze.
  * @param localTypeChecker Type checker scoped to the specific file.
  */
-export function analyzeFile(sourceFile: ts.SourceFile, localTypeChecker: ts.TypeChecker) {
+export function analyzeFile(
+  sourceFile: ts.SourceFile,
+  localTypeChecker: ts.TypeChecker,
+  options: MigrationOptions,
+) {
   const coreSpecifiers = getNamedImports(sourceFile, '@angular/core');
 
   // Exit early if there are no Angular imports.
@@ -64,11 +131,26 @@ export function analyzeFile(sourceFile: ts.SourceFile, localTypeChecker: ts.Type
       return;
     }
 
-    // Only visit the initializer of parameters, because we won't exclude
-    // their decorators from the identifier counting result below.
     if (ts.isParameter(node)) {
+      const closestConstructor = closestNode(node, ts.isConstructorDeclaration);
+
+      // Visiting the same parameters that we're about to remove can throw off the reference
+      // counting logic below. If we run into an initializer, we always visit its initializer
+      // and optionally visit the modifiers/decorators if it's not due to be deleted. Note that
+      // here we technically aren't dealing with the the full list of classes, but the parent class
+      // will have been visited by the time we reach the parameters.
       if (node.initializer) {
         walk(node.initializer);
+      }
+
+      if (
+        closestConstructor === null ||
+        // This is meant to avoid the case where this is a
+        // parameter inside a function placed in a constructor.
+        !closestConstructor.parameters.includes(node) ||
+        !classes.some((c) => c.constructor === closestConstructor)
+      ) {
+        node.modifiers?.forEach(walk);
       }
       return;
     }
@@ -96,6 +178,7 @@ export function analyzeFile(sourceFile: ts.SourceFile, localTypeChecker: ts.Type
       }
     } else if (ts.isClassDeclaration(node)) {
       const decorators = getAngularDecorators(localTypeChecker, ts.getDecorators(node) || []);
+      const isAbstract = !!node.modifiers?.some((m) => m.kind === ts.SyntaxKind.AbstractKeyword);
       const supportsDI = decorators.some((dec) => DECORATORS_SUPPORTING_DI.has(dec.name));
       const constructorNode = node.members.find(
         (member) =>
@@ -104,7 +187,26 @@ export function analyzeFile(sourceFile: ts.SourceFile, localTypeChecker: ts.Type
           member.parameters.length > 0,
       ) as ts.ConstructorDeclaration | undefined;
 
-      if (supportsDI && constructorNode) {
+      // Basic check to determine if all parameters are injectable. This isn't exhaustive, but it
+      // should catch the majority of cases. An exhaustive check would require a full type checker
+      // which we don't have in this migration.
+      const allParamsInjectable = !!constructorNode?.parameters.every((param) => {
+        if (!param.type || !UNINJECTABLE_TYPE_KINDS.has(param.type.kind)) {
+          return true;
+        }
+        return getAngularDecorators(localTypeChecker, ts.getDecorators(param) || []).some(
+          (dec) => dec.name === 'Inject' || dec.name === 'Attribute',
+        );
+      });
+
+      // Don't migrate abstract classes by default, because
+      // their parameters aren't guaranteed to be injectable.
+      if (
+        supportsDI &&
+        constructorNode &&
+        allParamsInjectable &&
+        (!isAbstract || options.migrateAbstractClasses)
+      ) {
         classes.push({
           node,
           constructor: constructorNode,
@@ -128,7 +230,7 @@ export function analyzeFile(sourceFile: ts.SourceFile, localTypeChecker: ts.Type
 export function getConstructorUnusedParameters(
   declaration: ts.ConstructorDeclaration,
   localTypeChecker: ts.TypeChecker,
-  removedStatements: Set<ts.Statement> | null,
+  removedStatements: Set<ts.Statement>,
 ): Set<ts.Declaration> {
   const accessedTopLevelParameters = new Set<ts.Declaration>();
   const topLevelParameters = new Set<ts.Declaration>();
@@ -147,14 +249,14 @@ export function getConstructorUnusedParameters(
     return topLevelParameters;
   }
 
-  declaration.body.forEachChild(function walk(node) {
+  const analyze = (node: ts.Node) => {
     // Don't descend into statements that were removed already.
-    if (removedStatements && ts.isStatement(node) && removedStatements.has(node)) {
+    if (ts.isStatement(node) && removedStatements.has(node)) {
       return;
     }
 
     if (!ts.isIdentifier(node) || !topLevelParameterNames.has(node.text)) {
-      node.forEachChild(walk);
+      node.forEachChild(analyze);
       return;
     }
 
@@ -175,7 +277,15 @@ export function getConstructorUnusedParameters(
         }
       }
     });
+  };
+
+  declaration.parameters.forEach((param) => {
+    if (param.initializer) {
+      analyze(param.initializer);
+    }
   });
+
+  declaration.body.forEachChild(analyze);
 
   for (const param of topLevelParameters) {
     if (!accessedTopLevelParameters.has(param)) {
@@ -213,14 +323,71 @@ export function getSuperParameters(
       localTypeChecker.getSymbolAtLocation(node)?.declarations?.forEach((decl) => {
         if (ts.isParameter(decl) && topLevelParameters.has(decl)) {
           usedParams.add(decl);
+        } else if (
+          ts.isShorthandPropertyAssignment(decl) &&
+          topLevelParameterNames.has(decl.name.text)
+        ) {
+          for (const param of topLevelParameters) {
+            if (ts.isIdentifier(param.name) && decl.name.text === param.name.text) {
+              usedParams.add(param);
+              break;
+            }
+          }
         }
       });
-    } else {
+      // Parameters referenced inside callbacks can be used directly
+      // within `super` so don't descend into inline functions.
+    } else if (!isInlineFunction(node)) {
       node.forEachChild(walk);
     }
   });
 
   return usedParams;
+}
+
+/**
+ * Determines if a specific parameter has references to other parameters.
+ * @param param Parameter to check.
+ * @param allParameters All parameters of the containing function.
+ * @param localTypeChecker Type checker scoped to the current file.
+ */
+export function parameterReferencesOtherParameters(
+  param: ts.ParameterDeclaration,
+  allParameters: ts.NodeArray<ts.ParameterDeclaration>,
+  localTypeChecker: ts.TypeChecker,
+): boolean {
+  // A parameter can only reference other parameters through its initializer.
+  if (!param.initializer || allParameters.length < 2) {
+    return false;
+  }
+
+  const paramNames = new Set<string>();
+  for (const current of allParameters) {
+    if (current !== param && ts.isIdentifier(current.name)) {
+      paramNames.add(current.name.text);
+    }
+  }
+
+  let result = false;
+  const analyze = (node: ts.Node) => {
+    if (ts.isIdentifier(node) && paramNames.has(node.text) && !isAccessedViaThis(node)) {
+      const symbol = localTypeChecker.getSymbolAtLocation(node);
+      const referencesOtherParam = symbol?.declarations?.some((decl) => {
+        return (allParameters as ts.NodeArray<ts.Declaration>).includes(decl);
+      });
+
+      if (referencesOtherParam) {
+        result = true;
+      }
+    }
+
+    if (!result) {
+      node.forEachChild(analyze);
+    }
+  };
+
+  analyze(param.initializer);
+  return result;
 }
 
 /** Checks whether a parameter node declares a property on its class. */
@@ -288,4 +455,13 @@ function findSuperCall(root: ts.Node): ts.CallExpression | null {
   });
 
   return result;
+}
+
+/** Checks whether a node is an inline function. */
+export function isInlineFunction(
+  node: ts.Node,
+): node is ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFunction {
+  return (
+    ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node) || ts.isArrowFunction(node)
+  );
 }

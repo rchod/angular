@@ -6,10 +6,11 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 import {findMatchingDehydratedView} from '../../hydration/views';
+import {isDetachedByI18n} from '../../i18n/utils';
 import {newArray} from '../../util/array_utils';
 import {assertLContainer, assertTNode} from '../assert';
 import {ComponentTemplate} from '../interfaces/definition';
-import {TAttributes, TElementNode, TNode, TNodeFlags, TNodeType} from '../interfaces/node';
+import {TAttributes, TElementNode, TNode, TNodeType} from '../interfaces/node';
 import {ProjectionSlots} from '../interfaces/projection';
 import {
   DECLARATION_COMPONENT_VIEW,
@@ -26,14 +27,11 @@ import {
   isSelectorInSelectorList,
 } from '../node_selector_matcher';
 import {getLView, getTView, isInSkipHydrationBlock, setCurrentTNodeAsNotParent} from '../state';
-import {
-  addLViewToLContainer,
-  createAndRenderEmbeddedLView,
-  shouldAddViewToDom,
-} from '../view_manipulation';
+import {getOrCreateTNode} from '../tnode_manipulation';
+import {addLViewToLContainer} from '../view/container';
+import {createAndRenderEmbeddedLView, shouldAddViewToDom} from '../view_manipulation';
 
-import {getOrCreateTNode} from './shared';
-import {declareTemplate} from './template';
+import {declareNoDirectiveHostTemplate} from './template';
 
 /**
  * Checks a given node against matching projection slots and returns the
@@ -95,7 +93,7 @@ export function matchingProjectionSlotIndex(
  *
  * @codeGenApi
  */
-export function ɵɵprojectionDef(projectionSlots?: ProjectionSlots): void {
+export function ɵɵprojectionDef(projectionSlots?: (string | (string | number)[][])[]): void {
   const componentNode = getLView()[DECLARATION_COMPONENT_VIEW][T_HOST] as TElementNode;
 
   if (!componentNode.projection) {
@@ -114,7 +112,7 @@ export function ɵɵprojectionDef(projectionSlots?: ProjectionSlots): void {
       // Do not project let declarations so they don't occupy a slot.
       if (componentChild.type !== TNodeType.LetDeclaration) {
         const slotIndex = projectionSlots
-          ? matchingProjectionSlotIndex(componentChild, projectionSlots)
+          ? matchingProjectionSlotIndex(componentChild, projectionSlots as ProjectionSlots)
           : 0;
 
         if (slotIndex !== null) {
@@ -151,7 +149,7 @@ export function ɵɵprojectionDef(projectionSlots?: ProjectionSlots): void {
 export function ɵɵprojection(
   nodeIndex: number,
   selectorIndex: number = 0,
-  attrs?: TAttributes,
+  attrs?: TAttributes | null,
   fallbackTemplateFn?: ComponentTemplate<unknown>,
   fallbackDecls?: number,
   fallbackVars?: number,
@@ -164,7 +162,7 @@ export function ɵɵprojection(
   // instances of the component may or may not insert it. Also it needs to be declare *before*
   // the projection node in order to work correctly with hydration.
   if (fallbackIndex !== null) {
-    declareTemplate(
+    declareNoDirectiveHostTemplate(
       lView,
       tView,
       fallbackIndex,
@@ -200,10 +198,7 @@ export function ɵɵprojection(
 
   if (isEmpty && fallbackIndex !== null) {
     insertFallbackContent(lView, tView, fallbackIndex);
-  } else if (
-    isNodeCreationMode &&
-    (tProjectionNode.flags & TNodeFlags.isDetached) !== TNodeFlags.isDetached
-  ) {
+  } else if (isNodeCreationMode && !isDetachedByI18n(tProjectionNode)) {
     // re-distribution of projectable nodes is stored on a component's view level
     applyProjection(tView, lView, tProjectionNode);
   }

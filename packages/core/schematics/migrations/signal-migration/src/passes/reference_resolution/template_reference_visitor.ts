@@ -8,32 +8,32 @@
 
 import ts from 'typescript';
 
-import {SymbolKind, TemplateTypeChecker} from '@angular/compiler-cli/src/ngtsc/typecheck/api';
+import {SymbolKind, TemplateTypeChecker} from '@angular/compiler-cli/private/migrations';
 import {
   AST,
+  Binary,
   BindingType,
+  Conditional,
   ImplicitReceiver,
   LiteralMap,
   ParsedEventType,
   PropertyRead,
-  PropertyWrite,
   RecursiveAstVisitor,
   SafePropertyRead,
-  ThisReceiver,
   TmplAstBoundAttribute,
   TmplAstBoundEvent,
   TmplAstBoundText,
   TmplAstDeferredBlock,
   TmplAstForLoopBlock,
   TmplAstIfBlockBranch,
+  TmplAstLetDeclaration,
   TmplAstNode,
   TmplAstRecursiveVisitor,
   TmplAstSwitchBlock,
   TmplAstSwitchBlockCase,
   TmplAstTemplate,
   tmplAstVisitAll,
-} from '../../../../../../../compiler';
-import {BoundAttribute, BoundEvent} from '../../../../../../../compiler/src/render3/r3_ast';
+} from '@angular/compiler';
 import {lookupPropertyAccess} from '../../../../../utils/tsurge/helpers/ast/lookup_property_access';
 import {ClassFieldDescriptor, KnownFields} from './known_fields';
 
@@ -81,6 +81,7 @@ export class TemplateReferenceVisitor<
     templateTypeChecker: TemplateTypeChecker,
     componentClass: ts.ClassDeclaration,
     knownFields: KnownFields<D>,
+    fieldNamesToConsiderForReferenceLookup: Set<string> | null,
   ) {
     super();
     this.expressionVisitor = new TemplateExpressionReferenceVisitor(
@@ -88,6 +89,7 @@ export class TemplateReferenceVisitor<
       templateTypeChecker,
       componentClass,
       knownFields,
+      fieldNamesToConsiderForReferenceLookup,
     );
   }
 
@@ -222,6 +224,10 @@ export class TemplateReferenceVisitor<
       this.templateAttributeReferencedFields.push(...referencedFields);
     }
   }
+
+  override visitLetDeclaration(decl: TmplAstLetDeclaration): void {
+    this.checkExpressionForReferencedFields(decl, decl.value);
+  }
 }
 
 /**
@@ -238,12 +244,14 @@ export class TemplateExpressionReferenceVisitor<
   private activeTmplAstNode: ExprContext | null = null;
   private detectedInputReferences: TmplInputExpressionReference<ExprContext, D>[] = [];
   private isInsideObjectShorthandExpression = false;
+  private insideConditionalExpressionsWithReads: AST[] = [];
 
   constructor(
     private typeChecker: ts.TypeChecker,
     private templateTypeChecker: TemplateTypeChecker | null,
     private componentClass: ts.ClassDeclaration,
     private knownFields: KnownFields<D>,
+    private fieldNamesToConsiderForReferenceLookup: Set<string> | null,
   ) {
     super();
   }
@@ -269,33 +277,52 @@ export class TemplateExpressionReferenceVisitor<
   // E.g. `{bla}` may be transformed to `{bla: bla()}`.
   override visitLiteralMap(ast: LiteralMap, context: any) {
     for (const [idx, key] of ast.keys.entries()) {
-      this.isInsideObjectShorthandExpression = !!key.isShorthandInitialized;
+      this.isInsideObjectShorthandExpression =
+        key.kind === 'property' && !!key.isShorthandInitialized;
       (ast.values[idx] as AST).visit(this, context);
       this.isInsideObjectShorthandExpression = false;
     }
   }
 
   override visitPropertyRead(ast: PropertyRead, context: AST[]) {
-    this._inspectPropertyAccess(ast, context);
+    this._inspectPropertyAccess(ast, false, context);
     super.visitPropertyRead(ast, context);
   }
   override visitSafePropertyRead(ast: SafePropertyRead, context: AST[]) {
-    this._inspectPropertyAccess(ast, context);
+    this._inspectPropertyAccess(ast, false, context);
     super.visitPropertyRead(ast, context);
   }
 
-  override visitPropertyWrite(ast: PropertyWrite, context: AST[]) {
-    this._inspectPropertyAccess(ast, context);
-    super.visitPropertyWrite(ast, context);
+  override visitBinary(ast: Binary, context: AST[]) {
+    if (ast.operation === '=' && ast.left instanceof PropertyRead) {
+      this._inspectPropertyAccess(ast.left, true, [...context, ast, ast.left]);
+    } else {
+      super.visitBinary(ast, context);
+    }
+  }
+
+  override visitConditional(ast: Conditional, context: AST[]) {
+    this.visit(ast.condition, context);
+    this.insideConditionalExpressionsWithReads.push(ast.condition);
+    this.visit(ast.trueExp, context);
+    this.visit(ast.falseExp, context);
+    this.insideConditionalExpressionsWithReads.pop();
   }
 
   /**
    * Inspects the property access and attempts to resolve whether they access
    * a known field. If so, the result is captured.
    */
-  private _inspectPropertyAccess(ast: PropertyRead | PropertyWrite, astPath: AST[]) {
+  private _inspectPropertyAccess(ast: PropertyRead, isAssignment: boolean, astPath: AST[]) {
+    if (
+      this.fieldNamesToConsiderForReferenceLookup !== null &&
+      !this.fieldNamesToConsiderForReferenceLookup.has(ast.name)
+    ) {
+      return;
+    }
+
     const isWrite = !!(
-      ast instanceof PropertyWrite ||
+      isAssignment ||
       (this.activeTmplAstNode && isTwoWayBindingNode(this.activeTmplAstNode))
     );
 
@@ -308,7 +335,7 @@ export class TemplateExpressionReferenceVisitor<
    * Type check block may not exist for e.g. test components, so this can return `null`.
    */
   private _checkAccessViaTemplateTypeCheckBlock(
-    ast: PropertyRead | PropertyWrite,
+    ast: PropertyRead,
     isWrite: boolean,
     astPath: AST[],
   ): boolean {
@@ -318,14 +345,19 @@ export class TemplateExpressionReferenceVisitor<
     }
 
     const symbol = this.templateTypeChecker.getSymbolOfNode(ast, this.componentClass);
-    if (symbol?.kind !== SymbolKind.Expression || symbol.tsSymbol === null) {
+    if (symbol?.kind !== SymbolKind.Expression) {
+      return false;
+    }
+
+    const tsSymbol = this.templateTypeChecker.getTsSymbolOfSymbol(symbol);
+    if (tsSymbol === null) {
       return false;
     }
 
     // Dangerous: Type checking symbol retrieval is a totally different `ts.Program`,
     // than the one where we analyzed `knownInputs`.
     // --> Find the input via its input id.
-    const targetInput = this.knownFields.attemptRetrieveDescriptorFromSymbol(symbol.tsSymbol);
+    const targetInput = this.knownFields.attemptRetrieveDescriptorFromSymbol(tsSymbol);
 
     if (targetInput === null) {
       return false;
@@ -337,7 +369,7 @@ export class TemplateExpressionReferenceVisitor<
       read: ast,
       readAstPath: astPath,
       context: this.activeTmplAstNode!,
-      isLikelyNarrowed: false,
+      isLikelyNarrowed: this._isPartOfNarrowingTernary(ast),
       isObjectShorthandExpression: this.isInsideObjectShorthandExpression,
       isWrite,
     });
@@ -353,7 +385,7 @@ export class TemplateExpressionReferenceVisitor<
    * e.g. `this.bla` is resolved via `CompType#bla` and further.
    */
   private _checkAccessViaOwningComponentClassType(
-    ast: PropertyRead | PropertyWrite,
+    ast: PropertyRead,
     isWrite: boolean,
     astPath: AST[],
   ): void {
@@ -390,10 +422,19 @@ export class TemplateExpressionReferenceVisitor<
       read: ast,
       readAstPath: astPath,
       context: this.activeTmplAstNode!,
-      isLikelyNarrowed: false,
+      isLikelyNarrowed: this._isPartOfNarrowingTernary(ast),
       isObjectShorthandExpression: this.isInsideObjectShorthandExpression,
       isWrite,
     });
+  }
+
+  private _isPartOfNarrowingTernary(read: PropertyRead) {
+    // Note: We do not safe check that the reads are fully matching 1:1. This is acceptable
+    // as worst case we just skip an input from being migrated. This is very unlikely too.
+    return this.insideConditionalExpressionsWithReads.some(
+      (r): r is PropertyRead | SafePropertyRead =>
+        (r instanceof PropertyRead || r instanceof SafePropertyRead) && r.name === read.name,
+    );
   }
 }
 
@@ -402,18 +443,18 @@ export class TemplateExpressionReferenceVisitor<
  * of the given class. The resolved symbol of the access is returned.
  */
 function traverseReceiverAndLookupSymbol(
-  readOrWrite: PropertyRead | PropertyWrite,
+  readOrWrite: PropertyRead,
   componentClass: ts.ClassDeclaration & {name: ts.Identifier},
   checker: ts.TypeChecker,
 ) {
   const path: string[] = [readOrWrite.name];
   let node = readOrWrite;
-  while (node.receiver instanceof PropertyRead || node.receiver instanceof PropertyWrite) {
+  while (node.receiver instanceof PropertyRead) {
     node = node.receiver;
     path.unshift(node.name);
   }
 
-  if (!(node.receiver instanceof ImplicitReceiver || node.receiver instanceof ThisReceiver)) {
+  if (!(node.receiver instanceof ImplicitReceiver)) {
     return null;
   }
 
@@ -430,7 +471,7 @@ function traverseReceiverAndLookupSymbol(
 /** Whether the given node refers to a two-way binding AST node. */
 function isTwoWayBindingNode(node: unknown): boolean {
   return (
-    (node instanceof BoundAttribute && node.type === BindingType.TwoWay) ||
-    (node instanceof BoundEvent && node.type === ParsedEventType.TwoWay)
+    (node instanceof TmplAstBoundAttribute && node.type === BindingType.TwoWay) ||
+    (node instanceof TmplAstBoundEvent && node.type === ParsedEventType.TwoWay)
   );
 }

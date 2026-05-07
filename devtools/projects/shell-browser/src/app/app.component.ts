@@ -7,12 +7,14 @@
  */
 
 import {ChangeDetectorRef, Component, inject, OnInit} from '@angular/core';
-import {Events, MessageBus} from 'protocol';
+import {DevToolsComponent} from '../../../ng-devtools';
+import {Events, MessageBus} from '../../../protocol';
 
 @Component({
   selector: 'app-root',
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.scss'],
+  imports: [DevToolsComponent],
 })
 export class AppComponent implements OnInit {
   private _cd = inject(ChangeDetectorRef);

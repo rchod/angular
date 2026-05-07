@@ -6,22 +6,18 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
-import {ChangeDetectionStrategy, Component} from '@angular/core';
+import {Component, VERSION} from '@angular/core';
 import {ExternalLink} from '@angular/docs';
 import {RouterLink} from '@angular/router';
-import {GITHUB, X, MEDIUM, YOUTUBE} from './../../constants/links';
+import {ANGULAR_LINKS} from '../../constants/links';
 
 @Component({
   selector: 'footer[adev-footer]',
-  standalone: true,
   imports: [ExternalLink, RouterLink],
   templateUrl: './footer.component.html',
   styleUrls: ['./footer.component.scss'],
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class Footer {
-  readonly GITHUB = GITHUB;
-  readonly X = X;
-  readonly YOUTUBE = YOUTUBE;
-  readonly MEDIUM = MEDIUM;
+  protected angularVersion = VERSION.full;
+  protected ngLinks = ANGULAR_LINKS;
 }

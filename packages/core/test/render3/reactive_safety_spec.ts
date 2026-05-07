@@ -6,9 +6,9 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
+import {getActiveConsumer} from '../../primitives/signals';
 import {
   Component,
-  ComponentFactoryResolver,
   createComponent,
   createEnvironmentInjector,
   effect,
@@ -23,11 +23,9 @@ import {
   TemplateRef,
   ViewChild,
   ViewContainerRef,
-} from '@angular/core';
-import {getActiveConsumer} from '@angular/core/primitives/signals';
-import {createInjector} from '@angular/core/src/di/create_injector';
-import {setUseMicrotaskEffectsByDefault} from '@angular/core/src/render3/reactivity/effect';
-import {TestBed} from '@angular/core/testing';
+} from '../../src/core';
+import {createInjector} from '../../src/di/create_injector';
+import {TestBed} from '../../testing';
 
 /*
  * Contains tests which validate that certain actions within the framework (for example, creating
@@ -35,16 +33,9 @@ import {TestBed} from '@angular/core/testing';
  */
 
 describe('reactive safety', () => {
-  let prev: boolean;
-  beforeEach(() => {
-    prev = setUseMicrotaskEffectsByDefault(false);
-  });
-  afterEach(() => setUseMicrotaskEffectsByDefault(prev));
-
   describe('view creation', () => {
     it('should be safe to call ViewContainerRef.createEmbeddedView', () => {
       @Component({
-        standalone: true,
         template: `<ng-template #tmpl>Template</ng-template>`,
       })
       class TestCmp {
@@ -60,7 +51,6 @@ describe('reactive safety', () => {
 
     it('should be safe to call TemplateRef.create', () => {
       @Component({
-        standalone: true,
         template: `<ng-template #tmpl>Template</ng-template>`,
       })
       class TestCmp {
@@ -75,7 +65,6 @@ describe('reactive safety', () => {
 
     it('should be safe to call createComponent', () => {
       @Component({
-        standalone: true,
         template: '',
       })
       class TestCmp {
@@ -90,7 +79,6 @@ describe('reactive safety', () => {
 
     it('should be safe to call ComponentFactory.create()', () => {
       @Component({
-        standalone: true,
         template: '',
       })
       class TestCmp {
@@ -99,15 +87,14 @@ describe('reactive safety', () => {
         }
       }
 
-      const injector = TestBed.inject(EnvironmentInjector);
-      const resolver = TestBed.inject(ComponentFactoryResolver);
-      const factory = resolver.resolveComponentFactory(TestCmp);
-      expectNotToThrowInReactiveContext(() => factory.create(injector));
+      const environmentInjector = TestBed.inject(EnvironmentInjector);
+      expectNotToThrowInReactiveContext(() => {
+        createComponent(TestCmp, {environmentInjector});
+      });
     });
 
     it('should be safe to flip @if to true', () => {
       @Component({
-        standalone: true,
         template: `
           @if (cond) {
             (creating this view should not throw)
@@ -122,7 +109,7 @@ describe('reactive safety', () => {
       fix.detectChanges();
       expectNotToThrowInReactiveContext(() => {
         fix.componentInstance.cond = true;
-        fix.detectChanges();
+        fix.changeDetectorRef.detectChanges();
       });
     });
   });
@@ -130,7 +117,6 @@ describe('reactive safety', () => {
   describe('view destruction', () => {
     it('should be safe to destroy a ComponentRef', () => {
       @Component({
-        standalone: true,
         template: '',
       })
       class HostCmp {
@@ -138,7 +124,6 @@ describe('reactive safety', () => {
       }
 
       @Component({
-        standalone: true,
         template: '',
       })
       class GuestCmp {
@@ -227,7 +212,6 @@ describe('reactive safety', () => {
   describe('outputs', () => {
     it('should be safe to emit an output', () => {
       @Component({
-        standalone: true,
         template: '',
       })
       class TestCmp {
@@ -251,5 +235,5 @@ function expectNotToThrowInReactiveContext(fn: () => void): void {
     },
     {injector},
   );
-  TestBed.flushEffects();
+  TestBed.tick();
 }

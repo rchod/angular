@@ -6,8 +6,13 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
-export {HttpBackend, HttpHandler} from './src/backend';
-export {HttpClient} from './src/client';
+export {
+  HttpBackend,
+  HttpHandler,
+  // The following private symbols isn't used outside this package but has a usage in G3.
+  HttpInterceptorHandler as ɵHttpInterceptingHandler,
+} from './src/backend';
+export {HttpClient, HttpClientCommonOptions} from './src/client';
 export {HttpContext, HttpContextToken} from './src/context';
 export {FetchBackend} from './src/fetch';
 export {HttpHeaders} from './src/headers';
@@ -16,8 +21,6 @@ export {
   HttpHandlerFn,
   HttpInterceptor,
   HttpInterceptorFn,
-  HttpInterceptorHandler as ɵHttpInterceptorHandler,
-  HttpInterceptorHandler as ɵHttpInterceptingHandler,
 } from './src/interceptor';
 export {JsonpClientBackend, JsonpInterceptor} from './src/jsonp';
 export {HttpClientJsonpModule, HttpClientModule, HttpClientXsrfModule} from './src/module';
@@ -37,9 +40,12 @@ export {
   withJsonpSupport,
   withNoXsrfProtection,
   withRequestsMadeViaParent,
+  withXhr,
   withXsrfConfiguration,
 } from './src/provider';
-export {HttpRequest} from './src/request';
+export {HttpRequest, HttpRequestOptions} from './src/request';
+export {httpResource, HttpResourceFn} from './src/resource';
+export {HttpResourceOptions, HttpResourceRef, HttpResourceRequest} from './src/resource_api';
 export {
   HttpDownloadProgressEvent,
   HttpErrorResponse,
@@ -55,9 +61,9 @@ export {
   HttpUserEvent,
 } from './src/response';
 export {
+  HTTP_TRANSFER_CACHE_ORIGIN_MAP,
   HttpTransferCacheOptions,
   withHttpTransferCache as ɵwithHttpTransferCache,
-  HTTP_TRANSFER_CACHE_ORIGIN_MAP,
 } from './src/transfer_cache';
 export {HttpXhrBackend} from './src/xhr';
 export {HttpXsrfTokenExtractor} from './src/xsrf';

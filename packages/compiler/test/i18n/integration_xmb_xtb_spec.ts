@@ -6,9 +6,8 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
-import {Xmb} from '@angular/compiler/src/i18n/serializers/xmb';
-import {waitForAsync} from '@angular/core/testing';
-import {expect} from '@angular/platform-browser/testing/src/matchers';
+import {Xmb} from '../../src/i18n/serializers/xmb';
+import {expect} from '@angular/private/testing/matchers';
 
 import {
   configureCompiler,
@@ -21,10 +20,10 @@ import {
 // TODO(alxhub): figure out if this test is still relevant.
 xdescribe('i18n XMB/XTB integration spec', () => {
   describe('(with LF line endings)', () => {
-    beforeEach(waitForAsync(() => configureCompiler(XTB + LF_LINE_ENDING_XTB, 'xtb')));
+    beforeEach(() => configureCompiler(XTB + LF_LINE_ENDING_XTB, 'xtb'));
 
     it('should extract from templates', () => {
-      const serializer = new Xmb(/* preservePlaceholders */ true);
+      const serializer = new Xmb();
       const serializedXmb = serializeTranslations(HTML, serializer);
 
       XMB.forEach((x) => {
@@ -40,10 +39,10 @@ xdescribe('i18n XMB/XTB integration spec', () => {
   });
 
   describe('(with CRLF line endings', () => {
-    beforeEach(waitForAsync(() => configureCompiler(XTB + CRLF_LINE_ENDING_XTB, 'xtb')));
+    beforeEach(() => configureCompiler(XTB + CRLF_LINE_ENDING_XTB, 'xtb'));
 
     it('should extract from templates (with CRLF line endings)', () => {
-      const serializer = new Xmb(/* preservePlaceholders */ true);
+      const serializer = new Xmb();
       const serializedXmb = serializeTranslations(HTML.replace(/\n/g, '\r\n'), serializer);
 
       XMB.forEach((x) => {

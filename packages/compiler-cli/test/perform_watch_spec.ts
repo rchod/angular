@@ -108,13 +108,13 @@ describe('perform watch', () => {
     expect(getSourceFileSpy!).toHaveBeenCalledWith(
       mainTsPath,
       jasmine.objectContaining({
-        languageVersion: ts.ScriptTarget.ES5,
+        languageVersion: ts.ScriptTarget.ES2015,
       }),
     );
     expect(getSourceFileSpy!).toHaveBeenCalledWith(
       utilTsPath,
       jasmine.objectContaining({
-        languageVersion: ts.ScriptTarget.ES5,
+        languageVersion: ts.ScriptTarget.ES2015,
       }),
     );
 
@@ -233,7 +233,7 @@ function createModuleAndCompSource(prefix: string, template: string = prefix + '
   return `
     import {Component, NgModule} from '@angular/core';
 
-    @Component({selector: '${prefix}', ${templateEntry}})
+    @Component({selector: '${prefix}', ${templateEntry}, standalone: false})
     export class ${prefix}Comp {}
 
     @NgModule({declarations: [${prefix}Comp]})

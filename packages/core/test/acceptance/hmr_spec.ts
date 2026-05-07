@@ -6,7 +6,13 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
+import {computeMsgId} from '@angular/compiler';
+import {TestBed} from '@angular/core/testing';
+import {clearTranslations, loadTranslations} from '@angular/localize';
+import {EVENT_MANAGER_PLUGINS} from '@angular/platform-browser';
+import {isNode} from '@angular/private/testing';
 import {
+  ChangeDetectionStrategy,
   Component,
   Directive,
   DoCheck,
@@ -15,30 +21,44 @@ import {
   inject,
   InjectionToken,
   Input,
+  NgZone,
   OnChanges,
   OnDestroy,
   OnInit,
   Output,
+  provideZoneChangeDetection,
   QueryList,
   SimpleChanges,
   Type,
   ViewChild,
   ViewChildren,
+  ViewContainerRef,
+  ViewEncapsulation,
   ɵNG_COMP_DEF,
   ɵɵreplaceMetadata,
-} from '@angular/core';
-import {TestBed} from '@angular/core/testing';
-import {compileComponent} from '@angular/core/src/render3/jit/directive';
-import {clearTranslations, loadTranslations} from '@angular/localize';
-import {computeMsgId} from '@angular/compiler';
+  ɵɵsetComponentScope,
+} from '../../src/core';
+import {NUM_ROOT_NODES} from '../../src/hydration/interfaces';
+import {ComponentType} from '../../src/render3';
+import {DEHYDRATED_VIEWS} from '../../src/render3/interfaces/container';
+import {isLContainer} from '../../src/render3/interfaces/type_checks';
+import {HEADER_OFFSET, TVIEW} from '../../src/render3/interfaces/view';
+import {compileComponent} from '../../src/render3/jit/directive';
+import {angularCoreEnv} from '../../src/render3/jit/environment';
+import {getComponentLView} from '../../src/render3/util/discovery_utils';
 
 describe('hot module replacement', () => {
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [provideZoneChangeDetection()],
+    });
+  });
   it('should recreate a single usage of a basic component', () => {
     let instance!: ChildCmp;
     const initialMetadata: Component = {
       selector: 'child-cmp',
-      standalone: true,
       template: 'Hello <strong>{{state}}</strong>',
+      changeDetection: ChangeDetectionStrategy.Eager,
     };
 
     @Component(initialMetadata)
@@ -51,9 +71,10 @@ describe('hot module replacement', () => {
     }
 
     @Component({
-      standalone: true,
       imports: [ChildCmp],
       template: '<child-cmp/>',
+
+      changeDetection: ChangeDetectionStrategy.Eager,
     })
     class RootCmp {}
 
@@ -84,6 +105,7 @@ describe('hot module replacement', () => {
     replaceMetadata(ChildCmp, {
       ...initialMetadata,
       template: `Changed <strong>{{state}}</strong>!`,
+      changeDetection: ChangeDetectionStrategy.Eager,
     });
     fixture.detectChanges();
 
@@ -104,8 +126,8 @@ describe('hot module replacement', () => {
   it('should recreate multiple usages of a complex component', () => {
     const initialMetadata: Component = {
       selector: 'child-cmp',
-      standalone: true,
       template: '<span>ChildCmp (orig)</span><h1>{{ text }}</h1>',
+      changeDetection: ChangeDetectionStrategy.Eager,
     };
 
     @Component(initialMetadata)
@@ -114,18 +136,19 @@ describe('hot module replacement', () => {
     }
 
     @Component({
-      standalone: true,
       imports: [ChildCmp],
       template: `
         <i>Unrelated node #1</i>
-        <child-cmp text="A"/>
+        <child-cmp text="A" />
         <u>Unrelated node #2</u>
-        <child-cmp text="B"/>
+        <child-cmp text="B" />
         <b>Unrelated node #3</b>
         <main>
-          <child-cmp text="C"/>
+          <child-cmp text="C" />
         </main>
       `,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
     })
     class RootCmp {}
 
@@ -160,6 +183,7 @@ describe('hot module replacement', () => {
         <h2>{{ text }}</h2>
         <div>Extra node!</div>
       `,
+      changeDetection: ChangeDetectionStrategy.Eager,
     });
     fixture.detectChanges();
 
@@ -197,8 +221,8 @@ describe('hot module replacement', () => {
   it('should not recreate sub-classes of a component being replaced', () => {
     const initialMetadata: Component = {
       selector: 'child-cmp',
-      standalone: true,
       template: 'Base class',
+      changeDetection: ChangeDetectionStrategy.Eager,
     };
 
     @Component(initialMetadata)
@@ -206,15 +230,17 @@ describe('hot module replacement', () => {
 
     @Component({
       selector: 'child-sub-cmp',
-      standalone: true,
       template: 'Sub class',
+
+      changeDetection: ChangeDetectionStrategy.Eager,
     })
     class ChildSubCmp extends ChildCmp {}
 
     @Component({
-      standalone: true,
       imports: [ChildCmp, ChildSubCmp],
-      template: `<child-cmp/>|<child-sub-cmp/>`,
+      template: `<child-cmp />|<child-sub-cmp />`,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
     })
     class RootCmp {}
 
@@ -232,6 +258,7 @@ describe('hot module replacement', () => {
     replaceMetadata(ChildCmp, {
       ...initialMetadata,
       template: `Replaced!`,
+      changeDetection: ChangeDetectionStrategy.Eager,
     });
     fixture.detectChanges();
 
@@ -244,11 +271,73 @@ describe('hot module replacement', () => {
     );
   });
 
+  it('should replace a component using shadow DOM encapsulation', () => {
+    // Domino doesn't support shadow DOM.
+    if (isNode) {
+      return;
+    }
+
+    let instance!: ChildCmp;
+    const initialMetadata: Component = {
+      encapsulation: ViewEncapsulation.ShadowDom,
+      selector: 'child-cmp',
+      template: 'Hello <strong>{{state}}</strong>',
+      styles: `strong {color: red;}`,
+      changeDetection: ChangeDetectionStrategy.Eager,
+    };
+
+    @Component(initialMetadata)
+    class ChildCmp {
+      state = 0;
+
+      constructor() {
+        instance = this;
+      }
+    }
+
+    @Component({
+      imports: [ChildCmp],
+      template: '<child-cmp/>',
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
+    class RootCmp {}
+
+    const fixture = TestBed.createComponent(RootCmp);
+    fixture.detectChanges();
+    const getShadowRoot = () => fixture.nativeElement.querySelector('child-cmp').shadowRoot;
+
+    markNodesAsCreatedInitially(getShadowRoot());
+    expectHTML(getShadowRoot(), `<style>strong {color: red;}</style>Hello <strong>0</strong>`);
+
+    instance.state = 1;
+    fixture.detectChanges();
+    expectHTML(getShadowRoot(), `<style>strong {color: red;}</style>Hello <strong>1</strong>`);
+
+    replaceMetadata(ChildCmp, {
+      ...initialMetadata,
+      template: `Changed <strong>{{state}}</strong>!`,
+      styles: `strong {background: pink;}`,
+      changeDetection: ChangeDetectionStrategy.Eager,
+    });
+    fixture.detectChanges();
+
+    verifyNodesWereRecreated([
+      fixture.nativeElement.querySelector('child-cmp'),
+      ...childrenOf(getShadowRoot()),
+    ]);
+
+    expectHTML(
+      getShadowRoot(),
+      `<style>strong {background: pink;}</style>Changed <strong>1</strong>!`,
+    );
+  });
+
   it('should continue binding inputs to a component that is replaced', () => {
     const initialMetadata: Component = {
       selector: 'child-cmp',
-      standalone: true,
       template: '<span>{{staticValue}}</span><strong>{{dynamicValue}}</strong>',
+      changeDetection: ChangeDetectionStrategy.Eager,
     };
 
     @Component(initialMetadata)
@@ -258,9 +347,10 @@ describe('hot module replacement', () => {
     }
 
     @Component({
-      standalone: true,
       imports: [ChildCmp],
-      template: `<child-cmp staticValue="1" [dynamicValue]="dynamicValue"/>`,
+      template: `<child-cmp staticValue="1" [dynamicValue]="dynamicValue" />`,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
     })
     class RootCmp {
       dynamicValue = '1';
@@ -299,6 +389,7 @@ describe('hot module replacement', () => {
           <strong>{{dynamicValue}}</strong>
         </main>
       `,
+      changeDetection: ChangeDetectionStrategy.Eager,
     });
     fixture.detectChanges();
     expectHTML(
@@ -331,8 +422,8 @@ describe('hot module replacement', () => {
   it('should recreate a component used inside @for', () => {
     const initialMetadata: Component = {
       selector: 'child-cmp',
-      standalone: true,
       template: 'Hello <strong>{{value}}</strong>',
+      changeDetection: ChangeDetectionStrategy.Eager,
     };
 
     @Component(initialMetadata)
@@ -341,14 +432,15 @@ describe('hot module replacement', () => {
     }
 
     @Component({
-      standalone: true,
       imports: [ChildCmp],
       template: `
         @for (current of items; track current.id) {
-          <child-cmp [value]="current.name"/>
-          <hr>
+          <child-cmp [value]="current.name" />
+          <hr />
         }
       `,
+
+      changeDetection: ChangeDetectionStrategy.Eager,
     })
     class RootCmp {
       items = [
@@ -377,6 +469,7 @@ describe('hot module replacement', () => {
     replaceMetadata(ChildCmp, {
       ...initialMetadata,
       template: `Changed <strong>{{value}}</strong>!`,
+      changeDetection: ChangeDetectionStrategy.Eager,
     });
     fixture.detectChanges();
 
@@ -413,12 +506,107 @@ describe('hot module replacement', () => {
     verifyNodesWereRecreated(recreatedNodes);
   });
 
+  it('should be able to replace a component that injects ViewContainerRef', () => {
+    const initialMetadata: Component = {
+      selector: 'child-cmp',
+      template: 'Hello <strong>world</strong>',
+      changeDetection: ChangeDetectionStrategy.Eager,
+    };
+
+    @Component(initialMetadata)
+    class ChildCmp {
+      vcr = inject(ViewContainerRef);
+    }
+
+    @Component({
+      imports: [ChildCmp],
+      template: '<child-cmp/>',
+
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
+    class RootCmp {}
+
+    const fixture = TestBed.createComponent(RootCmp);
+    fixture.detectChanges();
+    markNodesAsCreatedInitially(fixture.nativeElement);
+
+    expectHTML(
+      fixture.nativeElement,
+      `
+        <child-cmp>
+          Hello <strong>world</strong>
+        </child-cmp>
+      `,
+    );
+
+    replaceMetadata(ChildCmp, {
+      ...initialMetadata,
+      template: `Hello <i>Bob</i>!`,
+      changeDetection: ChangeDetectionStrategy.Eager,
+    });
+    fixture.detectChanges();
+
+    const recreatedNodes = childrenOf(...fixture.nativeElement.querySelectorAll('child-cmp'));
+    verifyNodesRemainUntouched(fixture.nativeElement, recreatedNodes);
+    verifyNodesWereRecreated(recreatedNodes);
+
+    expectHTML(
+      fixture.nativeElement,
+      `
+        <child-cmp>
+          Hello <i>Bob</i>!
+        </child-cmp>
+      `,
+    );
+  });
+
+  it('should carry over dependencies defined by setComponentScope', () => {
+    // In some cases the AoT compiler produces a `setComponentScope` for non-standalone
+    // components. We simulate it here by declaring two components that are not standalone
+    // and manually calling `setComponentScope`.
+    @Component({
+      selector: 'child-cmp',
+      template: 'hello',
+      standalone: false,
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
+    class ChildCmp {}
+
+    @Component({
+      template: 'Initial <child-cmp/>',
+      standalone: false,
+      changeDetection: ChangeDetectionStrategy.Eager,
+    })
+    class RootCmp {}
+
+    ɵɵsetComponentScope(RootCmp as ComponentType<RootCmp>, [ChildCmp], []);
+
+    const fixture = TestBed.createComponent(RootCmp);
+    fixture.detectChanges();
+    markNodesAsCreatedInitially(fixture.nativeElement);
+    expectHTML(fixture.nativeElement, 'Initial <child-cmp>hello</child-cmp>');
+
+    replaceMetadata(RootCmp, {
+      standalone: false,
+      template: 'Changed <child-cmp/>',
+      changeDetection: ChangeDetectionStrategy.Eager,
+    });
+    fixture.detectChanges();
+
+    const recreatedNodes = childrenOf(fixture.nativeElement);
+    verifyNodesRemainUntouched(fixture.nativeElement, recreatedNodes);
+    verifyNodesWereRecreated(recreatedNodes);
+
+    expectHTML(fixture.nativeElement, 'Changed <child-cmp>hello</child-cmp>');
+  });
+
   describe('queries', () => {
     it('should update ViewChildren query results', async () => {
       @Component({
         selector: 'child-cmp',
-        standalone: true,
         template: '<span>ChildCmp {{ text }}</span>',
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class ChildCmp {
         @Input() text = '[empty]';
@@ -426,13 +614,14 @@ describe('hot module replacement', () => {
 
       let instance!: ParentCmp;
       const initialMetadata: Component = {
-        standalone: true,
         selector: 'parent-cmp',
         imports: [ChildCmp],
         template: `
           <child-cmp text="A"/>
           <child-cmp text="B"/>
         `,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       };
 
       @Component(initialMetadata)
@@ -445,9 +634,10 @@ describe('hot module replacement', () => {
       }
 
       @Component({
-        standalone: true,
         imports: [ParentCmp],
-        template: `<parent-cmp/>`,
+        template: `<parent-cmp />`,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class RootCmp {}
 
@@ -465,6 +655,8 @@ describe('hot module replacement', () => {
           <child-cmp text="C"/>
           <child-cmp text="D"/>
         `,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       });
       fixture.detectChanges();
 
@@ -475,7 +667,6 @@ describe('hot module replacement', () => {
     it('should update ViewChild when the string points to a different element', async () => {
       let instance!: ParentCmp;
       const initialMetadata: Component = {
-        standalone: true,
         selector: 'parent-cmp',
         template: `
           <div>
@@ -484,6 +675,8 @@ describe('hot module replacement', () => {
             </span>
           </div>
         `,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       };
 
       @Component(initialMetadata)
@@ -496,9 +689,10 @@ describe('hot module replacement', () => {
       }
 
       @Component({
-        standalone: true,
         imports: [ParentCmp],
-        template: `<parent-cmp/>`,
+        template: `<parent-cmp />`,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class RootCmp {}
 
@@ -519,6 +713,8 @@ describe('hot module replacement', () => {
             <span #ref></span>
           </main>
         `,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       });
       fixture.detectChanges();
 
@@ -529,14 +725,12 @@ describe('hot module replacement', () => {
       const token = new InjectionToken<DirA | DirB>('token');
 
       @Directive({
-        standalone: true,
         selector: '[dir-a]',
         providers: [{provide: token, useExisting: DirA}],
       })
       class DirA {}
 
       @Directive({
-        standalone: true,
         selector: '[dir-b]',
         providers: [{provide: token, useExisting: DirB}],
       })
@@ -544,10 +738,11 @@ describe('hot module replacement', () => {
 
       let instance!: ParentCmp;
       const initialMetadata: Component = {
-        standalone: true,
         selector: 'parent-cmp',
         imports: [DirA, DirB],
         template: `<div #ref dir-a></div>`,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       };
 
       @Component(initialMetadata)
@@ -560,9 +755,10 @@ describe('hot module replacement', () => {
       }
 
       @Component({
-        standalone: true,
         imports: [ParentCmp],
-        template: `<parent-cmp/>`,
+        template: `<parent-cmp />`,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class RootCmp {}
 
@@ -577,6 +773,8 @@ describe('hot module replacement', () => {
             <div #ref dir-b></div>
           </section>
         `,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       });
       fixture.detectChanges();
 
@@ -587,7 +785,6 @@ describe('hot module replacement', () => {
       const token = new InjectionToken<Dir>('token');
 
       @Directive({
-        standalone: true,
         selector: '[dir]',
         providers: [{provide: token, useExisting: Dir}],
       })
@@ -595,10 +792,11 @@ describe('hot module replacement', () => {
 
       let instance!: ParentCmp;
       const initialMetadata: Component = {
-        standalone: true,
         selector: 'parent-cmp',
         imports: [Dir],
         template: `<div #ref dir></div>`,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       };
 
       @Component(initialMetadata)
@@ -611,9 +809,10 @@ describe('hot module replacement', () => {
       }
 
       @Component({
-        standalone: true,
         imports: [ParentCmp],
-        template: `<parent-cmp/>`,
+        template: `<parent-cmp />`,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class RootCmp {}
 
@@ -624,6 +823,8 @@ describe('hot module replacement', () => {
       replaceMetadata(ParentCmp, {
         ...initialMetadata,
         template: `<div #ref></div>`,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       });
       fixture.detectChanges();
 
@@ -634,16 +835,16 @@ describe('hot module replacement', () => {
   describe('content projection', () => {
     it('should work with content projection', () => {
       const initialMetadata: Component = {
-        standalone: true,
         selector: 'parent-cmp',
         template: `<ng-content/>`,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       };
 
       @Component(initialMetadata)
       class ParentCmp {}
 
       @Component({
-        standalone: true,
         imports: [ParentCmp],
         template: `
           <parent-cmp>
@@ -651,6 +852,8 @@ describe('hot module replacement', () => {
             <h2>Projected H2</h2>
           </parent-cmp>
         `,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class RootCmp {}
 
@@ -675,6 +878,8 @@ describe('hot module replacement', () => {
             <ng-content/>
           </section>
         `,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       });
       fixture.detectChanges();
 
@@ -700,16 +905,16 @@ describe('hot module replacement', () => {
     it('should handle elements moving around into different slots', () => {
       // Start off with a single catch-all slot.
       const initialMetadata: Component = {
-        standalone: true,
         selector: 'parent-cmp',
         template: `<ng-content/>`,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       };
 
       @Component(initialMetadata)
       class ParentCmp {}
 
       @Component({
-        standalone: true,
         imports: [ParentCmp],
         template: `
           <parent-cmp>
@@ -717,6 +922,8 @@ describe('hot module replacement', () => {
             <div two="2">two</div>
           </parent-cmp>
         `,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class RootCmp {}
 
@@ -741,6 +948,8 @@ describe('hot module replacement', () => {
           <section><ng-content select="[two]"/></section>
           <main><ng-content select="[one]"/></main>
         `,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       });
       fixture.detectChanges();
 
@@ -761,6 +970,8 @@ describe('hot module replacement', () => {
       replaceMetadata(ParentCmp, {
         ...initialMetadata,
         template: `<ng-content select="does-not-match"/>`,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       });
       fixture.detectChanges();
       expectHTML(fixture.nativeElement, '<parent-cmp></parent-cmp>');
@@ -769,6 +980,8 @@ describe('hot module replacement', () => {
       replaceMetadata(ParentCmp, {
         ...initialMetadata,
         template: `<span><ng-content select="[one]"/></span>`,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       });
       fixture.detectChanges();
 
@@ -786,26 +999,28 @@ describe('hot module replacement', () => {
 
     it('should handle default content for ng-content', () => {
       const initialMetadata: Component = {
-        standalone: true,
         selector: 'parent-cmp',
         template: `
           <ng-content select="will-not-match">
             <div class="default-content">Default content</div>
           </ng-content>
         `,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       };
 
       @Component(initialMetadata)
       class ParentCmp {}
 
       @Component({
-        standalone: true,
         imports: [ParentCmp],
         template: `
           <parent-cmp>
             <span>Some content</span>
           </parent-cmp>
         `,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class RootCmp {}
 
@@ -828,6 +1043,8 @@ describe('hot module replacement', () => {
             <div class="default-content">Default content</div>
           </ng-content>
         `,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       });
       fixture.detectChanges();
       expectHTML(
@@ -845,8 +1062,9 @@ describe('hot module replacement', () => {
     it('should only invoke the init/destroy hooks inside the content when replacing the template', () => {
       @Component({
         template: '',
-        standalone: true,
         selector: 'child-cmp',
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class ChildCmp implements OnInit, OnDestroy {
         @Input() text = '[empty]';
@@ -861,13 +1079,14 @@ describe('hot module replacement', () => {
       }
 
       const initialMetadata: Component = {
-        standalone: true,
         template: `
           <child-cmp text="A"/>
           <child-cmp text="B"/>
         `,
         imports: [ChildCmp],
         selector: 'parent-cmp',
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       };
       let logs: string[] = [];
 
@@ -888,11 +1107,12 @@ describe('hot module replacement', () => {
         // Note that we test two of the same component one after the other
         // specifically because during testing it was a problematic pattern.
         template: `
-          <parent-cmp text="A"/>
-          <parent-cmp text="B"/>
+          <parent-cmp text="A" />
+          <parent-cmp text="B" />
         `,
-        standalone: true,
         imports: [ParentCmp],
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class RootCmp {}
 
@@ -916,6 +1136,8 @@ describe('hot module replacement', () => {
           <child-cmp text="D"/>
           <child-cmp text="E"/>
         `,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       });
       fixture.detectChanges();
 
@@ -936,6 +1158,8 @@ describe('hot module replacement', () => {
       replaceMetadata(ParentCmp, {
         ...initialMetadata,
         template: '',
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       });
       fixture.detectChanges();
       expect(logs).toEqual([
@@ -951,8 +1175,9 @@ describe('hot module replacement', () => {
     it('should invoke checked hooks both on the host and the content being replaced', () => {
       @Component({
         template: '',
-        standalone: true,
         selector: 'child-cmp',
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class ChildCmp implements DoCheck {
         @Input() text = '[empty]';
@@ -963,10 +1188,11 @@ describe('hot module replacement', () => {
       }
 
       const initialMetadata: Component = {
-        standalone: true,
         template: `<child-cmp text="A"/>`,
         imports: [ChildCmp],
         selector: 'parent-cmp',
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       };
       let logs: string[] = [];
 
@@ -978,9 +1204,10 @@ describe('hot module replacement', () => {
       }
 
       @Component({
-        template: `<parent-cmp/>`,
-        standalone: true,
+        template: `<parent-cmp />`,
         imports: [ParentCmp],
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class RootCmp {}
 
@@ -1000,6 +1227,8 @@ describe('hot module replacement', () => {
       replaceMetadata(ParentCmp, {
         ...initialMetadata,
         template: '',
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       });
       fixture.detectChanges();
       expect(logs).toEqual(['ParentCmp checked']);
@@ -1013,6 +1242,8 @@ describe('hot module replacement', () => {
           <child-cmp text="A"/>
           <child-cmp text="B"/>
         `,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       });
       fixture.detectChanges();
       expect(logs).toEqual([
@@ -1039,8 +1270,9 @@ describe('hot module replacement', () => {
       const values: string[] = [];
       const initialMetadata: Component = {
         selector: 'child-cmp',
-        standalone: true,
         template: '',
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       };
 
       @Component(initialMetadata)
@@ -1056,9 +1288,10 @@ describe('hot module replacement', () => {
       }
 
       @Component({
-        standalone: true,
         imports: [ChildCmp],
-        template: `<child-cmp [value]="value"/>`,
+        template: `<child-cmp [value]="value" />`,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class RootCmp {
         value = 1;
@@ -1075,6 +1308,8 @@ describe('hot module replacement', () => {
       replaceMetadata(ChildCmp, {
         ...initialMetadata,
         template: 'Changed',
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       });
       fixture.detectChanges();
 
@@ -1094,6 +1329,8 @@ describe('hot module replacement', () => {
       replaceMetadata(ChildCmp, {
         ...initialMetadata,
         template: 'Changed!!!',
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       });
       fixture.detectChanges();
       fixture.componentInstance.value++;
@@ -1113,8 +1350,9 @@ describe('hot module replacement', () => {
       let count = 0;
       const initialMetadata: Component = {
         selector: 'child-cmp',
-        standalone: true,
         template: '<button (click)="clicked()"></button>',
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       };
 
       @Component(initialMetadata)
@@ -1127,9 +1365,10 @@ describe('hot module replacement', () => {
       }
 
       @Component({
-        standalone: true,
         imports: [ChildCmp],
-        template: `<child-cmp (changed)="onChange()"/>`,
+        template: `<child-cmp (changed)="onChange()" />`,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class RootCmp {
         onChange() {
@@ -1149,6 +1388,8 @@ describe('hot module replacement', () => {
       replaceMetadata(ChildCmp, {
         ...initialMetadata,
         template: '<button class="replacement" (click)="clicked()"></button>',
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       });
       fixture.detectChanges();
 
@@ -1165,8 +1406,9 @@ describe('hot module replacement', () => {
       let count = 0;
       const initialMetadata: Component = {
         selector: 'child-cmp',
-        standalone: true,
         template: '<button (click)="clicked()"></button>',
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       };
 
       @Component(initialMetadata)
@@ -1179,9 +1421,10 @@ describe('hot module replacement', () => {
       }
 
       @Component({
-        standalone: true,
         imports: [ChildCmp],
-        template: `<child-cmp (changed)="onChange()"/>`,
+        template: `<child-cmp (changed)="onChange()" />`,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class RootCmp {
         onChange() {
@@ -1201,6 +1444,8 @@ describe('hot module replacement', () => {
       replaceMetadata(ChildCmp, {
         ...initialMetadata,
         template: '<button (click)="clicked()"></button>',
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       });
       fixture.detectChanges();
 
@@ -1212,6 +1457,53 @@ describe('hot module replacement', () => {
       fixture.detectChanges();
       expect(count).toBe(2);
     });
+
+    it('should bind events inside the NgZone after a replacement', () => {
+      const calls: {name: string; inZone: boolean}[] = [];
+
+      @Component({
+        template: `<button (click)="clicked()"></button>`,
+        changeDetection: ChangeDetectionStrategy.Eager,
+      })
+      class App {
+        clicked() {}
+      }
+
+      TestBed.configureTestingModule({
+        providers: [
+          {
+            // Note: TestBed brings things into the zone even if they aren't which makes this
+            // test hard to write. We have to intercept the listener being bound at the renderer
+            // level in order to get a true sense if it'll be bound inside or outside the zone.
+            // We do so with a custom event manager.
+            provide: EVENT_MANAGER_PLUGINS,
+            multi: true,
+            useValue: {
+              supports: () => true,
+              addEventListener: (_: unknown, name: string) => {
+                calls.push({name, inZone: NgZone.isInAngularZone()});
+                return () => {};
+              },
+            },
+          },
+        ],
+      });
+
+      const fixture = TestBed.createComponent(App);
+      fixture.detectChanges();
+      expect(calls).toEqual([{name: 'click', inZone: true}]);
+
+      replaceMetadata(App, {
+        template: '<button class="foo" (click)="clicked()"></button>',
+        changeDetection: ChangeDetectionStrategy.Eager,
+      });
+      fixture.detectChanges();
+
+      expect(calls).toEqual([
+        {name: 'click', inZone: true},
+        {name: 'click', inZone: true},
+      ]);
+    });
   });
 
   describe('directives', () => {
@@ -1220,8 +1512,9 @@ describe('hot module replacement', () => {
       let destroyCount = 0;
       const initialMetadata: Component = {
         selector: 'child-cmp',
-        standalone: true,
         template: '',
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       };
 
       @Component(initialMetadata)
@@ -1235,7 +1528,7 @@ describe('hot module replacement', () => {
         }
       }
 
-      @Directive({selector: '[dir-a]', standalone: true})
+      @Directive({selector: '[dir-a]'})
       class DirA implements OnDestroy {
         constructor() {
           initLog.push('DirA init');
@@ -1246,7 +1539,7 @@ describe('hot module replacement', () => {
         }
       }
 
-      @Directive({selector: '[dir-b]', standalone: true})
+      @Directive({selector: '[dir-b]'})
       class DirB implements OnDestroy {
         constructor() {
           initLog.push('DirB init');
@@ -1258,9 +1551,10 @@ describe('hot module replacement', () => {
       }
 
       @Component({
-        standalone: true,
         imports: [ChildCmp, DirA, DirB],
-        template: `<child-cmp dir-a dir-b/>`,
+        template: `<child-cmp dir-a dir-b />`,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class RootCmp {}
 
@@ -1273,6 +1567,8 @@ describe('hot module replacement', () => {
       replaceMetadata(ChildCmp, {
         ...initialMetadata,
         template: 'Hello!',
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       });
       fixture.detectChanges();
       expect(initLog).toEqual(['ChildCmp init', 'DirA init', 'DirB init']);
@@ -1283,7 +1579,7 @@ describe('hot module replacement', () => {
       const initLog: string[] = [];
       let destroyCount = 0;
 
-      @Directive({selector: '[dir-a]', standalone: true})
+      @Directive({selector: '[dir-a]'})
       class DirA implements OnDestroy {
         constructor() {
           initLog.push('DirA init');
@@ -1294,7 +1590,7 @@ describe('hot module replacement', () => {
         }
       }
 
-      @Directive({selector: '[dir-b]', standalone: true})
+      @Directive({selector: '[dir-b]'})
       class DirB implements OnDestroy {
         constructor() {
           initLog.push('DirB init');
@@ -1307,9 +1603,10 @@ describe('hot module replacement', () => {
 
       const initialMetadata: Component = {
         selector: 'child-cmp',
-        standalone: true,
         template: '',
         hostDirectives: [DirA, DirB],
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       };
 
       @Component(initialMetadata)
@@ -1324,9 +1621,10 @@ describe('hot module replacement', () => {
       }
 
       @Component({
-        standalone: true,
         imports: [ChildCmp],
         template: '<child-cmp/>',
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class RootCmp {}
 
@@ -1339,6 +1637,8 @@ describe('hot module replacement', () => {
       replaceMetadata(ChildCmp, {
         ...initialMetadata,
         template: 'Hello!',
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       });
       fixture.detectChanges();
       expect(initLog).toEqual(['DirA init', 'DirB init', 'ChildCmp init']);
@@ -1351,14 +1651,14 @@ describe('hot module replacement', () => {
       let instance!: ChildCmp;
       const injectedInstances: [unknown, ChildCmp][] = [];
 
-      @Directive({selector: '[dir-a]', standalone: true})
+      @Directive({selector: '[dir-a]'})
       class DirA {
         constructor() {
           injectedInstances.push([this, inject(ChildCmp)]);
         }
       }
 
-      @Directive({selector: '[dir-b]', standalone: true})
+      @Directive({selector: '[dir-b]'})
       class DirB {
         constructor() {
           injectedInstances.push([this, inject(ChildCmp)]);
@@ -1367,9 +1667,10 @@ describe('hot module replacement', () => {
 
       const initialMetadata: Component = {
         selector: 'child-cmp',
-        standalone: true,
         template: '<div dir-a></div>',
         imports: [DirA, DirB],
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       };
 
       @Component(initialMetadata)
@@ -1380,9 +1681,10 @@ describe('hot module replacement', () => {
       }
 
       @Component({
-        standalone: true,
         imports: [ChildCmp],
         template: '<child-cmp/>',
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class RootCmp {}
 
@@ -1394,6 +1696,8 @@ describe('hot module replacement', () => {
       replaceMetadata(ChildCmp, {
         ...initialMetadata,
         template: '<div dir-b></div>',
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       });
       fixture.detectChanges();
 
@@ -1407,14 +1711,14 @@ describe('hot module replacement', () => {
       const token = new InjectionToken<string>('TEST_TOKEN');
       const injectedValues: [unknown, string][] = [];
 
-      @Directive({selector: '[dir-a]', standalone: true})
+      @Directive({selector: '[dir-a]'})
       class DirA {
         constructor() {
           injectedValues.push([this, inject(token)]);
         }
       }
 
-      @Directive({selector: '[dir-b]', standalone: true})
+      @Directive({selector: '[dir-b]'})
       class DirB {
         constructor() {
           injectedValues.push([this, inject(token)]);
@@ -1423,19 +1727,21 @@ describe('hot module replacement', () => {
 
       const initialMetadata: Component = {
         selector: 'child-cmp',
-        standalone: true,
         template: '<div dir-a></div>',
         imports: [DirA, DirB],
         providers: [{provide: token, useValue: 'provided value'}],
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       };
 
       @Component(initialMetadata)
       class ChildCmp {}
 
       @Component({
-        standalone: true,
         imports: [ChildCmp],
         template: '<child-cmp/>',
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class RootCmp {}
 
@@ -1446,6 +1752,8 @@ describe('hot module replacement', () => {
       replaceMetadata(ChildCmp, {
         ...initialMetadata,
         template: '<div dir-b></div>',
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       });
       fixture.detectChanges();
 
@@ -1459,14 +1767,14 @@ describe('hot module replacement', () => {
       const token = new InjectionToken<string>('TEST_TOKEN');
       const injectedValues: [unknown, string][] = [];
 
-      @Directive({selector: '[dir-a]', standalone: true})
+      @Directive({selector: '[dir-a]'})
       class DirA {
         constructor() {
           injectedValues.push([this, inject(token)]);
         }
       }
 
-      @Directive({selector: '[dir-b]', standalone: true})
+      @Directive({selector: '[dir-b]'})
       class DirB {
         constructor() {
           injectedValues.push([this, inject(token)]);
@@ -1475,19 +1783,21 @@ describe('hot module replacement', () => {
 
       const initialMetadata: Component = {
         selector: 'child-cmp',
-        standalone: true,
         template: '<div dir-a></div>',
         imports: [DirA, DirB],
         viewProviders: [{provide: token, useValue: 'provided value'}],
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       };
 
       @Component(initialMetadata)
       class ChildCmp {}
 
       @Component({
-        standalone: true,
         imports: [ChildCmp],
         template: '<child-cmp/>',
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class RootCmp {}
 
@@ -1498,6 +1808,8 @@ describe('hot module replacement', () => {
       replaceMetadata(ChildCmp, {
         ...initialMetadata,
         template: '<div dir-b></div>',
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       });
       fixture.detectChanges();
 
@@ -1512,11 +1824,12 @@ describe('hot module replacement', () => {
     it('should maintain attribute host bindings on a replaced component', () => {
       const initialMetadata: Component = {
         selector: 'child-cmp',
-        standalone: true,
         template: 'Hello',
         host: {
           '[attr.bar]': 'state',
         },
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       };
 
       @Component(initialMetadata)
@@ -1525,9 +1838,10 @@ describe('hot module replacement', () => {
       }
 
       @Component({
-        standalone: true,
         imports: [ChildCmp],
-        template: `<child-cmp [state]="state" [attr.foo]="'The state is ' + state"/>`,
+        template: `<child-cmp [state]="state" [attr.foo]="'The state is ' + state" />`,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class RootCmp {
         state = 0;
@@ -1548,7 +1862,11 @@ describe('hot module replacement', () => {
         `<child-cmp foo="The state is 1" bar="1">Hello</child-cmp>`,
       );
 
-      replaceMetadata(ChildCmp, {...initialMetadata, template: `Changed`});
+      replaceMetadata(ChildCmp, {
+        ...initialMetadata,
+        template: `Changed`,
+        changeDetection: ChangeDetectionStrategy.Eager,
+      });
       fixture.detectChanges();
       expectHTML(
         fixture.nativeElement,
@@ -1566,11 +1884,12 @@ describe('hot module replacement', () => {
     it('should maintain class host bindings on a replaced component', () => {
       const initialMetadata: Component = {
         selector: 'child-cmp',
-        standalone: true,
         template: 'Hello',
         host: {
           '[class.bar]': 'state',
         },
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       };
 
       @Component(initialMetadata)
@@ -1579,9 +1898,10 @@ describe('hot module replacement', () => {
       }
 
       @Component({
-        standalone: true,
         imports: [ChildCmp],
-        template: `<child-cmp class="static" [state]="state" [class.foo]="state"/>`,
+        template: `<child-cmp class="static" [state]="state" [class.foo]="state" />`,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class RootCmp {
         state = false;
@@ -1595,7 +1915,11 @@ describe('hot module replacement', () => {
       fixture.detectChanges();
       expectHTML(fixture.nativeElement, `<child-cmp class="static foo bar">Hello</child-cmp>`);
 
-      replaceMetadata(ChildCmp, {...initialMetadata, template: `Changed`});
+      replaceMetadata(ChildCmp, {
+        ...initialMetadata,
+        template: `Changed`,
+        changeDetection: ChangeDetectionStrategy.Eager,
+      });
       fixture.detectChanges();
       expectHTML(fixture.nativeElement, `<child-cmp class="static foo bar">Changed</child-cmp>`);
 
@@ -1607,11 +1931,12 @@ describe('hot module replacement', () => {
     it('should maintain style host bindings on a replaced component', () => {
       const initialMetadata: Component = {
         selector: 'child-cmp',
-        standalone: true,
         template: 'Hello',
         host: {
           '[style.height]': 'state ? "5px" : "20px"',
         },
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       };
 
       @Component(initialMetadata)
@@ -1620,9 +1945,14 @@ describe('hot module replacement', () => {
       }
 
       @Component({
-        standalone: true,
         imports: [ChildCmp],
-        template: `<child-cmp style="opacity: 0.5;" [state]="state" [style.width]="state ? '3px' : '12px'"/>`,
+        template: `<child-cmp
+          style="opacity: 0.5;"
+          [state]="state"
+          [style.width]="state ? '3px' : '12px'"
+        />`,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class RootCmp {
         state = false;
@@ -1642,7 +1972,11 @@ describe('hot module replacement', () => {
         `<child-cmp style="opacity: 0.5; width: 3px; height: 5px;">Hello</child-cmp>`,
       );
 
-      replaceMetadata(ChildCmp, {...initialMetadata, template: `Changed`});
+      replaceMetadata(ChildCmp, {
+        ...initialMetadata,
+        template: `Changed`,
+        changeDetection: ChangeDetectionStrategy.Eager,
+      });
       fixture.detectChanges();
       expectHTML(
         fixture.nativeElement,
@@ -1671,17 +2005,19 @@ describe('hot module replacement', () => {
 
       const initialMetadata: Component = {
         selector: 'child-cmp',
-        standalone: true,
         template: '<span i18n>hello</span>',
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       };
 
       @Component(initialMetadata)
       class ChildCmp {}
 
       @Component({
-        standalone: true,
         imports: [ChildCmp],
         template: '<child-cmp/>',
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class RootCmp {}
 
@@ -1689,7 +2025,11 @@ describe('hot module replacement', () => {
       fixture.detectChanges();
       expectHTML(fixture.nativeElement, '<child-cmp><span>здравей</span></child-cmp>');
 
-      replaceMetadata(ChildCmp, {...initialMetadata, template: '<strong i18n>goodbye</strong>!'});
+      replaceMetadata(ChildCmp, {
+        ...initialMetadata,
+        template: '<strong i18n>goodbye</strong>!',
+        changeDetection: ChangeDetectionStrategy.Eager,
+      });
       fixture.detectChanges();
       expectHTML(fixture.nativeElement, '<child-cmp><strong>довиждане</strong>!</child-cmp>');
     });
@@ -1699,17 +2039,19 @@ describe('hot module replacement', () => {
 
       const initialMetadata: Component = {
         selector: 'child-cmp',
-        standalone: true,
         template: '<ng-content/>',
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       };
 
       @Component(initialMetadata)
       class ChildCmp {}
 
       @Component({
-        standalone: true,
         imports: [ChildCmp],
         template: `<child-cmp i18n>hello</child-cmp>`,
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class RootCmp {}
 
@@ -1721,6 +2063,8 @@ describe('hot module replacement', () => {
       replaceMetadata(ChildCmp, {
         ...initialMetadata,
         template: 'Hello translates to <strong><ng-content/></strong>!',
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       });
       fixture.detectChanges();
 
@@ -1742,8 +2086,9 @@ describe('hot module replacement', () => {
       let instance!: ChildCmp;
       const initialMetadata: Component = {
         selector: 'child-cmp',
-        standalone: true,
         template: '<span i18n>Hello {{name}}!</span>',
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       };
 
       @Component(initialMetadata)
@@ -1756,9 +2101,10 @@ describe('hot module replacement', () => {
       }
 
       @Component({
-        standalone: true,
         imports: [ChildCmp],
         template: '<child-cmp/>',
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class RootCmp {}
 
@@ -1766,13 +2112,19 @@ describe('hot module replacement', () => {
       fixture.detectChanges();
       expectHTML(fixture.nativeElement, '<child-cmp><span>Здравей Frodo!</span></child-cmp>');
 
-      replaceMetadata(ChildCmp, {...initialMetadata, template: '<strong i18n>hello</strong>'});
+      replaceMetadata(ChildCmp, {
+        ...initialMetadata,
+        template: '<strong i18n>hello</strong>',
+        changeDetection: ChangeDetectionStrategy.Eager,
+      });
       fixture.detectChanges();
       expectHTML(fixture.nativeElement, '<child-cmp><strong>здравей</strong></child-cmp>');
 
       replaceMetadata(ChildCmp, {
         ...initialMetadata,
         template: '<main><section i18n>Hello {{name}}!</section></main>',
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       });
       fixture.detectChanges();
       expectHTML(
@@ -1795,17 +2147,19 @@ describe('hot module replacement', () => {
 
       const initialMetadata: Component = {
         selector: 'child-cmp',
-        standalone: true,
         template: '<ng-content/>',
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       };
 
       @Component(initialMetadata)
       class ChildCmp {}
 
       @Component({
-        standalone: true,
         imports: [ChildCmp],
         template: '<child-cmp i18n>Hello {{name}}!</child-cmp>',
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class RootCmp {
         name = 'Frodo';
@@ -1819,6 +2173,8 @@ describe('hot module replacement', () => {
       replaceMetadata(ChildCmp, {
         ...initialMetadata,
         template: 'The text translates to <strong><ng-content/></strong>!',
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       });
       fixture.detectChanges();
       expectHTML(
@@ -1848,8 +2204,9 @@ describe('hot module replacement', () => {
       let instance!: ChildCmp;
       const initialMetadata: Component = {
         selector: 'child-cmp',
-        standalone: true,
         template: '<span i18n>{count, select, 10 {ten} 20 {twenty} other {other}}</span>',
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       };
 
       @Component(initialMetadata)
@@ -1862,9 +2219,10 @@ describe('hot module replacement', () => {
       }
 
       @Component({
-        standalone: true,
         imports: [ChildCmp],
         template: '<child-cmp/>',
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class RootCmp {}
 
@@ -1872,7 +2230,11 @@ describe('hot module replacement', () => {
       fixture.detectChanges();
       expectHTML(fixture.nativeElement, '<child-cmp><span>десет</span></child-cmp>');
 
-      replaceMetadata(ChildCmp, {...initialMetadata, template: '<strong i18n>hello</strong>'});
+      replaceMetadata(ChildCmp, {
+        ...initialMetadata,
+        template: '<strong i18n>hello</strong>',
+        changeDetection: ChangeDetectionStrategy.Eager,
+      });
       fixture.detectChanges();
       expectHTML(fixture.nativeElement, '<child-cmp><strong>здравей</strong></child-cmp>');
 
@@ -1880,6 +2242,8 @@ describe('hot module replacement', () => {
         ...initialMetadata,
         template:
           '<main><section i18n>{count, select, 10 {ten} 20 {twenty} other {other}}</section></main>',
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       });
       fixture.detectChanges();
       expectHTML(
@@ -1903,17 +2267,19 @@ describe('hot module replacement', () => {
 
       const initialMetadata: Component = {
         selector: 'child-cmp',
-        standalone: true,
         template: '<ng-content/>',
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       };
 
       @Component(initialMetadata)
       class ChildCmp {}
 
       @Component({
-        standalone: true,
         imports: [ChildCmp],
         template: '<child-cmp i18n>{count, select, 10 {ten} 20 {twenty} other {other}}</child-cmp>',
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       })
       class RootCmp {
         count = 10;
@@ -1927,6 +2293,8 @@ describe('hot module replacement', () => {
       replaceMetadata(ChildCmp, {
         ...initialMetadata,
         template: 'The text translates to <strong><ng-content/></strong>!',
+
+        changeDetection: ChangeDetectionStrategy.Eager,
       });
       fixture.detectChanges();
 
@@ -1947,6 +2315,65 @@ describe('hot module replacement', () => {
     });
   });
 
+  it('should clean up dehydrated views from LContainers during HMR', () => {
+    const initialMetadata: Component = {
+      selector: 'child-cmp',
+      template: '@if (true) { <div>Initial</div> }',
+    };
+
+    @Component(initialMetadata)
+    class ChildCmp {}
+
+    @Component({
+      imports: [ChildCmp],
+      template: '<child-cmp/>',
+    })
+    class RootCmp {}
+
+    const fixture = TestBed.createComponent(RootCmp);
+    fixture.detectChanges();
+
+    const childEl = fixture.nativeElement.querySelector('child-cmp')!;
+    expectHTML(fixture.nativeElement, '<child-cmp><div>Initial</div></child-cmp>');
+
+    // Simulate SSR dehydrated views by injecting fake dehydrated DOM nodes
+    // into the LContainer's DEHYDRATED_VIEWS slot. During SSR hydration,
+    // Angular stores references to server-rendered DOM in this slot.
+    const childLView = getComponentLView(childEl);
+    const tView = childLView[TVIEW];
+
+    // Create fake dehydrated DOM content that simulates SSR remnants.
+    // Insert before existing content so the node has a nextSibling,
+    // which removeDehydratedView validates in dev mode.
+    const dehydratedNode = document.createElement('div');
+    dehydratedNode.textContent = 'SSR ghost';
+    childEl.insertBefore(dehydratedNode, childEl.firstChild);
+
+    // Find the LContainer created by the @if and inject dehydrated views.
+    for (let i = HEADER_OFFSET; i < tView.bindingStartIndex; i++) {
+      if (isLContainer(childLView[i])) {
+        childLView[i][DEHYDRATED_VIEWS] = [
+          {firstChild: dehydratedNode, data: {[NUM_ROOT_NODES]: 1}},
+        ];
+        break;
+      }
+    }
+
+    // Verify the dehydrated node is present in the DOM.
+    expect(childEl.innerHTML).toContain('SSR ghost');
+
+    // Trigger HMR replacement.
+    replaceMetadata(ChildCmp, {
+      ...initialMetadata,
+      template: '@if (true) { <div>Replaced</div> }',
+    });
+    fixture.detectChanges();
+
+    // After HMR, dehydrated DOM nodes should have been cleaned up — no duplication.
+    expect(childEl.innerHTML).not.toContain('SSR ghost');
+    expectHTML(fixture.nativeElement, '<child-cmp><div>Replaced</div></child-cmp>');
+  });
+
   // Testing utilities
 
   // Field that we'll monkey-patch onto DOM elements that were created
@@ -1955,21 +2382,28 @@ describe('hot module replacement', () => {
   const CREATED_INITIALLY_MARKER = '__ngCreatedInitially__';
 
   function replaceMetadata(type: Type<unknown>, metadata: Component) {
-    ɵɵreplaceMetadata(type, () => {
-      // TODO: the content of this callback is a hacky workaround to invoke the compiler in a test.
-      // in reality the callback will be generated by the compiler to be something along the lines
-      // of `MyComp[ɵcmp] = /* metadata */`.
-      // TODO: in reality this callback should also include `setClassMetadata` and
-      // `setClassDebugInfo`.
-      (type as any)[ɵNG_COMP_DEF] = null;
-      compileComponent(type, metadata);
-    });
+    ɵɵreplaceMetadata(
+      type,
+      () => {
+        // TODO: the content of this callback is a hacky workaround to invoke the compiler in a test.
+        // in reality the callback will be generated by the compiler to be something along the lines
+        // of `MyComp[ɵcmp] = /* metadata */`.
+        // TODO: in reality this callback should also include `setClassMetadata` and
+        // `setClassDebugInfo`.
+        (type as any)[ɵNG_COMP_DEF] = null;
+        compileComponent(type, metadata);
+      },
+      [angularCoreEnv],
+      [],
+      null,
+      '',
+    );
   }
 
   function expectHTML(element: HTMLElement, expectation: string) {
     const actual = element.innerHTML
       .replace(/<!--(\W|\w)*?-->/g, '')
-      .replace(/\sng-reflect-\S*="[^"]*"/g, '');
+      .replace(/\s(ng-reflect|_nghost|_ngcontent)-\S*="[^"]*"/g, '');
     expect(actual.replace(/\s/g, '') === expectation.replace(/\s/g, ''))
       .withContext(`HTML does not match expectation. Actual HTML:\n${actual}`)
       .toBe(true);

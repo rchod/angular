@@ -8,13 +8,13 @@
 
 import {EnvironmentInjector, Type} from '@angular/core';
 import {MonoTypeOperatorFunction} from 'rxjs';
-import {map, mergeMap} from 'rxjs/operators';
+import {mergeMap} from 'rxjs/operators';
 
-import {Route} from '../models';
-import {NavigationTransition} from '../navigation_transition';
+import type {Route} from '../models';
+import type {NavigationTransition} from '../navigation_transition';
 import {recognize as recognizeFn} from '../recognize';
-import {RouterConfigLoader} from '../router_config_loader';
-import {UrlSerializer} from '../url_tree';
+import type {RouterConfigLoader} from '../router_config_loader';
+import type {UrlSerializer} from '../url_tree';
 
 export function recognize(
   injector: EnvironmentInjector,
@@ -23,9 +23,10 @@ export function recognize(
   config: Route[],
   serializer: UrlSerializer,
   paramsInheritanceStrategy: 'emptyOnly' | 'always',
+  abortSignal: AbortSignal,
 ): MonoTypeOperatorFunction<NavigationTransition> {
-  return mergeMap((t) =>
-    recognizeFn(
+  return mergeMap(async (t) => {
+    const {state: targetSnapshot, tree: urlAfterRedirects} = await recognizeFn(
       injector,
       configLoader,
       rootComponentType,
@@ -33,10 +34,8 @@ export function recognize(
       t.extractedUrl,
       serializer,
       paramsInheritanceStrategy,
-    ).pipe(
-      map(({state: targetSnapshot, tree: urlAfterRedirects}) => {
-        return {...t, targetSnapshot, urlAfterRedirects};
-      }),
-    ),
-  );
+      abortSignal,
+    );
+    return {...t, targetSnapshot, urlAfterRedirects};
+  });
 }

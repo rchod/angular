@@ -6,17 +6,13 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
-import {ChangeDetectorRef} from '@angular/core';
 import {
   DirEnt,
-  ErrorListener,
   FSWatchCallback,
   FSWatchOptions,
   FileSystemAPI,
   FileSystemTree,
   IFSWatcher,
-  PortListener,
-  ServerReadyListener,
   Unsubscribe,
   WebContainer,
   WebContainerProcess,
@@ -68,14 +64,6 @@ export class MockLocalStorage implements Pick<Storage, 'getItem' | 'setItem'> {
   }
 }
 
-export class FakeChangeDetectorRef implements ChangeDetectorRef {
-  markForCheck(): void {}
-  detach(): void {}
-  checkNoChanges(): void {}
-  reattach(): void {}
-  detectChanges(): void {}
-}
-
 export class FakeWebContainer extends WebContainer {
   fakeSpawn: FakeWebContainerProcess | undefined = undefined;
 
@@ -84,32 +72,29 @@ export class FakeWebContainer extends WebContainer {
     if (fakeOptions?.spawn) this.fakeSpawn = fakeOptions.spawn;
   }
 
-  override spawn(
+  override async spawn(
     command: unknown,
     args?: unknown,
     options?: unknown,
   ): Promise<FakeWebContainerProcess> {
-    if (this.fakeSpawn) return Promise.resolve(this.fakeSpawn);
+    if (this.fakeSpawn) return this.fakeSpawn;
 
-    const fakeProcess = new FakeWebContainerProcess();
-
-    return Promise.resolve(fakeProcess);
+    return new FakeWebContainerProcess();
   }
-  override on(event: 'port', listener: PortListener): Unsubscribe;
-  override on(event: 'server-ready', listener: ServerReadyListener): Unsubscribe;
-  override on(event: 'error', listener: ErrorListener): Unsubscribe;
+
   override on(event: unknown, listener: unknown): Unsubscribe {
     return () => {};
   }
-  override mount(
+
+  override async mount(
     tree: FileSystemTree,
     options?: {mountPoint?: string | undefined} | undefined,
-  ): Promise<void> {
-    return Promise.resolve();
-  }
+  ): Promise<void> {}
+
   override get path() {
     return '/fake-path';
   }
+
   override get workdir() {
     return '/fake-workdir';
   }
@@ -117,6 +102,8 @@ export class FakeWebContainer extends WebContainer {
   override teardown() {}
 
   override fs: FakeFileSystemAPI = new FakeFileSystemAPI();
+
+  override async setPreviewScript(script: string): Promise<void> {}
 }
 
 class FakeFileSystemAPI implements FileSystemAPI {
@@ -140,15 +127,15 @@ class FakeFileSystemAPI implements FileSystemAPI {
     path: string,
     options: {encoding?: string | null | undefined; withFileTypes: true},
   ): Promise<DirEnt<string>[]>;
-  readdir(
+  async readdir(
     path: unknown,
-    options?: unknown,
-  ):
-    | Promise<Uint8Array[]>
-    | Promise<string[]>
-    | Promise<DirEnt<Uint8Array>[]>
-    | Promise<DirEnt<string>[]> {
-    return Promise.resolve(['/fake-dirname']);
+    options?: {encoding?: string | null | undefined; withFileTypes?: boolean} | string | null,
+  ): Promise<Uint8Array[] | string[] | DirEnt<Uint8Array>[] | DirEnt<string>[]> {
+    if (typeof options === 'object' && options?.withFileTypes === true) {
+      return [{name: 'fake-file', isFile: () => true, isDirectory: () => false}];
+    }
+
+    return ['/fake-dirname'];
   }
 
   readFile(path: string, encoding?: null | undefined): Promise<Uint8Array>;
@@ -156,28 +143,25 @@ class FakeFileSystemAPI implements FileSystemAPI {
   readFile(path: unknown, encoding?: unknown): Promise<Uint8Array> | Promise<string> {
     return Promise.resolve('fake file content');
   }
-  writeFile(
+  async writeFile(
     path: string,
     data: string | Uint8Array,
     options?: string | {encoding?: string | null | undefined} | null | undefined,
-  ): Promise<void> {
-    return Promise.resolve();
-  }
+  ): Promise<void> {}
+
   mkdir(path: string, options?: {recursive?: false | undefined} | undefined): Promise<void>;
   mkdir(path: string, options: {recursive: true}): Promise<string>;
-  mkdir(path: unknown, options?: unknown): Promise<void> | Promise<string> {
-    return Promise.resolve();
-  }
-  rm(
+  async mkdir(path: unknown, options?: unknown): Promise<void | string> {}
+
+  async rm(
     path: string,
     options?: {force?: boolean | undefined; recursive?: boolean | undefined} | undefined,
-  ): Promise<void> {
-    return Promise.resolve();
-  }
+  ): Promise<void> {}
 
   rename(oldPath: string, newPath: string): Promise<void> {
     throw Error('Not implemented');
   }
+
   watch(
     filename: string,
     options?: FSWatchOptions | undefined,
@@ -196,4 +180,47 @@ export class FakeWebContainerProcess implements WebContainerProcess {
 
   kill(): void {}
   resize(dimensions: {cols: number; rows: number}): void {}
+}
+
+// Copy from utils in packages/private/testing
+
+/**
+ * Returns a promise that resolves after the specified time.
+ *
+ * @param ms - Time to wait in milliseconds. Defaults to 0.
+ *
+ * @example
+ * ```ts
+ * await timeout(100); // Wait 100ms
+ * ```
+ */
+export async function timeout(ms?: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+/**
+ * Installs Jasmine's fake clock with auto-tick enabled for all tests in the describe block.
+ * Call at the top level of a describe block to automatically advance time for async operations.
+ *
+ * @example
+ * ```ts
+ * describe('MyComponent', () => {
+ *   useAutoTick();
+ *
+ *   it('should handle timers', () => {
+ *     // setTimeout, setInterval, etc. will execute synchronously
+ *   });
+ * });
+ * ```
+ */
+export function useAutoTick() {
+  beforeEach(() => {
+    jasmine.clock().install();
+    jasmine.clock().autoTick();
+  });
+  afterEach(() => {
+    jasmine.clock().uninstall();
+  });
 }

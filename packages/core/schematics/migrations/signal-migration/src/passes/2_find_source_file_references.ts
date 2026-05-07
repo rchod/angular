@@ -6,10 +6,12 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
-import {ResourceLoader} from '@angular/compiler-cli/src/ngtsc/annotations';
-import {PartialEvaluator} from '@angular/compiler-cli/src/ngtsc/partial_evaluator';
-import {ReflectionHost} from '@angular/compiler-cli/src/ngtsc/reflection';
-import {TemplateTypeChecker} from '@angular/compiler-cli/src/ngtsc/typecheck/api';
+import {
+  ResourceLoader,
+  PartialEvaluator,
+  ReflectionHost,
+  TemplateTypeChecker,
+} from '@angular/compiler-cli/private/migrations';
 import ts from 'typescript';
 import {KnownInputs} from '../input_detection/known_inputs';
 import {MigrationResult} from '../result';
@@ -31,9 +33,9 @@ export function pass2_IdentifySourceFileReferences(
   programInfo: ProgramInfo,
   checker: ts.TypeChecker,
   reflector: ReflectionHost,
-  resourceLoader: ResourceLoader,
+  resourceLoader: ResourceLoader | null,
   evaluator: PartialEvaluator,
-  templateTypeChecker: TemplateTypeChecker,
+  templateTypeChecker: TemplateTypeChecker | null,
   groupedTsAstVisitor: GroupedTsAstVisitor,
   knownInputs: KnownInputs,
   result: MigrationResult,

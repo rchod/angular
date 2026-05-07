@@ -26,7 +26,10 @@ import {TestBed} from '@angular/core/testing';
   describe('lifecycle hooks examples', () => {
     it('should work with ngOnInit', () => {
       // #docregion OnInit
-      @Component({selector: 'my-cmp', template: `...`})
+      @Component({
+        selector: 'my-cmp',
+        template: `...`,
+      })
       class MyComponent implements OnInit {
         ngOnInit() {
           // ...
@@ -39,7 +42,10 @@ import {TestBed} from '@angular/core/testing';
 
     it('should work with ngDoCheck', () => {
       // #docregion DoCheck
-      @Component({selector: 'my-cmp', template: `...`})
+      @Component({
+        selector: 'my-cmp',
+        template: `...`,
+      })
       class MyComponent implements DoCheck {
         ngDoCheck() {
           // ...
@@ -52,7 +58,10 @@ import {TestBed} from '@angular/core/testing';
 
     it('should work with ngAfterContentChecked', () => {
       // #docregion AfterContentChecked
-      @Component({selector: 'my-cmp', template: `...`})
+      @Component({
+        selector: 'my-cmp',
+        template: `...`,
+      })
       class MyComponent implements AfterContentChecked {
         ngAfterContentChecked() {
           // ...
@@ -65,7 +74,10 @@ import {TestBed} from '@angular/core/testing';
 
     it('should work with ngAfterContentInit', () => {
       // #docregion AfterContentInit
-      @Component({selector: 'my-cmp', template: `...`})
+      @Component({
+        selector: 'my-cmp',
+        template: `...`,
+      })
       class MyComponent implements AfterContentInit {
         ngAfterContentInit() {
           // ...
@@ -78,7 +90,10 @@ import {TestBed} from '@angular/core/testing';
 
     it('should work with ngAfterViewChecked', () => {
       // #docregion AfterViewChecked
-      @Component({selector: 'my-cmp', template: `...`})
+      @Component({
+        selector: 'my-cmp',
+        template: `...`,
+      })
       class MyComponent implements AfterViewChecked {
         ngAfterViewChecked() {
           // ...
@@ -91,7 +106,10 @@ import {TestBed} from '@angular/core/testing';
 
     it('should work with ngAfterViewInit', () => {
       // #docregion AfterViewInit
-      @Component({selector: 'my-cmp', template: `...`})
+      @Component({
+        selector: 'my-cmp',
+        template: `...`,
+      })
       class MyComponent implements AfterViewInit {
         ngAfterViewInit() {
           // ...
@@ -104,7 +122,10 @@ import {TestBed} from '@angular/core/testing';
 
     it('should work with ngOnDestroy', () => {
       // #docregion OnDestroy
-      @Component({selector: 'my-cmp', template: `...`})
+      @Component({
+        selector: 'my-cmp',
+        template: `...`,
+      })
       class MyComponent implements OnDestroy {
         ngOnDestroy() {
           // ...
@@ -117,7 +138,10 @@ import {TestBed} from '@angular/core/testing';
 
     it('should work with ngOnChanges', () => {
       // #docregion OnChanges
-      @Component({selector: 'my-cmp', template: `...`})
+      @Component({
+        selector: 'my-cmp',
+        template: `...`,
+      })
       class MyComponent implements OnChanges {
         @Input() prop: number = 0;
 
@@ -141,11 +165,14 @@ import {TestBed} from '@angular/core/testing';
 
     const inputBindings = inputs.map((input) => `[${input}] = true`).join(' ');
 
-    @Component({template: `<my-cmp ${inputBindings}></my-cmp>`})
+    @Component({
+      template: `<my-cmp ${inputBindings}></my-cmp>`,
+      imports: [clazz],
+    })
     class ParentComponent {}
 
     const fixture = TestBed.configureTestingModule({
-      declarations: [ParentComponent, clazz],
+      imports: [ParentComponent],
     }).createComponent(ParentComponent);
     fixture.detectChanges();
     fixture.destroy();

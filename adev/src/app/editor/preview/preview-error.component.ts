@@ -6,25 +6,22 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
-import {ChangeDetectionStrategy, Component, inject} from '@angular/core';
+import {Component, inject} from '@angular/core';
 import {isFirefox, isIos} from '@angular/docs';
 
 import {ErrorType, NodeRuntimeState} from '../node-runtime-state.service';
 
 @Component({
-  standalone: true,
   selector: 'docs-tutorial-preview-error',
   templateUrl: './preview-error.component.html',
   styleUrls: ['./preview-error.component.scss'],
-  changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [],
 })
 export class PreviewError {
   private readonly nodeRuntimeState = inject(NodeRuntimeState);
 
-  readonly isIos = isIos;
+  protected readonly isIos = isIos;
   readonly isFirefox = isFirefox;
 
-  readonly error = this.nodeRuntimeState.error;
-  readonly ErrorType = ErrorType;
+  protected readonly error = this.nodeRuntimeState.error;
+  protected readonly ErrorType = ErrorType;
 }

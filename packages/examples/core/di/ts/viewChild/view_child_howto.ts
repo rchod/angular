@@ -9,11 +9,16 @@
 // #docregion HowTo
 import {AfterViewInit, Component, Directive, ViewChild} from '@angular/core';
 
-@Directive({selector: 'child-directive'})
-class ChildDirective {}
+@Directive({
+  selector: 'child-directive',
+})
+export class ChildDirective {}
 
-@Component({selector: 'someCmp', templateUrl: 'someCmp.html'})
-class SomeCmp implements AfterViewInit {
+@Component({
+  selector: 'someCmp',
+  templateUrl: 'someCmp.html',
+})
+export class SomeCmp implements AfterViewInit {
   @ViewChild(ChildDirective) child!: ChildDirective;
 
   ngAfterViewInit() {

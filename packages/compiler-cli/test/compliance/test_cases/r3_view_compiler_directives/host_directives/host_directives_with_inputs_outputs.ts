@@ -1,21 +1,22 @@
 import {Component, Directive, EventEmitter, Input, Output} from '@angular/core';
 
-@Directive({standalone: true})
+@Directive({})
 export class HostDir {
-  @Input() value: number;
-  @Input() color: string;
+  @Input() value = 0;
+  @Input() color = '';
   @Output() opened = new EventEmitter();
   @Output() closed = new EventEmitter();
 }
 
 @Component({
-  selector: 'my-component',
-  template: '',
-  hostDirectives: [{
-    directive: HostDir,
-    inputs: ['value', 'color: colorAlias'],
-    outputs: ['opened', 'closed: closedAlias'],
-  }],
+    selector: 'my-component',
+    template: '',
+    hostDirectives: [{
+            directive: HostDir,
+            inputs: ['value', 'color: colorAlias'],
+            outputs: ['opened', 'closed: closedAlias'],
+        }],
+    standalone: false
 })
 export class MyComponent {
 }

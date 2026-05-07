@@ -21,9 +21,7 @@ export interface PlatformConfig {
   document?: string;
   /**
    * The URL for the current application state. This is used for initializing
-   * the platform's location. `protocol`, `hostname`, and `port` will be
-   * overridden if `baseUrl` is set.
-   * @default none
+   * the platform's location. `protocol`, `hostname`, and `port`.
    */
   url?: string;
 }
@@ -44,3 +42,5 @@ export const INITIAL_CONFIG = new InjectionToken<PlatformConfig>('Server.INITIAL
 export const BEFORE_APP_SERIALIZED = new InjectionToken<ReadonlyArray<() => void | Promise<void>>>(
   'Server.RENDER_MODULE_HOOK',
 );
+
+export const ENABLE_DOM_EMULATION = new InjectionToken<boolean>('ENABLE_DOM_EMULATION');

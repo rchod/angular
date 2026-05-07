@@ -11,7 +11,7 @@ import {Writable} from '../../interface/type';
 import {isListLikeIterable, iterateListLike} from '../../util/iterable';
 import {stringify} from '../../util/stringify';
 
-import {
+import type {
   IterableChangeRecord,
   IterableChanges,
   IterableDiffer,
@@ -21,7 +21,6 @@ import {
 } from './iterable_differs';
 
 export class DefaultIterableDifferFactory implements IterableDifferFactory {
-  constructor() {}
   supports(obj: Object | null | undefined): boolean {
     return isListLikeIterable(obj);
   }

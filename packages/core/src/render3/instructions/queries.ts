@@ -16,7 +16,7 @@ import {
   getQueryResults,
   getTQuery,
   loadQueryInternal,
-} from '../query';
+} from '../queries/query';
 import {getCurrentQueryIndex, getLView, getTView, setCurrentQueryIndex} from '../state';
 import {isCreationMode} from '../util/view_utils';
 
@@ -35,10 +35,11 @@ import {isCreationMode} from '../util/view_utils';
 export function ɵɵcontentQuery<T>(
   directiveIndex: number,
   predicate: ProviderToken<unknown> | string | string[],
-  flags: QueryFlags,
+  flags: number,
   read?: any,
-): void {
+): typeof ɵɵcontentQuery {
   createContentQuery<T>(directiveIndex, predicate, flags, read);
+  return ɵɵcontentQuery;
 }
 
 /**
@@ -52,10 +53,11 @@ export function ɵɵcontentQuery<T>(
  */
 export function ɵɵviewQuery<T>(
   predicate: ProviderToken<unknown> | string | string[],
-  flags: QueryFlags,
+  flags: number,
   read?: any,
-): void {
+): typeof ɵɵviewQuery {
   createViewQuery(predicate, flags, read);
+  return ɵɵviewQuery;
 }
 
 /**

@@ -6,12 +6,13 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
-import {IMAGE_CONFIG, ImageConfig, PLATFORM_ID} from './application/application_tokens';
+import {IMAGE_CONFIG, ImageConfig} from './application/application_tokens';
 import {Injectable} from './di';
 import {inject} from './di/injector_compatibility';
 import {formatRuntimeError, RuntimeErrorCode} from './errors';
-import {OnDestroy} from './interface/lifecycle_hooks';
+import {OnDestroy} from './change_detection/lifecycle_hooks';
 import {getDocument} from './render3/interfaces/document';
+import {ERROR_DETAILS_PAGE_BASE_URL} from './error_details_base_url';
 
 // A delay in milliseconds before the scan is run after onLoad, to avoid any
 // potential race conditions with other LCP-related functions. This delay
@@ -27,12 +28,11 @@ export class ImagePerformanceWarning implements OnDestroy {
   private window: Window | null = null;
   private observer: PerformanceObserver | null = null;
   private options: ImageConfig = inject(IMAGE_CONFIG);
-  private readonly isBrowser = inject(PLATFORM_ID) === 'browser';
   private lcpImageUrl?: string;
 
   public start() {
     if (
-      !this.isBrowser ||
+      (typeof ngServerMode !== 'undefined' && ngServerMode) ||
       typeof PerformanceObserver === 'undefined' ||
       (this.options?.disableImageSizeWarning && this.options?.disableImageLazyLoadWarning)
     ) {
@@ -41,7 +41,7 @@ export class ImagePerformanceWarning implements OnDestroy {
     this.observer = this.initPerformanceObserver();
     const doc = getDocument();
     const win = doc.defaultView;
-    if (typeof win !== 'undefined') {
+    if (win) {
       this.window = win;
       // Wait to avoid race conditions where LCP image triggers
       // load event before it's recorded by the performance observer
@@ -103,14 +103,22 @@ export class ImagePerformanceWarning implements OnDestroy {
     const images = getDocument().querySelectorAll('img');
     let lcpElementFound,
       lcpElementLoadedCorrectly = false;
-    images.forEach((image) => {
+    // Important: do not refactor this to use `images.forEach` or
+    // `for (const ... of ...)`, because images might be a custom internal
+    // data structure — such as a lazily evaluated query result in Domino.
+    // (This naturally would never be a case in any browser).
+    for (let index = 0; index < images.length; index++) {
+      const image = images[index];
+
+      if (!image) {
+        continue;
+      }
+
       if (!this.options?.disableImageSizeWarning) {
-        for (const image of images) {
-          // Image elements using the NgOptimizedImage directive are excluded,
-          // as that directive has its own version of this check.
-          if (!image.getAttribute('ng-img') && this.isOversized(image)) {
-            logOversizedImageWarning(image.src);
-          }
+        // Image elements using the NgOptimizedImage directive are excluded,
+        // as that directive has its own version of this check.
+        if (!image.getAttribute('ng-img') && this.isOversized(image)) {
+          logOversizedImageWarning(image.src);
         }
       }
       if (!this.options?.disableImageLazyLoadWarning && this.lcpImageUrl) {
@@ -125,7 +133,7 @@ export class ImagePerformanceWarning implements OnDestroy {
           }
         }
       }
-    });
+    }
     if (
       lcpElementFound &&
       !lcpElementLoadedCorrectly &&
@@ -206,7 +214,7 @@ function logLazyLCPWarning(src: string) {
         `changing the loading value of the LCP image to "eager", or by using the ` +
         `NgOptimizedImage directive's prioritization utilities. For more ` +
         `information about addressing or disabling this warning, see ` +
-        `https://angular.dev/errors/NG0913`,
+        `${ERROR_DETAILS_PAGE_BASE_URL}/NG0913`,
     ),
   );
 }
@@ -218,7 +226,7 @@ function logOversizedImageWarning(src: string) {
       `An image with src ${src} has intrinsic file dimensions much larger than its ` +
         `rendered size. This can negatively impact application loading performance. ` +
         `For more information about addressing or disabling this warning, see ` +
-        `https://angular.dev/errors/NG0913`,
+        `${ERROR_DETAILS_PAGE_BASE_URL}/NG0913`,
     ),
   );
 }

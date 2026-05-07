@@ -21,7 +21,7 @@ import {ɵɵdefineInjectable} from './interface/defs';
  * `InjectionToken` is parameterized on `T` which is the type of object which will be returned by
  * the `Injector`. This provides an additional level of type safety.
  *
- * <div class="alert is-helpful">
+ * <div class="docs-alert docs-alert-helpful">
  *
  * **Important Note**: Ensure that you use the same instance of the `InjectionToken` in both the
  * provider and the injection call. Creating a new instance of `InjectionToken` in different places,
@@ -30,8 +30,7 @@ import {ɵɵdefineInjectable} from './interface/defs';
  *
  * </div>
  *
- * <code-example format="typescript" language="typescript" path="injection-token/src/main.ts"
- * region="InjectionToken"></code-example>
+ * {@example injection-token/src/main.ts region='InjectionToken'}
  *
  * When creating an `InjectionToken`, you can optionally specify a factory function which returns
  * (possibly by creating) a default value of the parameterized type `T`. This sets up the
@@ -58,6 +57,9 @@ import {ɵɵdefineInjectable} from './interface/defs';
  *
  * {@example core/di/ts/injector_spec.ts region='ShakableInjectionToken'}
  *
+ *
+ * @see [What is an InjectionToken?](guide/di/defining-dependency-providers#what-is-an-injectiontoken)
+ *
  * @publicApi
  */
 export class InjectionToken<T> {
@@ -67,11 +69,30 @@ export class InjectionToken<T> {
   readonly ɵprov: unknown;
 
   /**
+   * @deprecated The `providedIn: NgModule` or `providedIn:'any'` options are deprecated. Please use the other signature.
+   */
+  constructor(
+    _desc: string,
+    options: {
+      providedIn: Type<any> | 'any';
+      factory: () => T;
+    },
+  );
+
+  /**
    * @param _desc   Description for the token,
    *                used only for debugging purposes,
    *                it should but does not need to be unique
    * @param options Options for the token's usage, as described above
    */
+  constructor(
+    _desc: string,
+    options?: {
+      providedIn?: Type<any> | 'root' | 'platform' | 'any' | null;
+      factory: () => T;
+    },
+  );
+
   constructor(
     protected _desc: string,
     options?: {

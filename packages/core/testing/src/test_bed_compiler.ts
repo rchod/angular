@@ -8,68 +8,71 @@
 
 import {ResourceLoader} from '@angular/compiler';
 import {
+  ɵANIMATIONS_DISABLED as ANIMATIONS_DISABLED,
   ApplicationInitStatus,
-  ɵINTERNAL_APPLICATION_ERROR_HANDLER as INTERNAL_APPLICATION_ERROR_HANDLER,
-  ɵChangeDetectionScheduler as ChangeDetectionScheduler,
-  ɵChangeDetectionSchedulerImpl as ChangeDetectionSchedulerImpl,
-  Compiler,
-  COMPILER_OPTIONS,
-  Component,
-  Directive,
-  Injector,
-  inject,
-  InjectorType,
-  LOCALE_ID,
-  ModuleWithComponentFactories,
-  ModuleWithProviders,
-  NgModule,
-  NgModuleFactory,
-  Pipe,
-  PlatformRef,
-  Provider,
-  resolveForwardRef,
-  StaticProvider,
-  Type,
-  ɵclearResolutionOfComponentResourcesQueue,
   ɵcompileComponent as compileComponent,
   ɵcompileDirective as compileDirective,
   ɵcompileNgModuleDefs as compileNgModuleDefs,
   ɵcompilePipe as compilePipe,
+  Compiler,
+  COMPILER_OPTIONS,
+  Component,
+  ɵRender3ComponentFactory as ComponentFactory,
   ɵDEFAULT_LOCALE_ID as DEFAULT_LOCALE_ID,
   ɵDEFER_BLOCK_CONFIG as DEFER_BLOCK_CONFIG,
   ɵdepsTracker as depsTracker,
+  Directive,
   ɵDirectiveDef as DirectiveDef,
-  ɵgenerateStandaloneInDeclarationsError,
+  ENVIRONMENT_INITIALIZER,
+  ErrorHandler,
   ɵgetAsyncClassMetadataFn as getAsyncClassMetadataFn,
   ɵgetInjectableDef as getInjectableDef,
+  inject,
+  ɵɵInjectableDeclaration as InjectableDeclaration,
+  Injector,
+  InjectorType,
+  ɵINTERNAL_APPLICATION_ERROR_HANDLER as INTERNAL_APPLICATION_ERROR_HANDLER,
   ɵInternalEnvironmentProviders as InternalEnvironmentProviders,
-  ɵinternalProvideZoneChangeDetection as internalProvideZoneChangeDetection,
-  ɵisComponentDefPendingResolution,
   ɵisEnvironmentProviders as isEnvironmentProviders,
+  LOCALE_ID,
+  ModuleWithProviders,
   ɵNG_COMP_DEF as NG_COMP_DEF,
   ɵNG_DIR_DEF as NG_DIR_DEF,
   ɵNG_INJ_DEF as NG_INJ_DEF,
   ɵNG_MOD_DEF as NG_MOD_DEF,
   ɵNG_PIPE_DEF as NG_PIPE_DEF,
-  ɵNgModuleFactory as R3NgModuleFactory,
+  NgModule,
+  NgModuleFactory,
+  ɵRender3NgModuleRef as NgModuleRef,
   ɵNgModuleTransitiveScopes as NgModuleTransitiveScopes,
   ɵNgModuleType as NgModuleType,
+  NgZone,
   ɵpatchComponentDefWithScope as patchComponentDefWithScope,
-  ɵRender3ComponentFactory as ComponentFactory,
-  ɵRender3NgModuleRef as NgModuleRef,
+  Pipe,
+  PlatformRef,
+  Provider,
+  ɵprovideZonelessChangeDetectionInternal as provideZonelessChangeDetectionInternal,
+  ɵNgModuleFactory as R3NgModuleFactory,
+  resolveForwardRef,
+  ɵsetLocaleId as setLocaleId,
+  StaticProvider,
+  ɵtransitiveScopesFor as transitiveScopesFor,
+  Type,
+  ɵclearResolutionOfComponentResourcesQueue,
+  ɵgenerateStandaloneInDeclarationsError,
+  ɵisComponentDefPendingResolution,
   ɵresolveComponentResources,
   ɵrestoreComponentResolutionQueue,
-  ɵsetLocaleId as setLocaleId,
-  ɵtransitiveScopesFor as transitiveScopesFor,
-  ɵUSE_RUNTIME_DEPS_TRACKER_FOR_JIT as USE_RUNTIME_DEPS_TRACKER_FOR_JIT,
-  ɵɵInjectableDeclaration as InjectableDeclaration,
-  NgZone,
-  ErrorHandler,
-} from '@angular/core';
+} from '../../src/core';
 
 import {ComponentDef, ComponentType} from '../../src/render3';
 
+import {
+  RETHROW_APPLICATION_ERRORS_DEFAULT,
+  TestBedApplicationErrorHandler,
+} from './application_error_handler';
 import {MetadataOverride} from './metadata_override';
+import {MetadataOverrider} from './metadata_overrider';
 import {
   ComponentResolver,
   DirectiveResolver,
@@ -77,11 +80,11 @@ import {
   PipeResolver,
   Resolver,
 } from './resolvers';
-import {DEFER_BLOCK_DEFAULT_BEHAVIOR, TestModuleMetadata} from './test_bed_common';
 import {
-  RETHROW_APPLICATION_ERRORS_DEFAULT,
-  TestBedApplicationErrorHandler,
-} from './application_error_handler';
+  ANIMATIONS_ENABLED_DEFAULT,
+  DEFER_BLOCK_DEFAULT_BEHAVIOR,
+  TestModuleMetadata,
+} from './test_bed_common';
 
 enum TestingModuleOverride {
   DECLARATION,
@@ -102,7 +105,7 @@ function assertNoStandaloneComponents(
   types.forEach((type) => {
     if (!getAsyncClassMetadataFn(type)) {
       const component = resolver.resolve(type);
-      if (component && component.standalone) {
+      if (component && (component.standalone == null || component.standalone)) {
         throw new Error(ɵgenerateStandaloneInDeclarationsError(type, location));
       }
     }
@@ -112,8 +115,8 @@ function assertNoStandaloneComponents(
 // Resolvers for Angular decorators
 type Resolvers = {
   module: Resolver<NgModule>;
-  component: Resolver<Directive>;
-  directive: Resolver<Component>;
+  component: Resolver<Component>;
+  directive: Resolver<Directive>;
   pipe: Resolver<Pipe>;
 };
 
@@ -188,6 +191,7 @@ export class TestBedCompiler {
   private testModuleType: NgModuleType<any>;
   private testModuleRef: NgModuleRef<any> | null = null;
 
+  private animationsEnabled = ANIMATIONS_ENABLED_DEFAULT;
   private deferBlockBehavior = DEFER_BLOCK_DEFAULT_BEHAVIOR;
   private rethrowApplicationTickErrors = RETHROW_APPLICATION_ERRORS_DEFAULT;
 
@@ -232,14 +236,13 @@ export class TestBedCompiler {
     }
 
     this.deferBlockBehavior = moduleDef.deferBlockBehavior ?? DEFER_BLOCK_DEFAULT_BEHAVIOR;
+    this.animationsEnabled = moduleDef.animationsEnabled ?? ANIMATIONS_ENABLED_DEFAULT;
     this.rethrowApplicationTickErrors =
       moduleDef.rethrowApplicationErrors ?? RETHROW_APPLICATION_ERRORS_DEFAULT;
   }
 
   overrideModule(ngModule: Type<any>, override: MetadataOverride<NgModule>): void {
-    if (USE_RUNTIME_DEPS_TRACKER_FOR_JIT) {
-      depsTracker.clearScopeCacheFor(ngModule);
-    }
+    depsTracker.clearScopeCacheFor(ngModule);
     this.overriddenModules.add(ngModule as NgModuleType<any>);
 
     // Compile the module right away.
@@ -277,6 +280,10 @@ export class TestBedCompiler {
     this.verifyNoStandaloneFlagOverrides(pipe, override);
     this.resolvers.pipe.addOverride(pipe, override);
     this.pendingPipes.add(pipe);
+  }
+
+  hasComponentOverrides(type: Type<any>): boolean {
+    return this.resolvers.component.hasOverrides(type);
   }
 
   private verifyNoStandaloneFlagOverrides(
@@ -505,15 +512,62 @@ export class TestBedCompiler {
 
       needsAsyncResources = needsAsyncResources || ɵisComponentDefPendingResolution(declaration);
 
-      const metadata = this.resolvers.component.resolve(declaration);
+      // Note: we can't use `this.resolvers.component.resolve(declaration)` here, because
+      // that function requires the component to have a decorator, which is not the case
+      // for AOT components.
+      let metadata = this.resolvers.component.resolve(declaration);
       if (metadata === null) {
+        if (this.resolvers.component.hasOverrides(declaration)) {
+          const componentDef = getComponentDef(declaration);
+          if (componentDef) {
+            // We have a component without metadata, but with a definition (AOT) and overrides.
+            // We can manually apply the overrides to the definition.
+            const overrider = new MetadataOverrider();
+            metadata = new Component({
+              selector: componentDef.selectors[0][0] as string,
+              template: componentDef.template as any,
+              standalone: componentDef.standalone,
+            });
+
+            const overrides = this.resolvers.component.getOverrides(declaration);
+            if (overrides) {
+              overrides.forEach((override) => {
+                metadata = overrider.overrideMetadata(Component, metadata!, override);
+              });
+            }
+
+            if (metadata!.providers) {
+              const providers = metadata!.providers;
+              const providersResolver = (
+                ndef: DirectiveDef<any>,
+                processProvidersFn?: (providers: Provider[]) => Provider[],
+              ) => {
+                return processProvidersFn ? processProvidersFn(providers) : providers;
+              };
+              componentDef.providersResolver = providersResolver;
+            }
+
+            if ((metadata as Component).viewProviders) {
+              const viewProviders = (metadata as Component).viewProviders!;
+              const viewProvidersResolver = (
+                ndef: DirectiveDef<any>,
+                processProvidersFn?: (providers: Provider[]) => Provider[],
+              ) => {
+                return processProvidersFn ? processProvidersFn(viewProviders) : viewProviders;
+              };
+              componentDef.viewProvidersResolver = viewProvidersResolver;
+            }
+
+            // We manually patched ɵcmp.
+            // We must skip compileComponent to avoid overwriting our work (and to avoid failure).
+            return;
+          }
+        }
         throw invalidTypeError(declaration.name, 'Component');
       }
 
       this.maybeStoreNgDef(NG_COMP_DEF, declaration);
-      if (USE_RUNTIME_DEPS_TRACKER_FOR_JIT) {
-        depsTracker.clearScopeCacheFor(declaration);
-      }
+      depsTracker.clearScopeCacheFor(declaration);
       compileComponent(declaration, metadata);
     });
     this.pendingComponents.clear();
@@ -550,12 +604,7 @@ export class TestBedCompiler {
       const affectedModules = this.collectModulesAffectedByOverrides(testingModuleDef.imports);
       if (affectedModules.size > 0) {
         affectedModules.forEach((moduleType) => {
-          if (!USE_RUNTIME_DEPS_TRACKER_FOR_JIT) {
-            this.storeFieldOfDefOnType(moduleType as any, NG_MOD_DEF, 'transitiveCompileScopes');
-            (moduleType as any)[NG_MOD_DEF].transitiveCompileScopes = null;
-          } else {
-            depsTracker.clearScopeCacheFor(moduleType);
-          }
+          depsTracker.clearScopeCacheFor(moduleType);
         });
       }
     }
@@ -910,9 +959,7 @@ export class TestBedCompiler {
     // Restore initial component/directive/pipe defs
     this.initialNgDefs.forEach(
       (defs: Map<string, PropertyDescriptor | undefined>, type: Type<any>) => {
-        if (USE_RUNTIME_DEPS_TRACKER_FOR_JIT) {
-          depsTracker.clearScopeCacheFor(type);
-        }
+        depsTracker.clearScopeCacheFor(type);
         defs.forEach((descriptor, prop) => {
           if (!descriptor) {
             // Delete operations are generally undesirable since they have performance
@@ -940,15 +987,25 @@ export class TestBedCompiler {
     compileNgModuleDefs(RootScopeModule as NgModuleType<any>, {
       providers: [
         ...this.rootProviderOverrides,
-        internalProvideZoneChangeDetection({}),
+        provideZonelessChangeDetectionInternal(),
         TestBedApplicationErrorHandler,
-        {provide: ChangeDetectionScheduler, useExisting: ChangeDetectionSchedulerImpl},
+        {
+          provide: ENVIRONMENT_INITIALIZER,
+          multi: true,
+          useValue: () => {
+            inject(ErrorHandler);
+          },
+        },
       ],
     });
 
     const providers = [
       {provide: Compiler, useFactory: () => new R3TestCompiler(this)},
       {provide: DEFER_BLOCK_CONFIG, useValue: {behavior: this.deferBlockBehavior}},
+      {
+        provide: ANIMATIONS_DISABLED,
+        useValue: !this.animationsEnabled,
+      },
       {
         provide: INTERNAL_APPLICATION_ERROR_HANDLER,
         useFactory: () => {
@@ -989,7 +1046,7 @@ export class TestBedCompiler {
     }
 
     const providers: StaticProvider[] = [];
-    const compilerOptions = this.platform.injector.get(COMPILER_OPTIONS);
+    const compilerOptions = this.platform.injector.get(COMPILER_OPTIONS, []);
     compilerOptions.forEach((opts) => {
       if (opts.providers) {
         providers.push(opts.providers);
@@ -1066,15 +1123,30 @@ export class TestBedCompiler {
 
   private patchDefWithProviderOverrides(declaration: Type<any>, field: string): void {
     const def = (declaration as any)[field];
-    if (def && def.providersResolver) {
-      this.maybeStoreNgDef(field, declaration);
 
-      const resolver = def.providersResolver;
-      const processProvidersFn = (providers: Provider[]) => this.getOverriddenProviders(providers);
+    if (!def) {
+      return;
+    }
+
+    if (def.viewProvidersResolver) {
+      this.maybeStoreNgDef(field, declaration);
+      const viewProvidersResolver = def.viewProvidersResolver;
+      this.storeFieldOfDefOnType(declaration, field, 'viewProvidersResolver');
+      def.viewProvidersResolver = (ngDef: DirectiveDef<any>) =>
+        viewProvidersResolver(ngDef, this.processProviderOverrides);
+    }
+
+    if (def.providersResolver) {
+      this.maybeStoreNgDef(field, declaration);
+      const providersResolver = def.providersResolver;
       this.storeFieldOfDefOnType(declaration, field, 'providersResolver');
-      def.providersResolver = (ngDef: DirectiveDef<any>) => resolver(ngDef, processProvidersFn);
+      def.providersResolver = (ngDef: DirectiveDef<any>) =>
+        providersResolver(ngDef, this.processProviderOverrides);
     }
   }
+
+  private processProviderOverrides = (providers: Provider[]) =>
+    this.getOverriddenProviders(providers);
 }
 
 function initResolvers(): Resolvers {
@@ -1181,20 +1253,6 @@ class R3TestCompiler implements Compiler {
   async compileModuleAsync<T>(moduleType: Type<T>): Promise<NgModuleFactory<T>> {
     await this.testBed._compileNgModuleAsync(moduleType);
     return new R3NgModuleFactory(moduleType);
-  }
-
-  compileModuleAndAllComponentsSync<T>(moduleType: Type<T>): ModuleWithComponentFactories<T> {
-    const ngModuleFactory = this.compileModuleSync(moduleType);
-    const componentFactories = this.testBed._getComponentFactories(moduleType as NgModuleType<T>);
-    return new ModuleWithComponentFactories(ngModuleFactory, componentFactories);
-  }
-
-  async compileModuleAndAllComponentsAsync<T>(
-    moduleType: Type<T>,
-  ): Promise<ModuleWithComponentFactories<T>> {
-    const ngModuleFactory = await this.compileModuleAsync(moduleType);
-    const componentFactories = this.testBed._getComponentFactories(moduleType as NgModuleType<T>);
-    return new ModuleWithComponentFactories(ngModuleFactory, componentFactories);
   }
 
   clearCache(): void {}

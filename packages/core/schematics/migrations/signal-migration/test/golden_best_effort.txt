@@ -2,14 +2,20 @@
 
 // tslint:disable
 
-import {input} from '@angular/core';
+import {DebugElement, input} from '@angular/core';
 import {TestBed} from '@angular/core/testing';
 import {By} from '@angular/platform-browser';
 
 function it(msg: string, fn: () => void) {}
+const harness = {
+  query<T>(v: T): DebugElement {
+    return null!;
+  },
+};
 
 class SubDir {
   readonly name = input('John');
+  readonly name2 = input('');
 }
 
 class MyComp {
@@ -22,6 +28,14 @@ it('should work', () => {
   const sub = fixture.debugElement.query(By.directive(SubDir)).componentInstance;
 
   expect(sub.name()).toBe('John');
+});
+
+it('should work2', () => {
+  const fixture = TestBed.createComponent(MyComp);
+  // `.componentInstance` is using `any` :O
+  const sub = harness.query(SubDir).componentInstance;
+
+  expect(sub.name2()).toBe('John');
 });
 @@@@@@ base_class.ts @@@@@@
 
@@ -119,6 +133,26 @@ it('should work', () => {
   } as Partial<UnwrapSignalInputs<MyComp>>;
   bootstrapTemplate('<my-comp [hello]="hello">', inputs);
 });
+@@@@@@ catalyst_test_partial.ts @@@@@@
+
+// tslint:disable
+
+import {Component, input} from '@angular/core';
+
+// @ts-ignore
+import {UnwrapSignalInputs} from 'google3/javascript/angular2/testing/catalyst/fake_async';
+
+function renderComponent(inputs: Partial<UnwrapSignalInputs<TestableSecondaryRangePicker>> = {}) {}
+
+@Component({
+  standalone: false,
+  jit: true,
+  template: '<bla [(ngModel)]="incompatible()">',
+})
+class TestableSecondaryRangePicker {
+  readonly bla = input(true);
+  readonly incompatible = input(true);
+}
 @@@@@@ constructor_initializations.ts @@@@@@
 
 // tslint:disable
@@ -142,9 +176,7 @@ export class MyComp {
 import {Component, input} from '@angular/core';
 
 @Component({
-  template: `
-    {{label()}}
-  `,
+  template: ` {{ label() }} `,
 })
 class Group {
   readonly label = input.required<string>();
@@ -153,10 +185,10 @@ class Group {
 @Component({
   template: `
     @if (true) {
-      {{group.label()}}
+      {{ group.label() }}
     }
 
-    {{group.label()}}
+    {{ group.label() }}
   `,
 })
 class Option {
@@ -255,7 +287,7 @@ export class MatHint {
   template: ``,
 })
 export class MatFormFieldTest {
-  private declare _hintChildren: MatHint[];
+  declare private _hintChildren: MatHint[];
   private _control = true;
   private _somethingElse = false;
 
@@ -310,6 +342,27 @@ import {Component, input} from '@angular/core';
 export class WithTemplate {
   readonly test = input(true);
 }
+@@@@@@ flow_cases.ts @@@@@@
+
+// tslint:disable
+
+import {input} from '@angular/core';
+
+class Test {
+  readonly maxCellsPerRow = input(5);
+  readonly maxCellsPerRow2 = input(5);
+
+  private test(arr: string[]) {
+    const maxCellsPerRow = this.maxCellsPerRow();
+    for (let i = 0; i < arr.length; i += maxCellsPerRow) {
+      console.log(maxCellsPerRow);
+    }
+  }
+
+  private readonly maxCellsPerRowValue = this.maxCellsPerRow();
+  protected readonly test2 = this.maxCellsPerRowValue ? this.maxCellsPerRowValue === 3 : false;
+  protected readonly test3 = this.maxCellsPerRow2() === 3 ? true : false;
+}
 @@@@@@ getters.ts @@@@@@
 
 // tslint:disable
@@ -338,7 +391,7 @@ export class WithGetters {
 
 // tslint:disable
 
-import {Component, input} from '@angular/core';
+import {Component, HostBinding, input} from '@angular/core';
 
 @Component({
   template: '',
@@ -356,6 +409,9 @@ class HostBindingTestCmp {
   nested = this;
 
   declare receiverNarrowing: this | undefined;
+
+  @HostBinding('[attr.bla]')
+readonly myInput = input('initial');
 }
 
 const SHARED = {
@@ -556,12 +612,12 @@ export class AppComponent {
         if (isAudi(car)) {
           console.log(car.__audi);
         }
-        const narrowableMultipleTimes = ctx.narrowableMultipleTimes();
-        if (!isCar(narrowableMultipleTimes!) || !isAudi(narrowableMultipleTimes)) {
+        const narrowableMultipleTimesValue = ctx.narrowableMultipleTimes();
+        if (!isCar(narrowableMultipleTimesValue!) || !isAudi(narrowableMultipleTimesValue)) {
           return;
         }
 
-        narrowableMultipleTimes.__audi;
+        narrowableMultipleTimesValue.__audi;
       }
 
       // iife
@@ -620,8 +676,8 @@ describe('bla', () => {
     @Component({
       template: `
         <app-component #ref />
-        {{ref.input.ok}}
-        `,
+        {{ ref.input.ok }}
+      `,
     })
     class TestCmp {}
     TestBed.configureTestingModule({
@@ -653,13 +709,20 @@ describe('bla', () => {
 import {Component, input} from '@angular/core';
 
 @Component({
-  template: `
-    <div *someTemplateDir [style.ok]="justify()">
-    </div>
-  `,
+  template: ` <div *someTemplateDir [style.ok]="justify()"></div> `,
 })
 export class InlineTmpl {
   readonly justify = input<'start' | 'end'>('end');
+}
+@@@@@@ input_function_that_reference_this.ts @@@@@@
+
+// tslint:disable
+
+import {input} from '@angular/core';
+
+export class TestComponent {
+  readonly fnDisplay = input((item: any) => item);
+  @Input() fnEquals = (a: any, b: any) => this.fnDisplay()(a) === this.fnDisplay()(b);
 }
 @@@@@@ jit_true_component_external_tmpl.html @@@@@@
 
@@ -757,6 +820,21 @@ class ModifierScenarios {
   @CustomDecorator()
 protected readonly usingCustomDecorator = input(true);
 }
+@@@@@@ multiple_references_in_method.ts @@@@@@
+
+// tslint:disable
+
+import {input} from '@angular/core';
+
+export class TestMigrationComponent {
+  public readonly model = input<any>();
+
+  public onSaveClick(): void {
+    const model = this.model();
+    model.requisitionId = 145;
+    model.comment = 'value';
+  }
+}
 @@@@@@ mutate.ts @@@@@@
 
 // tslint:disable
@@ -834,11 +912,7 @@ interface Config {
 }
 
 @Component({
-  template: `
-    <span [id]="config().bla">
-      Test
-    </span>
-  `,
+  template: ` <span [id]="config().bla"> Test </span> `,
 })
 export class NestedTemplatePropAccess {
   readonly config = input<Config>({});
@@ -924,9 +998,7 @@ class OptionalInput {
 import {Component, Directive, QueryList, input} from '@angular/core';
 
 @Component({
-  template: `
-    {{label()}}
-  `,
+  template: ` {{ label() }} `,
 })
 class Group {
   readonly label = input.required<string>();
@@ -993,9 +1065,7 @@ class Required {
 import {Component, input} from '@angular/core';
 
 @Component({
-  template: `
-    {{bla?.myInput()}}
-  `,
+  template: ` {{ bla?.myInput() }} `,
 })
 class WithSafePropertyReads {
   readonly myInput = input(0);
@@ -1114,23 +1184,23 @@ import {Component, input} from '@angular/core';
 @Component({
   template: `
     @if (first()) {
-      {{first()}}
+      {{ first() }}
     }
 
     <ng-template [ngIf]="second()">
-      {{second()}}
+      {{ second() }}
     </ng-template>
 
     <div *ngIf="third()">
-      {{third()}}
+      {{ third() }}
     </div>
 
     <div *ngIf="fourth()">
-      {{notTheInput}}
+      {{ notTheInput }}
     </div>
 
     @if (fifth()) {
-      {{notTheInput}}
+      {{ notTheInput }}
     }
   `,
 })
@@ -1141,7 +1211,7 @@ export class MyComp {
   readonly fourth = input(true);
   readonly fifth = input(true);
 }
-@@@@@@ template_object_shorthand.ts @@@@@@
+@@@@@@ template_ng_let.ts @@@@@@
 
 // tslint:disable
 
@@ -1149,9 +1219,24 @@ import {Component, input} from '@angular/core';
 
 @Component({
   template: `
-    <div [bla]="{myInput: myInput()}">
-    </div>
+    @let sum = one() + two();
+    @let three = this.three();
+    {{ sum }} {{ three }}
   `,
+})
+export class MyComp {
+  readonly one = input(1);
+  readonly two = input(2);
+  readonly three = input(3);
+}
+@@@@@@ template_object_shorthand.ts @@@@@@
+
+// tslint:disable
+
+import {Component, input} from '@angular/core';
+
+@Component({
+  template: `<div [bla]="{myInput: myInput()}"></div>`,
   host: {
     '[style]': '{myInput: myInput()}',
   },
@@ -1168,8 +1253,7 @@ import {Component, input} from '@angular/core';
 @Component({
   template: `
     <input [(ngModel)]="inputA()" />
-    <div (click)="inputB = false()">
-    </div>
+    <div (click)="inputB = false()"></div>
   `,
   host: {
     '(click)': 'inputC = true()',
@@ -1180,6 +1264,78 @@ class TwoWayBinding {
   readonly inputB = input(true);
   readonly inputC = input(false);
   readonly inputD = input(false);
+}
+@@@@@@ temporary_variables.ts @@@@@@
+
+// tslint:disable
+
+import {Directive, input} from '@angular/core';
+
+export class OtherCmp {
+  readonly name = input(false);
+}
+
+@Directive()
+export class MyComp {
+  readonly name = input('');
+  other: OtherCmp = null!;
+
+  readonly scroller = input({ fn: () => { }, other: (x?: any) => { } });
+
+  click() {
+    const name = this.name();
+    if (name) {
+      console.error(name);
+    }
+
+    const nameValue = this.other.name();
+    if (nameValue) {
+      console.error(nameValue);
+    }
+  }
+
+  onOverlayAnimationStart() {
+    if (global) {
+      console.log('some statements');
+      console.log('some statements');
+
+      const scroller = this.scroller();
+      if (window) {
+        scroller?.fn();
+        scroller.other();
+      }
+      if (window) {
+        scroller?.other(true as any);
+      }
+    }
+  }
+}
+@@@@@@ ternary_narrowing.ts @@@@@@
+
+// tslint:disable
+
+import {Component, input} from '@angular/core';
+
+@Component({
+  template: `
+    {{ narrowed() ? narrowed().substring(0, 1) : 'Empty' }}
+    {{ justChecked() ? 'true' : 'false' }}
+
+    {{ other?.safeRead() ? other.safeRead() : 'Empty' }}
+    {{ other?.safeRead2() ? other?.safeRead2() : 'Empty' }}
+  `,
+})
+export class TernaryNarrowing {
+  readonly narrowed = input<string>();
+  readonly justChecked = input(true);
+
+  other?: OtherComponent;
+}
+
+@Component({template: ''})
+export class OtherComponent {
+  readonly safeRead = input<string>('');
+  readonly safeRead2 = input<string>('');
 }
 @@@@@@ transform_functions.ts @@@@@@
 
@@ -1226,6 +1382,15 @@ class TransformIncompatibleTypes {
   //  Input type is incompatible with transform. The migration added an `any`
   //  cast. This worked previously because Angular was unable to check transforms.
   readonly disabled = input<boolean, unknown>(undefined, { transform: ((v: unknown) => (v === null ? undefined : !!v)) as any });
+}
+@@@@@@ transform_no_explicit_types.ts @@@@@@
+
+// tslint:disable
+
+import {input} from '@angular/core';
+
+export class TransformFunctions {
+  readonly untypedTransform = input<number>(0);
 }
 @@@@@@ with_getters.ts @@@@@@
 
@@ -1286,4 +1451,24 @@ class WithJsdoc {
   readonly simpleInput = input.required<string>();
 
   readonly withCommentInside = input</* intended */ boolean>();
+}
+@@@@@@ writing_to_inputs.ts @@@@@@
+
+// tslint:disable
+
+import {input} from '@angular/core';
+
+export class TestCmp {
+  readonly testParenthesisInput = input(false);
+  readonly notMutated = input(true);
+
+  testParenthesis() {
+    // prettier-ignore
+    ((this.testParenthesisInput)) = true;
+  }
+
+  testNotMutated() {
+    let fixture: boolean;
+    fixture = this.notMutated();
+  }
 }

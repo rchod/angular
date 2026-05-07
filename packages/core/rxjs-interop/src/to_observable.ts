@@ -14,14 +14,13 @@ import {
   Injector,
   Signal,
   untracked,
-  ɵmicrotaskEffect as microtaskEffect,
-} from '@angular/core';
+} from '../../src/core';
 import {Observable, ReplaySubject} from 'rxjs';
 
 /**
  * Options for `toObservable`.
  *
- * @developerPreview
+ * @publicApi 20.0
  */
 export interface ToObservableOptions {
   /**
@@ -35,49 +34,25 @@ export interface ToObservableOptions {
 
 /**
  * Exposes the value of an Angular `Signal` as an RxJS `Observable`.
+ * As it reflects a state, the observable will always emit the latest value upon subscription.
  *
  * The signal's value will be propagated into the `Observable`'s subscribers using an `effect`.
  *
  * `toObservable` must be called in an injection context unless an injector is provided via options.
  *
- * @developerPreview
+ * @see [RxJS interop with Angular signals](ecosystem/rxjs-interop)
+ * @see [Create an RxJS Observable from a signal with toObservable](ecosystem/rxjs-interop#create-an-rxjs-observable-from-a-signal-with-toobservable)
+ *
+ * @publicApi 20.0
  */
 export function toObservable<T>(source: Signal<T>, options?: ToObservableOptions): Observable<T> {
-  !options?.injector && assertInInjectionContext(toObservable);
+  if (ngDevMode && !options?.injector) {
+    assertInInjectionContext(toObservable);
+  }
   const injector = options?.injector ?? inject(Injector);
   const subject = new ReplaySubject<T>(1);
 
   const watcher = effect(
-    () => {
-      let value: T;
-      try {
-        value = source();
-      } catch (err) {
-        untracked(() => subject.error(err));
-        return;
-      }
-      untracked(() => subject.next(value));
-    },
-    {injector, manualCleanup: true},
-  );
-
-  injector.get(DestroyRef).onDestroy(() => {
-    watcher.destroy();
-    subject.complete();
-  });
-
-  return subject.asObservable();
-}
-
-export function toObservableMicrotask<T>(
-  source: Signal<T>,
-  options?: ToObservableOptions,
-): Observable<T> {
-  !options?.injector && assertInInjectionContext(toObservable);
-  const injector = options?.injector ?? inject(Injector);
-  const subject = new ReplaySubject<T>(1);
-
-  const watcher = microtaskEffect(
     () => {
       let value: T;
       try {

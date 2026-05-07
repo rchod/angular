@@ -6,24 +6,21 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
-import {PLATFORM_ID} from '../../application/application_tokens';
-import {Injector} from '../../di';
-import {inject} from '../../di/injector_compatibility';
 import {RElement} from '../interfaces/renderer_dom';
 
 /**
  *
  * @codeGenApi
  */
-export function ɵɵresolveWindow(element: RElement & {ownerDocument: Document}) {
-  return element.ownerDocument.defaultView;
+export function ɵɵresolveWindow(element: RElement & {ownerDocument: Document}): EventTarget {
+  return element.ownerDocument.defaultView!;
 }
 
 /**
  *
  * @codeGenApi
  */
-export function ɵɵresolveDocument(element: RElement & {ownerDocument: Document}) {
+export function ɵɵresolveDocument(element: RElement & {ownerDocument: Document}): EventTarget {
   return element.ownerDocument;
 }
 
@@ -31,7 +28,7 @@ export function ɵɵresolveDocument(element: RElement & {ownerDocument: Document
  *
  * @codeGenApi
  */
-export function ɵɵresolveBody(element: RElement & {ownerDocument: Document}) {
+export function ɵɵresolveBody(element: RElement & {ownerDocument: Document}): EventTarget {
   return element.ownerDocument.body;
 }
 
@@ -60,13 +57,4 @@ export function maybeUnwrapFn<T>(value: T | (() => T)): T {
   } else {
     return value;
   }
-}
-
-/**
- * Detects whether the code is invoked in a browser.
- * Later on, this check should be replaced with a tree-shakable
- * flag (e.g. `!isServer`).
- */
-export function isPlatformBrowser(injector?: Injector): boolean {
-  return (injector ?? inject(Injector)).get(PLATFORM_ID) === 'browser';
 }

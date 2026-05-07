@@ -6,33 +6,25 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
-import {
-  ChangeDetectionStrategy,
-  Component,
-  DestroyRef,
-  Input,
-  Type,
-  computed,
-  inject,
-  ChangeDetectorRef,
-  ViewChild,
-  signal,
-  ElementRef,
-  forwardRef,
-} from '@angular/core';
-import {CommonModule, DOCUMENT} from '@angular/common';
-import {MatTabGroup, MatTabsModule} from '@angular/material/tabs';
 import {Clipboard} from '@angular/cdk/clipboard';
-import {CopySourceCodeButton} from '../../copy-source-code-button/copy-source-code-button.component';
+import {DOCUMENT, NgComponentOutlet, NgTemplateOutlet} from '@angular/common';
+import {
+  afterNextRender,
+  Component,
+  computed,
+  ElementRef,
+  inject,
+  Injector,
+  input,
+  signal,
+  Type,
+} from '@angular/core';
+import {MatTab, MatTabGroup} from '@angular/material/tabs';
+import {MatTooltip} from '@angular/material/tooltip';
 import {ExampleMetadata, Snippet} from '../../../interfaces/index';
 import {EXAMPLE_VIEWER_CONTENT_LOADER} from '../../../providers/index';
-import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
-import {DocViewer} from '../docs-viewer/docs-viewer.component';
-
-export enum CodeExampleViewMode {
-  SNIPPET = 'snippet',
-  MULTI_FILE = 'multi',
-}
+import {CopySourceCodeButton} from '../../copy-source-code-button/copy-source-code-button.component';
+import {IconComponent} from '../../icon/icon.component';
 
 export const CODE_LINE_NUMBER_CLASS_NAME = 'shiki-ln-number';
 export const CODE_LINE_CLASS_NAME = 'line';
@@ -41,26 +33,26 @@ export const HIDDEN_CLASS_NAME = 'hidden';
 
 @Component({
   selector: 'docs-example-viewer',
-  standalone: true,
-  imports: [CommonModule, forwardRef(() => DocViewer), CopySourceCodeButton, MatTabsModule],
+  imports: [
+    CopySourceCodeButton,
+    MatTabGroup,
+    MatTab,
+    MatTooltip,
+    IconComponent,
+    NgTemplateOutlet,
+    NgComponentOutlet,
+  ],
   templateUrl: './example-viewer.component.html',
   styleUrls: ['./example-viewer.component.scss'],
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ExampleViewer {
-  // TODO: replace by signal-based input when it'll be available
-  @Input({required: true}) set metadata(value: ExampleMetadata) {
-    this.exampleMetadata.set(value);
-  }
+  readonly exampleMetadata = input<ExampleMetadata | null>(null, {alias: 'metadata'});
+  readonly githubUrl = input<string | null>(null);
+  readonly stackblitzUrl = input<string | null>(null);
 
-  @Input() githubUrl: string | null = null;
-  @Input() stackblitzUrl: string | null = null;
-  @ViewChild('codeTabs') matTabGroup?: MatTabGroup;
-
-  private readonly changeDetector = inject(ChangeDetectorRef);
   private readonly clipboard = inject(Clipboard);
-  private readonly destroyRef = inject(DestroyRef);
   private readonly document = inject(DOCUMENT);
+  private readonly injector = inject(Injector);
   private readonly elementRef = inject(ElementRef<HTMLElement>);
   private readonly exampleViewerContentLoader = inject(EXAMPLE_VIEWER_CONTENT_LOADER);
 
@@ -72,50 +64,50 @@ export class ExampleViewer {
     return new Set(fileExtensions).size !== fileExtensions.length;
   });
 
-  CodeExampleViewMode = CodeExampleViewMode;
   exampleComponent?: Type<unknown>;
 
-  expanded = signal<boolean>(false);
-  exampleMetadata = signal<ExampleMetadata | null>(null);
-  snippetCode = signal<Snippet | undefined>(undefined);
-  tabs = computed(() =>
+  readonly expandable = signal<boolean>(false);
+  readonly expanded = signal<boolean>(false);
+  readonly snippetCode = signal<Snippet | undefined>(undefined);
+  readonly showCode = signal<boolean>(true);
+  readonly tabs = computed(() =>
     this.exampleMetadata()?.files.map((file) => ({
       name:
         file.title ?? (this.shouldDisplayFullName() ? file.name : this.getFileExtension(file.name)),
-      code: file.content,
+      code: file.sanitizedContent,
     })),
-  );
-  view = computed(() =>
-    this.exampleMetadata()?.files.length === 1
-      ? CodeExampleViewMode.SNIPPET
-      : CodeExampleViewMode.MULTI_FILE,
-  );
-  expandable = computed(() =>
-    this.exampleMetadata()?.files.some((file) => !!file.visibleLinesRange),
   );
 
   async renderExample(): Promise<void> {
     // Lazy load live example component
-    if (this.exampleMetadata()?.path && this.exampleMetadata()?.preview) {
-      this.exampleComponent = await this.exampleViewerContentLoader.loadPreview(
-        this.exampleMetadata()?.path!,
-      );
+    const path = this.exampleMetadata()?.path;
+    if (path && this.exampleMetadata()?.preview) {
+      this.exampleComponent = await this.exampleViewerContentLoader.loadPreview(path);
     }
 
     this.snippetCode.set(this.exampleMetadata()?.files[0]);
 
-    this.changeDetector.detectChanges();
+    if (this.exampleMetadata()?.hideCode) {
+      this.showCode.set(false);
+    }
 
-    this.setCodeLinesVisibility();
+    afterNextRender(
+      () => {
+        // Several function below query the DOM directly, we need to wait until the DOM is rendered.
+        this.setCodeLinesVisibility();
 
-    this.elementRef.nativeElement.setAttribute(
-      'id',
-      `example-${this.exampleMetadata()?.id.toString()!}`,
+        this.elementRef.nativeElement.setAttribute(
+          'id',
+          `example-${this.exampleMetadata()?.id.toString()!}`,
+        );
+
+        const lines = this.getHiddenCodeLines();
+        const lineNumbers = this.getHiddenCodeLineNumbers();
+
+        this.expandable.set(lines.length > 0 || lineNumbers.length > 0);
+      },
+      {injector: this.injector},
     );
-
-    this.matTabGroup?.realignInkBar();
-
-    this.listenToMatTabIndexChange();
   }
 
   toggleExampleVisibility(): void {
@@ -135,15 +127,9 @@ export class ExampleViewer {
     this.clipboard.copy(fullUrl);
   }
 
-  private listenToMatTabIndexChange(): void {
-    this.matTabGroup?.realignInkBar();
-    this.matTabGroup?.selectedIndexChange
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe((index) => {
-        this.snippetCode.set(this.exampleMetadata()?.files[index]);
-        this.changeDetector.detectChanges();
-        this.setCodeLinesVisibility();
-      });
+  protected onTabIndexChange(index: number): void {
+    this.snippetCode.set(this.exampleMetadata()?.files[index]);
+    this.setCodeLinesVisibility();
   }
 
   private getFileExtension(name: string): string {
@@ -158,21 +144,9 @@ export class ExampleViewer {
   }
 
   private handleExpandedStateForCodeBlock(): void {
-    const lines = <HTMLDivElement[]>(
-      Array.from(
-        this.elementRef.nativeElement.querySelectorAll(
-          `.${CODE_LINE_CLASS_NAME}.${HIDDEN_CLASS_NAME}`,
-        ),
-      )
-    );
+    const lines = this.getHiddenCodeLines();
 
-    const lineNumbers = <HTMLSpanElement[]>(
-      Array.from(
-        this.elementRef.nativeElement.querySelectorAll(
-          `.${CODE_LINE_NUMBER_CLASS_NAME}.${HIDDEN_CLASS_NAME}`,
-        ),
-      )
-    );
+    const lineNumbers = this.getHiddenCodeLineNumbers();
 
     const gapLines = <HTMLDivElement[]>(
       Array.from(
@@ -212,7 +186,7 @@ export class ExampleViewer {
     const appendGapBefore = [];
 
     for (const [index, line] of lines.entries()) {
-      if (!linesToDisplay.includes(index)) {
+      if (!linesToDisplay.includes(index + 1)) {
         line.classList.add(HIDDEN_CLASS_NAME);
       } else if (!linesToDisplay.includes(index - 1)) {
         appendGapBefore.push(line);
@@ -239,5 +213,25 @@ export class ExampleViewer {
       separator.classList.add(GAP_CODE_LINE_CLASS_NAME);
       element.parentNode?.insertBefore(separator, element);
     }
+  }
+
+  private getHiddenCodeLines(): HTMLDivElement[] {
+    return <HTMLDivElement[]>(
+      Array.from(
+        this.elementRef.nativeElement.querySelectorAll(
+          `.${CODE_LINE_CLASS_NAME}.${HIDDEN_CLASS_NAME}`,
+        ),
+      )
+    );
+  }
+
+  private getHiddenCodeLineNumbers(): HTMLSpanElement[] {
+    return <HTMLSpanElement[]>(
+      Array.from(
+        this.elementRef.nativeElement.querySelectorAll(
+          `.${CODE_LINE_NUMBER_CLASS_NAME}.${HIDDEN_CLASS_NAME}`,
+        ),
+      )
+    );
   }
 }

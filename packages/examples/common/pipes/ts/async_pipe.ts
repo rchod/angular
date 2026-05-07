@@ -6,12 +6,14 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
+import {AsyncPipe} from '@angular/common';
 import {Component} from '@angular/core';
 import {Observable, Observer} from 'rxjs';
 
 // #docregion AsyncPipePromise
 @Component({
   selector: 'async-promise-pipe',
+  imports: [AsyncPipe],
   template: `<div>
     <code>promise|async</code>:
     <button (click)="clicked()">{{ arrived ? 'Reset' : 'Resolve' }}</button>
@@ -49,6 +51,7 @@ export class AsyncPromisePipeComponent {
 // #docregion AsyncPipeObservable
 @Component({
   selector: 'async-observable-pipe',
+  imports: [AsyncPipe],
   template: '<div><code>observable|async</code>: Time: {{ time | async }}</div>',
 })
 export class AsyncObservablePipeComponent {

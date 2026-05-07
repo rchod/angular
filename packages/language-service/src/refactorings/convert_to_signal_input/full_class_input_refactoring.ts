@@ -6,10 +6,10 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
-import {CompilerOptions} from '@angular/compiler-cli';
-import {NgCompiler} from '@angular/compiler-cli/src/ngtsc/core';
+import {CompilerOptions, NgCompiler} from '@angular/compiler-cli';
+
 import {MigrationConfig} from '@angular/core/schematics/migrations/signal-migration/src';
-import {ApplyRefactoringProgressFn, ApplyRefactoringResult} from '@angular/language-service/api';
+import {ApplyRefactoringProgressFn, ApplyRefactoringResult} from '../../../api';
 import ts from 'typescript';
 import {isTypeScriptFile} from '../../utils';
 import {findTightestNode, getParentClassDeclaration} from '../../utils/ts_utils';
@@ -106,11 +106,12 @@ abstract class BaseConvertFullClassToSignalInputsRefactoring implements ActiveRe
 
 export class ConvertFullClassToSignalInputsRefactoring extends BaseConvertFullClassToSignalInputsRefactoring {
   static id = 'convert-full-class-to-signal-inputs-safe-mode';
-  static description = "Convert all class @Input's to signal inputs (safe)";
+  static description = "Full class: Convert all @Input's to signal inputs (safe)";
   override config: MigrationConfig = {};
 }
 export class ConvertFullClassToSignalInputsBestEffortRefactoring extends BaseConvertFullClassToSignalInputsRefactoring {
   static id = 'convert-full-class-to-signal-inputs-best-effort-mode';
-  static description = "Convert all class @Input's to signal inputs (forcibly, ignoring errors)";
+  static description =
+    "Full class: Convert all @Input's to signal inputs (forcibly, ignoring errors)";
   override config: MigrationConfig = {bestEffortMode: true};
 }

@@ -6,11 +6,11 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
-import {DATE_PIPE_DEFAULT_OPTIONS, DatePipe} from '@angular/common';
-import localeEn from '@angular/common/locales/en';
-import localeEnExtra from '@angular/common/locales/extra/en';
 import {Component, ɵregisterLocaleData, ɵunregisterLocaleData} from '@angular/core';
 import {TestBed} from '@angular/core/testing';
+import {DATE_PIPE_DEFAULT_OPTIONS, DatePipe} from '../../index';
+import localeEn from '../../locales/en';
+import localeEnExtra from '../../locales/extra/en';
 
 describe('DatePipe', () => {
   const isoStringWithoutTime = '2015-01-01';
@@ -82,7 +82,6 @@ describe('DatePipe', () => {
         selector: 'test-component',
         imports: [DatePipe],
         template: '{{ value | date }}',
-        standalone: true,
         providers: [{provide: DATE_PIPE_DEFAULT_OPTIONS, useValue: {dateFormat: 'shortDate'}}],
       })
       class TestComponent {
@@ -101,7 +100,6 @@ describe('DatePipe', () => {
         selector: 'test-component',
         imports: [DatePipe],
         template: '{{ value | date }}',
-        standalone: true,
       })
       class TestComponent {
         value = '2017-01-11T10:14:39+0000';
@@ -157,10 +155,6 @@ describe('DatePipe', () => {
       expect(pipe.transform('2017-01-11T00:00:00', 'mediumDate', '-1200')).toEqual('Jan 10, 2017');
     });
 
-    it('should take timezone into account with timezone offset', () => {
-      expect(pipe.transform('2017-01-11T00:00:00', 'mediumDate', '-1200')).toEqual('Jan 10, 2017');
-    });
-
     it('should take the default timezone into account when no timezone is passed in', () => {
       pipe = new DatePipe('en-US', '-1200');
       expect(pipe.transform('2017-01-11T00:00:00', 'mediumDate')).toEqual('Jan 10, 2017');
@@ -176,7 +170,6 @@ describe('DatePipe', () => {
         selector: 'test-component',
         imports: [DatePipe],
         template: '{{ value | date }}',
-        standalone: true,
         providers: [{provide: DATE_PIPE_DEFAULT_OPTIONS, useValue: {timezone: '-1200'}}],
       })
       class TestComponent {
@@ -195,7 +188,6 @@ describe('DatePipe', () => {
         selector: 'test-component',
         imports: [DatePipe],
         template: '{{ value | date }}',
-        standalone: true,
       })
       class TestComponent {
         value = '2017-01-11T00:00:00';
@@ -218,7 +210,6 @@ describe('DatePipe', () => {
       selector: 'test-component',
       imports: [DatePipe],
       template: '{{ value | date }}',
-      standalone: true,
     })
     class TestComponent {
       value = '2017-01-11T10:14:39+0000';

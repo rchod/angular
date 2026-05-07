@@ -49,12 +49,12 @@ export function createPipeDefinitionMap(
   // e.g. `type: MyPipe`
   definitionMap.set('type', meta.type.value);
 
-  if (meta.isStandalone) {
+  if (meta.isStandalone !== undefined) {
     definitionMap.set('isStandalone', o.literal(meta.isStandalone));
   }
 
   // e.g. `name: "myPipe"`
-  definitionMap.set('name', o.literal(meta.pipeName));
+  definitionMap.set('name', o.literal(meta.pipeName ?? meta.name));
 
   if (meta.pure === false) {
     // e.g. `pure: false`

@@ -6,7 +6,14 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
+// Needed for the global `Zone` ambient types to be available.
+import type {} from 'zone.js';
+
 import {AsyncPipe} from '@angular/common';
+import {bootstrapApplication} from '@angular/platform-browser';
+import {withBody} from '@angular/private/testing';
+import {SIGNAL} from '../../primitives/signals';
+import {toObservable} from '../../rxjs-interop';
 import {
   AfterViewInit,
   ApplicationRef,
@@ -16,7 +23,6 @@ import {
   computed,
   ContentChildren,
   createComponent,
-  createEnvironmentInjector,
   destroyPlatform,
   Directive,
   effect,
@@ -28,29 +34,19 @@ import {
   Input,
   NgZone,
   OnChanges,
-  provideExperimentalZonelessChangeDetection,
+  provideZonelessChangeDetection,
   QueryList,
   signal,
   SimpleChanges,
   TemplateRef,
+  untracked,
   ViewChild,
   ViewContainerRef,
-} from '@angular/core';
-import {takeUntilDestroyed, toObservable} from '@angular/core/rxjs-interop';
-import {createInjector} from '@angular/core/src/di/create_injector';
-import {setUseMicrotaskEffectsByDefault} from '@angular/core/src/render3/reactivity/effect';
-import {TestBed} from '@angular/core/testing';
-import {bootstrapApplication} from '@angular/platform-browser';
-import {withBody} from '@angular/private/testing';
-import {filter, firstValueFrom, map} from 'rxjs';
+} from '../../src/core';
+import {EffectNode} from '../../src/render3/reactivity/effect';
+import {TestBed} from '../../testing';
 
 describe('reactivity', () => {
-  let prev: boolean;
-  beforeEach(() => {
-    prev = setUseMicrotaskEffectsByDefault(false);
-  });
-  afterEach(() => setUseMicrotaskEffectsByDefault(prev));
-
   describe('effects', () => {
     beforeEach(destroyPlatform);
     afterEach(destroyPlatform);
@@ -61,7 +57,6 @@ describe('reactivity', () => {
         const log: string[] = [];
         @Component({
           selector: 'test-cmp',
-          standalone: true,
           template: '',
         })
         class Cmp {
@@ -96,11 +91,17 @@ describe('reactivity', () => {
       expect(isStable).toEqual([true, false]);
 
       appRef.tick();
+      await appRef.whenStable();
 
       expect(isStable).toEqual([true, false, true]);
     });
 
-    it('should propagate errors to the ErrorHandler', () => {
+    it('should propagate errors to the ErrorHandler', async () => {
+      TestBed.configureTestingModule({
+        providers: [{provide: ErrorHandler, useFactory: () => new FakeErrorHandler()}],
+        rethrowApplicationErrors: false,
+      });
+
       let run = false;
 
       let lastError: any = null;
@@ -109,24 +110,26 @@ describe('reactivity', () => {
           lastError = error;
         }
       }
-
-      const injector = createEnvironmentInjector(
-        [{provide: ErrorHandler, useFactory: () => new FakeErrorHandler()}],
-        TestBed.inject(EnvironmentInjector),
-      );
+      const appRef = TestBed.inject(ApplicationRef);
       effect(
         () => {
           run = true;
           throw new Error('fail!');
         },
-        {injector},
+        {injector: appRef.injector},
       );
-      expect(() => TestBed.flushEffects()).not.toThrow();
+      await appRef.whenStable();
       expect(run).toBeTrue();
       expect(lastError.message).toBe('fail!');
     });
 
-    it('should be usable inside an ErrorHandler', async () => {
+    // Disabled while we consider whether this actually makes sense.
+    // This test _used_ to show that `effect()` was usable inside component error handlers, partly
+    // because effect errors used to report to component error handlers. Now, effect errors are
+    // always reported to the top-level error handler, which has never been able to use `effect()`
+    // as `effect()` depends transitively on `ApplicationRef` which depends circularly on
+    // `ErrorHandler`.
+    xit('should be usable inside an ErrorHandler', async () => {
       const shouldError = signal(false);
       let lastError: any = null;
 
@@ -145,24 +148,16 @@ describe('reactivity', () => {
         }
       }
 
-      @Component({
-        standalone: true,
-        template: '',
+      TestBed.configureTestingModule({
         providers: [{provide: ErrorHandler, useClass: FakeErrorHandler}],
-      })
-      class App {
-        errorHandler = inject(ErrorHandler);
-      }
+        rethrowApplicationErrors: false,
+      });
 
-      const fixture = TestBed.createComponent(App);
-      fixture.detectChanges();
-
-      expect(fixture.componentInstance.errorHandler).toBeInstanceOf(FakeErrorHandler);
-      expect(lastError).toBe(null);
+      const appRef = TestBed.inject(ApplicationRef);
+      expect(() => appRef.tick()).not.toThrow();
 
       shouldError.set(true);
-      fixture.detectChanges();
-
+      expect(() => appRef.tick()).not.toThrow();
       expect(lastError?.message).toBe('fail!');
     });
 
@@ -172,7 +167,6 @@ describe('reactivity', () => {
 
       @Component({
         selector: 'test-cmp',
-        standalone: true,
         template: '',
       })
       class Cmp {
@@ -203,12 +197,54 @@ describe('reactivity', () => {
       expect(cleanupCount).toBe(2);
     });
 
+    it('should run effect cleanup as untracked', async () => {
+      @Component({
+        template: '',
+      })
+      class Cmp {
+        counter = signal(0);
+        effectTrigger = signal(0);
+
+        effectRef = effect((onCleanup) => {
+          this.effectTrigger();
+
+          untracked(() => {
+            if (this.counter() > 1) {
+              // This is an early bailout in case the effect loops infinitely
+              throw new Error('Updated consummers in cleanup for not re-trigger the effect');
+            }
+          });
+
+          onCleanup(() => {
+            this.counter(); // A signal read but not consummed
+            this.counter.update((v) => v + 1);
+          });
+        });
+      }
+
+      const fixture = TestBed.createComponent(Cmp);
+      fixture.detectChanges();
+      await fixture.whenStable();
+      // initially an effect runs but the default cleanup function is noop
+      expect(fixture.componentInstance.counter()).toBe(0);
+
+      // Triggers a cleanup
+      fixture.componentInstance.effectTrigger.update((v) => v + 1);
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      expect(fixture.componentInstance.counter()).toBe(1);
+
+      // Destroy triggers a cleanup
+      fixture.destroy();
+      expect(fixture.componentInstance.counter()).toBe(2);
+    });
+
     it('should run effects created in ngAfterViewInit', () => {
       let didRun = false;
 
       @Component({
         selector: 'test-cmp',
-        standalone: true,
         template: '',
       })
       class Cmp implements AfterViewInit {
@@ -231,67 +267,88 @@ describe('reactivity', () => {
     });
 
     it('should create root effects when outside of a component, using injection context', () => {
-      TestBed.configureTestingModule({});
       const counter = signal(0);
       const log: number[] = [];
       TestBed.runInInjectionContext(() => effect(() => log.push(counter())));
 
-      TestBed.flushEffects();
+      TestBed.tick();
       expect(log).toEqual([0]);
 
       counter.set(1);
-      TestBed.flushEffects();
+      TestBed.tick();
       expect(log).toEqual([0, 1]);
     });
 
     it('should create root effects when outside of a component, using an injector', () => {
-      TestBed.configureTestingModule({});
       const counter = signal(0);
       const log: number[] = [];
       effect(() => log.push(counter()), {injector: TestBed.inject(Injector)});
 
-      TestBed.flushEffects();
+      TestBed.tick();
       expect(log).toEqual([0]);
 
       counter.set(1);
-      TestBed.flushEffects();
+      TestBed.tick();
       expect(log).toEqual([0, 1]);
     });
 
-    it('should create root effects inside a component when specified', () => {
-      TestBed.configureTestingModule({});
+    it('should cleanup effect when manualCleanup is enabled and an injector is provided', () => {
       const counter = signal(0);
       const log: number[] = [];
+      // It needs the injector to be able to inject the other deps (and not just the DestroyRef).
+      const ref = effect(() => log.push(counter()), {
+        manualCleanup: true,
+        injector: TestBed.inject(Injector),
+      });
 
-      @Component({
-        standalone: true,
-        template: '',
-      })
-      class TestCmp {
-        constructor() {
-          effect(() => log.push(counter()), {forceRoot: true});
-        }
-      }
-
-      // Running this creates the effect. Note: we never CD this component.
-      TestBed.createComponent(TestCmp);
-
-      TestBed.flushEffects();
+      TestBed.tick();
       expect(log).toEqual([0]);
 
       counter.set(1);
-      TestBed.flushEffects();
+      TestBed.tick();
       expect(log).toEqual([0, 1]);
+
+      ref.destroy();
+      counter.set(2);
+      TestBed.tick();
+      expect(log).toEqual([0, 1]);
+    });
+
+    it('should run root effects in creation order independent of dirty order', async () => {
+      TestBed.configureTestingModule({
+        providers: [provideZonelessChangeDetection()],
+      });
+      const appRef = TestBed.inject(ApplicationRef);
+
+      const sourceA = signal(0);
+      const sourceB = signal(0);
+
+      const log: string[] = [];
+
+      // Creation order: A, B
+      effect(() => log.push(`A: ${sourceA()}`), {injector: appRef.injector});
+      effect(() => log.push(`B: ${sourceB()}`), {injector: appRef.injector});
+      await appRef.whenStable();
+
+      expect(log).toEqual(['A: 0', 'B: 0']);
+      log.length = 0;
+
+      // Dirty order: B, A
+      sourceB.set(1);
+      sourceA.set(2);
+      await appRef.whenStable();
+
+      // Effects should still run in A, B creation order.
+      expect(log).toEqual(['A: 2', 'B: 1']);
     });
 
     it('should check components made dirty from markForCheck() from an effect', async () => {
       TestBed.configureTestingModule({
-        providers: [provideExperimentalZonelessChangeDetection()],
+        providers: [provideZonelessChangeDetection()],
       });
 
       const source = signal('');
       @Component({
-        standalone: true,
         changeDetection: ChangeDetectionStrategy.OnPush,
         template: '{{ data }}',
       })
@@ -317,7 +374,7 @@ describe('reactivity', () => {
 
     it('should check components made dirty from markForCheck() from an effect in a service', async () => {
       TestBed.configureTestingModule({
-        providers: [provideExperimentalZonelessChangeDetection()],
+        providers: [provideZonelessChangeDetection()],
       });
 
       const source = signal('');
@@ -335,7 +392,6 @@ describe('reactivity', () => {
       }
 
       @Component({
-        standalone: true,
         changeDetection: ChangeDetectionStrategy.OnPush,
         providers: [Service],
         template: '{{ service.data }}',
@@ -355,13 +411,12 @@ describe('reactivity', () => {
 
     it('should check views made dirty from markForCheck() from an effect in a directive', async () => {
       TestBed.configureTestingModule({
-        providers: [provideExperimentalZonelessChangeDetection()],
+        providers: [provideZonelessChangeDetection()],
       });
 
       const source = signal('');
 
       @Directive({
-        standalone: true,
         selector: '[dir]',
       })
       class Dir {
@@ -382,9 +437,8 @@ describe('reactivity', () => {
       }
 
       @Component({
-        standalone: true,
         imports: [Dir],
-        template: `<ng-template dir let-data>{{data}}</ng-template>`,
+        template: `<ng-template dir let-data>{{ data }}</ng-template>`,
         changeDetection: ChangeDetectionStrategy.OnPush,
       })
       class TestCmp {}
@@ -399,39 +453,9 @@ describe('reactivity', () => {
     });
 
     describe('destruction', () => {
-      it('should still destroy root effects with the DestroyRef of the component', () => {
-        TestBed.configureTestingModule({});
-        const counter = signal(0);
-        const log: number[] = [];
-
-        @Component({
-          standalone: true,
-          template: '',
-        })
-        class TestCmp {
-          constructor() {
-            effect(() => log.push(counter()), {forceRoot: true});
-          }
-        }
-
-        const fix = TestBed.createComponent(TestCmp);
-
-        TestBed.flushEffects();
-        expect(log).toEqual([0]);
-
-        // Destroy the effect.
-        fix.destroy();
-
-        counter.set(1);
-        TestBed.flushEffects();
-        expect(log).toEqual([0]);
-      });
-
       it('should destroy effects when the parent component is destroyed', () => {
         let destroyed = false;
-        @Component({
-          standalone: true,
-        })
+        @Component({})
         class TestCmp {
           constructor() {
             effect((onCleanup) => onCleanup(() => (destroyed = true)));
@@ -447,9 +471,7 @@ describe('reactivity', () => {
 
       it('should destroy effects when their view is destroyed, separately from DestroyRef', () => {
         let destroyed = false;
-        @Component({
-          standalone: true,
-        })
+        @Component({})
         class TestCmp {
           readonly injector = Injector.create({providers: [], parent: inject(Injector)});
 
@@ -467,9 +489,7 @@ describe('reactivity', () => {
 
       it('should destroy effects when their DestroyRef is separately destroyed', () => {
         let destroyed = false;
-        @Component({
-          standalone: true,
-        })
+        @Component({})
         class TestCmp {
           readonly injector = Injector.create({providers: [], parent: inject(Injector)});
 
@@ -484,6 +504,53 @@ describe('reactivity', () => {
         (fix.componentInstance.injector as Injector & {destroy(): void}).destroy();
         expect(destroyed).toBeTrue();
       });
+
+      it('should not run root effects after it has been destroyed', async () => {
+        let effectCounter = 0;
+        const counter = signal(1);
+        const effectRef = TestBed.runInInjectionContext(() =>
+          effect(
+            () => {
+              counter();
+              effectCounter++;
+            },
+            {injector: TestBed.inject(EnvironmentInjector)},
+          ),
+        );
+        expect(effectCounter).toBe(0);
+        effectRef.destroy();
+        TestBed.tick();
+        expect(effectCounter).toBe(0);
+
+        counter.set(2);
+        TestBed.tick();
+        expect(effectCounter).toBe(0);
+      });
+
+      it('should not run view effects after it has been destroyed', async () => {
+        let effectCounter = 0;
+
+        @Component({template: ''})
+        class TestCmp {
+          counter = signal(1);
+          effectRef = effect(() => {
+            this.counter();
+            effectCounter++;
+          });
+        }
+
+        const fixture = TestBed.createComponent(TestCmp);
+        fixture.componentInstance.effectRef.destroy();
+        fixture.detectChanges();
+        expect(effectCounter).toBe(0);
+
+        TestBed.tick();
+        expect(effectCounter).toBe(0);
+
+        fixture.componentInstance.counter.set(2);
+        TestBed.tick();
+        expect(effectCounter).toBe(0);
+      });
     });
   });
 
@@ -492,14 +559,13 @@ describe('reactivity', () => {
       const counter = signal(0);
 
       effect(() => counter.set(1), {injector: TestBed.inject(Injector)});
-      TestBed.flushEffects();
+      TestBed.tick();
       expect(counter()).toBe(1);
     });
 
     it('should allow writing to signals in ngOnChanges', () => {
       @Component({
         selector: 'with-input',
-        standalone: true,
         template: '{{inSignal()}}',
       })
       class WithInput implements OnChanges {
@@ -515,7 +581,6 @@ describe('reactivity', () => {
 
       @Component({
         selector: 'test-cmp',
-        standalone: true,
         imports: [WithInput],
         template: `<with-input [in]="'A'" />|<with-input [in]="'B'" />`,
       })
@@ -529,7 +594,6 @@ describe('reactivity', () => {
     it('should allow writing to signals in a constructor', () => {
       @Component({
         selector: 'with-constructor',
-        standalone: true,
         template: '{{state()}}',
       })
       class WithConstructor {
@@ -542,7 +606,6 @@ describe('reactivity', () => {
 
       @Component({
         selector: 'test-cmp',
-        standalone: true,
         imports: [WithConstructor],
         template: `<with-constructor />`,
       })
@@ -556,7 +619,6 @@ describe('reactivity', () => {
     it('should allow writing to signals in input setters', () => {
       @Component({
         selector: 'with-input-setter',
-        standalone: true,
         template: '{{state()}}',
       })
       class WithInputSetter {
@@ -570,11 +632,10 @@ describe('reactivity', () => {
 
       @Component({
         selector: 'test-cmp',
-        standalone: true,
         imports: [WithInputSetter],
         template: `
           <with-input-setter [testInput]="'binding'" />|<with-input-setter testInput="static" />
-      `,
+        `,
       })
       class Cmp {}
 
@@ -586,7 +647,6 @@ describe('reactivity', () => {
     it('should allow writing to signals in query result setters', () => {
       @Component({
         selector: 'with-query',
-        standalone: true,
         template: '{{items().length}}',
       })
       class WithQuery {
@@ -600,7 +660,6 @@ describe('reactivity', () => {
 
       @Component({
         selector: 'test-cmp',
-        standalone: true,
         imports: [WithQuery],
         template: `<with-query><div #item></div></with-query>`,
       })
@@ -616,7 +675,6 @@ describe('reactivity', () => {
 
       @Component({
         selector: 'with-query-setter',
-        standalone: true,
         template: '<div #el></div>',
       })
       class WithQuerySetter {
@@ -632,7 +690,6 @@ describe('reactivity', () => {
 
       @Component({
         selector: 'test-cmp',
-        standalone: true,
         template: ``,
       })
       class Cmp {
@@ -665,7 +722,6 @@ describe('reactivity', () => {
     it('should allow toObservable subscription in template (with async pipe)', () => {
       @Component({
         selector: 'test-cmp',
-        standalone: true,
         imports: [AsyncPipe],
         template: '{{counter$ | async}}',
       })
@@ -680,11 +736,61 @@ describe('reactivity', () => {
       expect(fixture.nativeElement.textContent).toBe('0');
     });
 
+    it('should assign a debugName to the underlying node for an effect', async () => {
+      @Component({
+        selector: 'test-cmp',
+        template: '',
+      })
+      class Cmp {
+        effectRef = effect(() => {}, {debugName: 'TEST_DEBUG_NAME'});
+      }
+
+      const fixture = TestBed.createComponent(Cmp);
+      fixture.detectChanges();
+      const component = fixture.componentInstance;
+      const effectRef = component.effectRef as unknown as {[SIGNAL]: EffectNode};
+      expect(effectRef[SIGNAL].debugName).toBe('TEST_DEBUG_NAME');
+    });
+
+    it('should disallow writing to signals within computed', () => {
+      @Component({
+        selector: 'with-input',
+        template: '{{comp()}}',
+      })
+      class WriteComputed {
+        sig = signal(0);
+        comp = computed(() => {
+          this.sig.set(this.sig() + 1);
+          return this.sig();
+        });
+      }
+
+      const fixture = TestBed.createComponent(WriteComputed);
+
+      expect(() => fixture.detectChanges()).toThrowError(/NG0600.*in a `computed`/);
+    });
+
+    it('should disallow writing to signals within a template', () => {
+      @Component({
+        selector: 'with-input',
+        template: '{{func()}}',
+      })
+      class WriteComputed {
+        sig = signal(0);
+        func() {
+          this.sig.set(this.sig() + 1);
+        }
+      }
+
+      const fixture = TestBed.createComponent(WriteComputed);
+
+      expect(() => fixture.detectChanges()).toThrowError(/NG0600.*template/);
+    });
+
     describe('effects created in components should first run after ngOnInit', () => {
       it('when created during bootstrapping', () => {
         let log: string[] = [];
         @Component({
-          standalone: true,
           selector: 'test-cmp',
           template: '',
         })
@@ -698,10 +804,8 @@ describe('reactivity', () => {
           }
         }
 
-        const fixture = TestBed.createComponent(TestCmp);
-        TestBed.flushEffects();
-        expect(log).toEqual([]);
-        fixture.detectChanges();
+        TestBed.createComponent(TestCmp);
+        TestBed.tick();
         expect(log).toEqual(['init', 'effect']);
       });
 
@@ -709,9 +813,9 @@ describe('reactivity', () => {
         let log: string[] = [];
 
         @Component({
-          standalone: true,
           selector: 'test-cmp',
           template: '',
+          changeDetection: ChangeDetectionStrategy.Eager,
         })
         class TestCmp {
           ngOnInitRan = false;
@@ -725,14 +829,14 @@ describe('reactivity', () => {
         }
 
         @Component({
-          standalone: true,
           selector: 'driver-cmp',
           imports: [TestCmp],
           template: `
-          @if (cond) {
-            <test-cmp />
-          }
-        `,
+            @if (cond) {
+              <test-cmp />
+            }
+          `,
+          changeDetection: ChangeDetectionStrategy.Eager,
         })
         class DriverCmp {
           cond = false;
@@ -744,6 +848,7 @@ describe('reactivity', () => {
 
         // Toggle the @if, which should create and run the effect.
         fixture.componentInstance.cond = true;
+        fixture.changeDetectorRef.markForCheck();
         fixture.detectChanges();
         expect(log).toEqual(['init', 'effect']);
       });
@@ -751,7 +856,6 @@ describe('reactivity', () => {
       it('when created dynamically', () => {
         let log: string[] = [];
         @Component({
-          standalone: true,
           selector: 'test-cmp',
           template: '',
         })
@@ -767,7 +871,6 @@ describe('reactivity', () => {
         }
 
         @Component({
-          standalone: true,
           selector: 'driver-cmp',
           template: '',
         })
@@ -775,17 +878,17 @@ describe('reactivity', () => {
           vcr = inject(ViewContainerRef);
         }
 
-        const fixture = TestBed.createComponent(DriverCmp);
-        fixture.detectChanges();
+        const componentRef = createComponent(DriverCmp, {
+          environmentInjector: TestBed.inject(EnvironmentInjector),
+        });
+        componentRef.changeDetectorRef.detectChanges();
 
-        fixture.componentInstance.vcr.createComponent(TestCmp);
+        componentRef.instance.vcr.createComponent(TestCmp);
 
         // Verify that simply creating the component didn't schedule the effect.
-        TestBed.flushEffects();
+        TestBed.inject(ApplicationRef).tick();
         expect(log).toEqual([]);
-
-        // Running change detection should schedule and run the effect.
-        fixture.detectChanges();
+        componentRef.changeDetectorRef.detectChanges();
         expect(log).toEqual(['init', 'effect']);
       });
 
@@ -800,7 +903,6 @@ describe('reactivity', () => {
         }
 
         @Component({
-          standalone: true,
           selector: 'test-cmp',
           template: '',
           providers: [EffectService],
@@ -814,16 +916,13 @@ describe('reactivity', () => {
         }
 
         const fixture = TestBed.createComponent(TestCmp);
-        TestBed.flushEffects();
-        expect(log).toEqual([]);
-        fixture.detectChanges();
+        TestBed.tick();
         expect(log).toEqual(['init', 'effect']);
       });
 
       it('if multiple effects are created', () => {
         let log: string[] = [];
         @Component({
-          standalone: true,
           selector: 'test-cmp',
           template: '',
         })
@@ -851,6 +950,7 @@ describe('reactivity', () => {
     describe('should disallow creating an effect context', () => {
       it('inside template effect', () => {
         @Component({
+          standalone: false,
           template: '{{someFn()}}',
         })
         class Cmp {
@@ -875,6 +975,7 @@ describe('reactivity', () => {
 
       it('inside an effect', () => {
         @Component({
+          standalone: false,
           template: '',
         })
         class Cmp {
